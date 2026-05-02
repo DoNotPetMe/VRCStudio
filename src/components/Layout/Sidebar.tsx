@@ -2,7 +2,7 @@ import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, Users, Globe, Shirt, Star, Settings,
   LogOut, Bell, Search, History, UsersRound, FileText, Camera,
-  ChevronDown, Flame, BarChart3, CalendarPlus, TrendingUp, Paintbrush,
+  ChevronDown, Flame, BarChart3, CalendarPlus, TrendingUp, Paintbrush, Flag,
 } from 'lucide-react';
 import { useState } from 'react';
 import { useAuthStore } from '../../stores/authStore';
@@ -36,6 +36,7 @@ const toolsNavItems = [
   { to: '/events', icon: CalendarPlus, label: 'Events' },
   { to: '/game-log', icon: FileText, label: 'Game Log' },
   { to: '/screenshots', icon: Camera, label: 'Screenshots' },
+  { to: '/reports', icon: Flag, label: 'History & Reports' },
 ];
 
 const statusDotColors: Record<string, string> = {

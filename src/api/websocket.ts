@@ -2,6 +2,7 @@ import api from './vrchat';
 import { useFeedStore } from '../stores/feedStore';
 import { useFriendStore } from '../stores/friendStore';
 import { logWorldVisit, logWorldExit } from '../utils/worldAnalytics';
+import { useReportStore } from '../stores/reportStore';
 
 type WSEventType =
   | 'friend-online'
@@ -177,9 +178,20 @@ class VRChatWebSocket {
         friendStore.fetchOnlineFriends();
         break;
 
-      case 'notification':
-        // Notification events are handled by the notification store
+      case 'notification': {
+        // Check for moderation action notifications and correlate with filed reports
+        const notifType = (data.type || '').toLowerCase();
+        const notifMsg = (data.message || '').toLowerCase();
+        const isModerationNotif =
+          notifType.includes('moderat') ||
+          notifType.includes('action') ||
+          notifMsg.includes('action has been taken') ||
+          notifMsg.includes('we have taken action');
+        if (isModerationNotif) {
+          useReportStore.getState().handleModerationNotification(data);
+        }
         break;
+      }
     }
 
     for (const listener of this.listeners) {

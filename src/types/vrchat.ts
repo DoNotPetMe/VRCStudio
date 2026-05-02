@@ -256,9 +256,41 @@ export interface AppSettings {
     greetingEnabled: boolean;
     showWeather: boolean;
   };
-  profile: {
-    nickname: string;
-    greetingEnabled: boolean;
-    showWeather: boolean;
-  };
+}
+
+export type ViolationCategory =
+  | 'harassment'
+  | 'hate_speech'
+  | 'nsfw_content'
+  | 'cheating'
+  | 'impersonation'
+  | 'spam'
+  | 'self_harm'
+  | 'doxxing'
+  | 'group_misuse'
+  | 'group_harassment';
+
+export type ReportStatus = 'filed' | 'actioned' | 'potential_action' | 'dismissed';
+
+export interface FiledReport {
+  id: string;
+  reportType: 'player' | 'group';
+  targetId: string;
+  targetName: string;
+  targetImageUrl?: string;
+  violationCategory: ViolationCategory;
+  violationSubtype?: string;
+  hasEvidence: boolean;
+  evidenceType?: 'screenshot' | 'video' | 'both';
+  worldId?: string;
+  worldName?: string;
+  instanceId?: string;
+  incidentTime: number;
+  reportTime: number;
+  generatedText: string;
+  status: ReportStatus;
+  actionedAt?: number;
+  actionNotificationId?: string;
+  userNotes?: string;
+  witnesses?: string;
 }

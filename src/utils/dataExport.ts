@@ -12,6 +12,8 @@ export interface ExportData {
     theme?: any;
     gameLogPath?: string;
     accounts?: any[];
+    reports?: any[];
+    instanceHistory?: any[];
   };
 }
 
@@ -30,6 +32,8 @@ export function exportAllData(): ExportData {
     settings: 'vrcstudio_settings',
     theme: 'vrcstudio_theme',
     gameLogPath: 'vrcstudio_logpath',
+    reports: 'vrcstudio_reports',
+    instanceHistory: 'vrcstudio_instance_history',
   };
 
   for (const [key, storageKey] of Object.entries(keys)) {
@@ -72,6 +76,8 @@ export function importData(jsonString: string): { success: boolean; message: str
       settings: 'vrcstudio_settings',
       theme: 'vrcstudio_theme',
       gameLogPath: 'vrcstudio_logpath',
+      reports: 'vrcstudio_reports',
+      instanceHistory: 'vrcstudio_instance_history',
     };
 
     let importedCount = 0;

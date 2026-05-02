@@ -26,7 +26,9 @@ import FriendAnalytics from './pages/FriendAnalytics';
 import EventPlanner from './pages/EventPlanner';
 import StatisticsInsights from './pages/StatisticsInsights';
 import AvatarEditor from './pages/AvatarEditor';
+import Reports from './pages/Reports';
 import LoadingSpinner from './components/common/LoadingSpinner';
+import { useLocationTracking } from './hooks/useLocationTracking';
 
 // Error boundary to catch React rendering errors and show them instead of a blank screen
 class ErrorBoundary extends Component<
@@ -95,6 +97,7 @@ class ErrorBoundary extends Component<
 function AppShell() {
   const navigate = useNavigate();
   useDiscordRPC();
+  useLocationTracking();
 
   useEffect(() => {
     const unregister = keyboardManager.registerAll([
@@ -127,6 +130,7 @@ function AppShell() {
         <Route path="/events" element={<EventPlanner />} />
         <Route path="/statistics" element={<StatisticsInsights />} />
         <Route path="/avatar-editor" element={<AvatarEditor />} />
+        <Route path="/reports" element={<Reports />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
