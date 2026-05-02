@@ -1,10 +1,31 @@
-// Community avatar search services using the vrcx_search.php API format.
-// Multiple providers are listed so the user can switch if one goes down.
+// Avatar search using community-run VRCDB indexes.
+// All requests route through Electron's main process (Node.js https.request)
+// so we can set User-Agent: VRCX, which is required by the primary provider.
+// Falls back to browser fetch() when running outside Electron (dev/browser).
 
 export const VRCDB_PROVIDERS = [
-  { id: 'requi',   label: 'requi.dev',        url: 'https://requi.dev/vrcx_search.php' },
-  { id: 'justh',   label: 'just-h.party',     url: 'https://avtr.just-h.party/vrcx_search.php' },
-  { id: 'ares',    label: 'ares-mod.com',     url: 'https://api.ares-mod.com/vrcx_search.php' },
+  {
+    id: 'vrcdb',
+    label: 'vrcdb.com',
+    // URL template: replace {query} with the encoded search term
+    searchUrl: (q: string) => `https://vrcx.vrcdb.com/avatars/Avatar/${encodeURIComponent(q)}`,
+    byAuthorUrl: (authorId: string) => `https://vrcx.vrcdb.com/avatars/Author/${encodeURIComponent(authorId)}`,
+    byIdUrl: (avatarId: string) => `https://vrcx.vrcdb.com/avatars/Avatar/${encodeURIComponent(avatarId)}`,
+  },
+  {
+    id: 'requi',
+    label: 'requi.dev',
+    searchUrl: (q: string) => `https://requi.dev/vrcx_search.php?search=${encodeURIComponent(q)}&n=40`,
+    byAuthorUrl: (id: string) => `https://requi.dev/vrcx_search.php?authorId=${encodeURIComponent(id)}&n=50`,
+    byIdUrl: (id: string) => `https://requi.dev/vrcx_search.php?avatarId=${encodeURIComponent(id)}`,
+  },
+  {
+    id: 'justh',
+    label: 'just-h.party',
+    searchUrl: (q: string) => `https://avtr.just-h.party/vrcx_search.php?search=${encodeURIComponent(q)}&n=40`,
+    byAuthorUrl: (id: string) => `https://avtr.just-h.party/vrcx_search.php?authorId=${encodeURIComponent(id)}&n=50`,
+    byIdUrl: (id: string) => `https://avtr.just-h.party/vrcx_search.php?avatarId=${encodeURIComponent(id)}`,
+  },
 ] as const;
 
 export type ProviderId = typeof VRCDB_PROVIDERS[number]['id'];
@@ -13,16 +34,16 @@ const PROVIDER_KEY = 'vrcstudio_vrcdb_provider';
 
 export function getProviderId(): ProviderId {
   const stored = localStorage.getItem(PROVIDER_KEY) as ProviderId | null;
-  return VRCDB_PROVIDERS.find(p => p.id === stored) ? (stored as ProviderId) : 'requi';
+  return VRCDB_PROVIDERS.find(p => p.id === stored) ? (stored as ProviderId) : 'vrcdb';
 }
 
 export function setProviderId(id: ProviderId) {
   localStorage.setItem(PROVIDER_KEY, id);
 }
 
-function providerUrl(): string {
+function getProvider() {
   const id = getProviderId();
-  return VRCDB_PROVIDERS.find(p => p.id === id)?.url ?? VRCDB_PROVIDERS[0].url;
+  return VRCDB_PROVIDERS.find(p => p.id === id) ?? VRCDB_PROVIDERS[0];
 }
 
 export interface VRCDBAvatar {
@@ -36,23 +57,39 @@ export interface VRCDBAvatar {
   releaseStatus: string;
 }
 
-async function get(params: Record<string, string>): Promise<VRCDBAvatar[]> {
-  const qs = new URLSearchParams(params).toString();
-  const res = await fetch(`${providerUrl()}?${qs}`);
-  if (!res.ok) throw new Error(`VRCDB request failed: ${res.status}`);
-  const data = await res.json();
-  // Some providers return an array directly, others wrap in { avatars: [] }
-  const list: unknown[] = Array.isArray(data) ? data : (data?.avatars ?? data?.data ?? []);
-  return list as VRCDBAvatar[];
+function normalise(raw: unknown): VRCDBAvatar[] {
+  const list: unknown[] = Array.isArray(raw)
+    ? raw
+    : (raw as any)?.avatars ?? (raw as any)?.data ?? (raw as any)?.results ?? [];
+  return (list as any[]).filter(
+    (a) => a && typeof a === 'object' && (a.id || a.avatarId)
+  ).map((a) => ({
+    id: a.id ?? a.avatarId ?? '',
+    name: a.name ?? a.avatarName ?? '',
+    authorId: a.authorId ?? a.userId ?? '',
+    authorName: a.authorName ?? a.userName ?? '',
+    description: a.description ?? '',
+    imageUrl: a.imageUrl ?? a.thumbnailImageUrl ?? '',
+    thumbnailImageUrl: a.thumbnailImageUrl ?? a.imageUrl ?? '',
+    releaseStatus: a.releaseStatus ?? 'public',
+  }));
+}
+
+async function fetchUrl(url: string): Promise<VRCDBAvatar[]> {
+  // Prefer IPC path (Electron) so we control User-Agent
+  if (window.electronAPI?.httpGet) {
+    const res = await window.electronAPI.httpGet(url);
+    if (!res.ok) throw new Error(`VRCDB ${res.status}: ${res.raw?.slice(0, 120)}`);
+    return normalise(res.data);
+  }
+  // Browser fallback (dev server)
+  const res = await fetch(url, { headers: { 'User-Agent': 'VRCX' } });
+  if (!res.ok) throw new Error(`VRCDB ${res.status}`);
+  return normalise(await res.json());
 }
 
 export const vrcdb = {
-  search: (query: string, limit = 20) =>
-    get({ search: query, n: String(limit) }),
-
-  getByAuthor: (authorId: string, limit = 50) =>
-    get({ authorId, n: String(limit) }),
-
-  getById: (avatarId: string) =>
-    get({ avatarId }),
+  search: (query: string) => fetchUrl(getProvider().searchUrl(query)),
+  getByAuthor: (authorId: string) => fetchUrl(getProvider().byAuthorUrl(authorId)),
+  getById: (avatarId: string) => fetchUrl(getProvider().byIdUrl(avatarId)),
 };

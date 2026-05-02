@@ -713,7 +713,7 @@ export default function SettingsPage() {
                       />
                       <div>
                         <div className="text-sm font-medium">{p.label}</div>
-                        <div className="text-xs text-surface-500 font-mono">{p.url}</div>
+                        <div className="text-xs text-surface-500 font-mono">{p.searchUrl('…')}</div>
                       </div>
                     </label>
                   ))}

@@ -379,6 +379,39 @@ ipcMain.handle('vrchat:request', async (_e, opts: {
   });
 });
 
+// Generic outbound GET — used for third-party APIs (VRCDB, etc.)
+// Runs in main process so we can set any User-Agent header.
+ipcMain.handle('http:get', async (_e, url: string, headers?: Record<string, string>) => {
+  return new Promise((resolve) => {
+    let parsed: URL;
+    try { parsed = new URL(url); } catch {
+      return resolve({ ok: false, status: 0, data: null, raw: 'Invalid URL' });
+    }
+
+    const req = https.request(
+      {
+        hostname: parsed.hostname,
+        port: parsed.port || 443,
+        path: parsed.pathname + parsed.search,
+        method: 'GET',
+        headers: { 'User-Agent': 'VRCX', ...headers },
+      },
+      (res) => {
+        const chunks: Buffer[] = [];
+        res.on('data', (chunk: Buffer) => chunks.push(chunk));
+        res.on('end', () => {
+          const raw = Buffer.concat(chunks).toString('utf-8');
+          let data: any = null;
+          try { data = JSON.parse(raw); } catch {}
+          resolve({ ok: res.statusCode! >= 200 && res.statusCode! < 300, status: res.statusCode, data, raw });
+        });
+      }
+    );
+    req.on('error', (err) => resolve({ ok: false, status: 0, data: null, raw: err.message }));
+    req.end();
+  });
+});
+
 // ─── App lifecycle ────────────────────────────────────────────────────────────
 
 app.whenReady().then(() => {

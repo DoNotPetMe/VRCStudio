@@ -35,6 +35,12 @@ interface ElectronAPI {
     data: any;
     cookies: Record<string, string>;
   }>;
+  httpGet: (url: string, headers?: Record<string, string>) => Promise<{
+    ok: boolean;
+    status: number;
+    data: any;
+    raw: string;
+  }>;
 }
 
 interface Window {

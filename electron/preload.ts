@@ -51,4 +51,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     body?: string;
     cookies?: Record<string, string>;
   }) => ipcRenderer.invoke('vrchat:request', opts),
+
+  // Generic outbound GET (routes through main process, sends User-Agent: VRCX)
+  httpGet: (url: string, headers?: Record<string, string>) =>
+    ipcRenderer.invoke('http:get', url, headers),
 });
