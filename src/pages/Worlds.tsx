@@ -222,7 +222,7 @@ export default function WorldsPage() {
           {worldList.map(world => {
             const friendCount = friendsInWorld(world.id).length;
             return (
-              <div key={world.id} className="relative">
+              <div key={world.id} className="relative h-full">
                 <WorldCard world={world} onClick={() => openWorldDetail(world)} />
                 {friendCount > 0 && (
                   <div className="absolute top-2 left-2 bg-green-500/90 text-white text-xs px-1.5 py-0.5 rounded-full

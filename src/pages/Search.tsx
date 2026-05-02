@@ -174,7 +174,9 @@ export default function SearchPage() {
           {category === 'worlds' && (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {worldResults.map(world => (
-                <WorldCard key={world.id} world={world} />
+                <div key={world.id} className="h-full">
+                  <WorldCard world={world} />
+                </div>
               ))}
             </div>
           )}

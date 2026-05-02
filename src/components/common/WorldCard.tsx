@@ -37,9 +37,9 @@ export default function WorldCard({ world, onClick, compact = false }: Props) {
   return (
     <button
       onClick={onClick}
-      className="glass-panel-solid overflow-hidden card-hover group text-left"
+      className="glass-panel-solid overflow-hidden card-hover group text-left w-full h-full flex flex-col"
     >
-      <div className="relative aspect-video overflow-hidden">
+      <div className="relative aspect-video overflow-hidden flex-shrink-0">
         <img
           src={imgUrl}
           alt=""
@@ -56,7 +56,7 @@ export default function WorldCard({ world, onClick, compact = false }: Props) {
           </span>
         </div>
       </div>
-      <div className="p-3">
+      <div className="p-3 flex-1 flex flex-col">
         <h3 className="text-sm font-semibold truncate">{world.name}</h3>
         <p className="text-xs text-surface-400 mt-0.5 truncate">by {world.authorName}</p>
         {world.tags?.length > 0 && (
