@@ -1,14 +1,16 @@
 import { useState, useEffect } from 'react';
-import { Shirt, Search, Star, ArrowLeft, Heart, AlertCircle, RotateCw } from 'lucide-react';
+import { Shirt, Search, Star, ArrowLeft, Heart, AlertCircle, RotateCw, Pin, PinOff, Zap } from 'lucide-react';
 import api from '../api/vrchat';
 import SearchInput from '../components/common/SearchInput';
 import EmptyState from '../components/common/EmptyState';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import type { VRCAvatar } from '../types/vrchat';
+import { useAvatarSwitcherStore } from '../stores/avatarSwitcherStore';
 
 type AvatarTab = 'favorites' | 'own' | 'search';
 
 export default function AvatarsPage() {
+  const { togglePin, isPinned, toggle: openSwitcher } = useAvatarSwitcherStore();
   const [tab, setTab] = useState<AvatarTab>('own');
   const [favoriteAvatars, setFavoriteAvatars] = useState<VRCAvatar[]>([]);
   const [ownAvatars, setOwnAvatars] = useState<VRCAvatar[]>([]);
@@ -124,7 +126,16 @@ export default function AvatarsPage() {
 
   return (
     <div className="max-w-6xl mx-auto space-y-4 animate-fade-in">
-      <h1 className="text-2xl font-bold">Avatars</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">Avatars</h1>
+        <button
+          onClick={openSwitcher}
+          className="btn-secondary text-xs flex items-center gap-1.5"
+          title="Open quick avatar switcher (Ctrl+Shift+A)"
+        >
+          <Zap size={13} /> Quick Switch
+        </button>
+      </div>
 
       <div className="flex gap-2">
         <SearchInput
@@ -186,26 +197,42 @@ export default function AvatarsPage() {
         />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {avatars.map(avatar => (
-            <button
-              key={avatar.id}
-              onClick={() => setSelected(avatar)}
-              className="glass-panel-solid overflow-hidden card-hover group text-left"
-            >
-              <div className="aspect-square overflow-hidden">
-                <img
-                  src={avatar.thumbnailImageUrl || avatar.imageUrl}
-                  alt=""
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                  loading="lazy"
-                />
+          {avatars.map(avatar => {
+            const pinned = isPinned(avatar.id);
+            return (
+              <div key={avatar.id} className="relative group">
+                <button
+                  onClick={() => setSelected(avatar)}
+                  className="glass-panel-solid overflow-hidden card-hover group text-left w-full"
+                >
+                  <div className="aspect-square overflow-hidden">
+                    <img
+                      src={avatar.thumbnailImageUrl || avatar.imageUrl}
+                      alt=""
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      loading="lazy"
+                    />
+                  </div>
+                  <div className="p-3">
+                    <h3 className="text-sm font-semibold truncate">{avatar.name}</h3>
+                    <p className="text-xs text-surface-400 truncate">by {avatar.authorName}</p>
+                  </div>
+                </button>
+                {/* Pin button */}
+                <button
+                  onClick={e => { e.stopPropagation(); togglePin(avatar.id); }}
+                  className={`absolute top-2 right-2 p-1.5 rounded-lg backdrop-blur-sm transition-all ${
+                    pinned
+                      ? 'bg-accent-600/80 text-white opacity-100'
+                      : 'bg-black/50 text-white opacity-0 group-hover:opacity-100'
+                  }`}
+                  title={pinned ? 'Remove from Quick Switch pins' : 'Pin to Quick Switch'}
+                >
+                  {pinned ? <Pin size={11} /> : <PinOff size={11} />}
+                </button>
               </div>
-              <div className="p-3">
-                <h3 className="text-sm font-semibold truncate">{avatar.name}</h3>
-                <p className="text-xs text-surface-400 truncate">by {avatar.authorName}</p>
-              </div>
-            </button>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
