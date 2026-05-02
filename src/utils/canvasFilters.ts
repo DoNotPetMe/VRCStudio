@@ -12,6 +12,12 @@ export interface CanvasEditState {
     sepia: number; // 0-100
     blur: number; // 0-20 (pixels)
     temperature: number; // -50 to 50 (cool to warm)
+    tint: number; // -50 to 50 (green to magenta)
+    exposure: number; // -100 to 100
+    highlights: number; // -100 to 100
+    shadows: number; // -100 to 100
+    clarity: number; // 0 to 100
+    vibrance: number; // -100 to 100
   };
   borderStyle: {
     width: number;
@@ -30,6 +36,12 @@ export const DEFAULT_EDIT_STATE: CanvasEditState = {
     sepia: 0,
     blur: 0,
     temperature: 0,
+    tint: 0,
+    exposure: 0,
+    highlights: 0,
+    shadows: 0,
+    clarity: 0,
+    vibrance: 0,
   },
   borderStyle: {
     width: 0,
@@ -154,6 +166,141 @@ export function applyFilters(
   }
 }
 
+export function applyExposure(
+  ctx: CanvasRenderingContext2D,
+  amount: number, // -100 to 100
+  width: number,
+  height: number
+) {
+  if (amount === 0) return;
+  const factor = Math.pow(2, amount / 50);
+  const imageData = ctx.getImageData(0, 0, width, height);
+  const data = imageData.data;
+  for (let i = 0; i < data.length; i += 4) {
+    data[i] = Math.max(0, Math.min(255, data[i] * factor));
+    data[i + 1] = Math.max(0, Math.min(255, data[i + 1] * factor));
+    data[i + 2] = Math.max(0, Math.min(255, data[i + 2] * factor));
+  }
+  ctx.putImageData(imageData, 0, 0);
+}
+
+export function applyHighlights(
+  ctx: CanvasRenderingContext2D,
+  amount: number, // -100 to 100
+  width: number,
+  height: number
+) {
+  if (amount === 0) return;
+  const factor = amount / 100;
+  const imageData = ctx.getImageData(0, 0, width, height);
+  const data = imageData.data;
+  for (let i = 0; i < data.length; i += 4) {
+    const luma = (data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114) / 255;
+    const highlightWeight = luma > 0.5 ? (luma - 0.5) * 2 : 0;
+    const adj = factor * highlightWeight * 50;
+    data[i] = Math.max(0, Math.min(255, data[i] + adj));
+    data[i + 1] = Math.max(0, Math.min(255, data[i + 1] + adj));
+    data[i + 2] = Math.max(0, Math.min(255, data[i + 2] + adj));
+  }
+  ctx.putImageData(imageData, 0, 0);
+}
+
+export function applyShadows(
+  ctx: CanvasRenderingContext2D,
+  amount: number, // -100 to 100
+  width: number,
+  height: number
+) {
+  if (amount === 0) return;
+  const factor = amount / 100;
+  const imageData = ctx.getImageData(0, 0, width, height);
+  const data = imageData.data;
+  for (let i = 0; i < data.length; i += 4) {
+    const luma = (data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114) / 255;
+    const shadowWeight = luma < 0.5 ? (0.5 - luma) * 2 : 0;
+    const adj = factor * shadowWeight * 50;
+    data[i] = Math.max(0, Math.min(255, data[i] + adj));
+    data[i + 1] = Math.max(0, Math.min(255, data[i + 1] + adj));
+    data[i + 2] = Math.max(0, Math.min(255, data[i + 2] + adj));
+  }
+  ctx.putImageData(imageData, 0, 0);
+}
+
+export function applyClarity(
+  ctx: CanvasRenderingContext2D,
+  amount: number, // 0 to 100
+  width: number,
+  height: number
+) {
+  if (amount === 0) return;
+  const factor = (amount / 100) * 0.6;
+  const imageData = ctx.getImageData(0, 0, width, height);
+  const data = imageData.data;
+  for (let i = 0; i < data.length; i += 4) {
+    const luma = (data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114) / 255;
+    // Clarity peaks at midtones
+    const midweight = 1 - Math.abs(luma - 0.5) * 2;
+    for (let c = 0; c < 3; c++) {
+      const v = data[i + c] / 255 - 0.5;
+      data[i + c] = Math.max(0, Math.min(255, Math.round((v * (1 + factor * midweight) + 0.5) * 255)));
+    }
+  }
+  ctx.putImageData(imageData, 0, 0);
+}
+
+export function applyVibrance(
+  ctx: CanvasRenderingContext2D,
+  amount: number, // -100 to 100
+  width: number,
+  height: number
+) {
+  if (amount === 0) return;
+  const factor = amount / 100;
+  const imageData = ctx.getImageData(0, 0, width, height);
+  const data = imageData.data;
+  for (let i = 0; i < data.length; i += 4) {
+    const r = data[i] / 255;
+    const g = data[i + 1] / 255;
+    const b = data[i + 2] / 255;
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    const sat = max === 0 ? 0 : (max - min) / max;
+    // More boost to less-saturated colors (protects already-vivid colors)
+    const boost = factor * (1 - sat) * 0.5;
+    const gray = r * 0.299 + g * 0.587 + b * 0.114;
+    data[i] = Math.max(0, Math.min(255, Math.round((r + (r - gray) * boost) * 255)));
+    data[i + 1] = Math.max(0, Math.min(255, Math.round((g + (g - gray) * boost) * 255)));
+    data[i + 2] = Math.max(0, Math.min(255, Math.round((b + (b - gray) * boost) * 255)));
+  }
+  ctx.putImageData(imageData, 0, 0);
+}
+
+export function applyTint(
+  ctx: CanvasRenderingContext2D,
+  amount: number, // -50 to 50 (negative = green, positive = magenta)
+  width: number,
+  height: number
+) {
+  if (amount === 0) return;
+  const factor = amount / 100;
+  const imageData = ctx.getImageData(0, 0, width, height);
+  const data = imageData.data;
+  for (let i = 0; i < data.length; i += 4) {
+    if (factor > 0) {
+      // Magenta tint: boost red + blue, reduce green
+      data[i] = Math.min(255, data[i] + factor * 30);
+      data[i + 1] = Math.max(0, data[i + 1] - factor * 30);
+      data[i + 2] = Math.min(255, data[i + 2] + factor * 30);
+    } else {
+      // Green tint
+      data[i] = Math.max(0, data[i] + factor * 30);
+      data[i + 1] = Math.min(255, data[i + 1] - factor * 30);
+      data[i + 2] = Math.max(0, data[i + 2] + factor * 30);
+    }
+  }
+  ctx.putImageData(imageData, 0, 0);
+}
+
 /**
  * Draw border/frame on canvas
  */
@@ -218,20 +365,23 @@ export function drawBorder(
  * Preset filters for quick application
  */
 export const PRESET_FILTERS = {
-  grayscale: { name: 'Grayscale', state: { grayscale: 100, sepia: 0, blur: 0, temperature: 0 } },
-  sepia: { name: 'Sepia', state: { grayscale: 0, sepia: 100, blur: 0, temperature: 0 } },
-  cool: { name: 'Cool', state: { grayscale: 0, sepia: 0, blur: 0, temperature: -30 } },
-  warm: { name: 'Warm', state: { grayscale: 0, sepia: 0, blur: 0, temperature: 30 } },
-  vintage: {
-    name: 'Vintage',
-    state: { grayscale: 0, sepia: 50, blur: 0, temperature: 20 },
-  },
-  noir: { name: 'Noir', state: { grayscale: 100, sepia: 0, blur: 0, temperature: -50 } },
-  neon: { name: 'Neon', state: { grayscale: 0, sepia: 0, blur: 0, temperature: 50 } },
-  vibrant: { name: 'Vibrant', state: { grayscale: 0, sepia: 0, blur: 0, temperature: 0 } },
-  soft: { name: 'Soft', state: { grayscale: 0, sepia: 0, blur: 2, temperature: 10 } },
-  highcontrast: {
-    name: 'High Contrast',
-    state: { grayscale: 0, sepia: 0, blur: 0, temperature: 0 },
-  },
+  grayscale:    { name: 'Grayscale',    state: { grayscale: 100, sepia: 0,  blur: 0, temperature: 0,   tint: 0,   exposure: 0,   highlights: 0,  shadows: 0, clarity: 0,  vibrance: 0 } },
+  sepia:        { name: 'Sepia',        state: { grayscale: 0,   sepia: 100, blur: 0, temperature: 15,  tint: 5,   exposure: 0,   highlights: 0,  shadows: 0, clarity: 0,  vibrance: 0 } },
+  cool:         { name: 'Cool',         state: { grayscale: 0,   sepia: 0,  blur: 0, temperature: -30,  tint: -5,  exposure: 0,   highlights: 0,  shadows: 0, clarity: 0,  vibrance: 10 } },
+  warm:         { name: 'Warm',         state: { grayscale: 0,   sepia: 0,  blur: 0, temperature: 30,   tint: 0,   exposure: 5,   highlights: 0,  shadows: 5, clarity: 0,  vibrance: 20 } },
+  vintage:      { name: 'Vintage',      state: { grayscale: 0,   sepia: 50, blur: 0, temperature: 20,   tint: 5,   exposure: -5,  highlights: -10, shadows: 10, clarity: 10, vibrance: -20 } },
+  noir:         { name: 'Noir',         state: { grayscale: 100, sepia: 0,  blur: 0, temperature: -50,  tint: 0,   exposure: -10, highlights: 20, shadows: -20, clarity: 30, vibrance: 0 } },
+  neon:         { name: 'Neon',         state: { grayscale: 0,   sepia: 0,  blur: 0, temperature: 50,   tint: -10, exposure: 10,  highlights: 0,  shadows: 0, clarity: 0,  vibrance: 80 } },
+  vibrant:      { name: 'Vibrant',      state: { grayscale: 0,   sepia: 0,  blur: 0, temperature: 0,    tint: 0,   exposure: 5,   highlights: 0,  shadows: 0, clarity: 20, vibrance: 60 } },
+  soft:         { name: 'Soft',         state: { grayscale: 0,   sepia: 0,  blur: 2, temperature: 10,   tint: 0,   exposure: 5,   highlights: -15, shadows: 10, clarity: -10, vibrance: -10 } },
+  highcontrast: { name: 'High Contrast', state: { grayscale: 0,  sepia: 0,  blur: 0, temperature: 0,    tint: 0,   exposure: 0,   highlights: 20, shadows: -20, clarity: 40, vibrance: 10 } },
+  anime:        { name: 'Anime',        state: { grayscale: 0,   sepia: 0,  blur: 0, temperature: -10,  tint: 0,   exposure: 5,   highlights: 15, shadows: -10, clarity: 30, vibrance: -20 } },
+  vaporwave:    { name: 'Vaporwave',    state: { grayscale: 0,   sepia: 0,  blur: 0, temperature: -20,  tint: 15,  exposure: 5,   highlights: 10, shadows: 0, clarity: 0,  vibrance: 60 } },
+  cinematic:    { name: 'Cinematic',    state: { grayscale: 0,   sepia: 10, blur: 0, temperature: -5,   tint: -8,  exposure: -10, highlights: -20, shadows: -15, clarity: 20, vibrance: -20 } },
+  horror:       { name: 'Horror',       state: { grayscale: 60,  sepia: 20, blur: 0, temperature: -20,  tint: 0,   exposure: -20, highlights: 30, shadows: -30, clarity: 50, vibrance: -50 } },
+  forest:       { name: 'Forest',       state: { grayscale: 0,   sepia: 0,  blur: 0, temperature: 15,   tint: -15, exposure: 5,   highlights: -5,  shadows: 10, clarity: 20, vibrance: 40 } },
+  ocean:        { name: 'Ocean',        state: { grayscale: 0,   sepia: 0,  blur: 0, temperature: -30,  tint: -5,  exposure: -5,  highlights: 0,  shadows: 15, clarity: 10, vibrance: 30 } },
+  goldenHour:   { name: 'Golden Hour',  state: { grayscale: 0,   sepia: 20, blur: 0, temperature: 45,   tint: 8,   exposure: 10,  highlights: -10, shadows: 15, clarity: 10, vibrance: 30 } },
+  fade:         { name: 'Fade',         state: { grayscale: 0,   sepia: 5,  blur: 0, temperature: 5,    tint: 5,   exposure: 10,  highlights: -20, shadows: 20, clarity: -20, vibrance: -40 } },
+  duotone:      { name: 'Duotone',      state: { grayscale: 60,  sepia: 30, blur: 0, temperature: -20,  tint: 20,  exposure: 0,   highlights: 0,  shadows: 0, clarity: 20, vibrance: -30 } },
 } as const;

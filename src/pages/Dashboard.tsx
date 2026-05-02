@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Users,
   Globe,
@@ -13,12 +13,20 @@ import {
   History,
   Send,
   RotateCcw,
+  Thermometer,
+  CloudRain,
+  Sun,
+  Cloud,
+  Snowflake,
+  Wind,
+  Zap,
 } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNow, format } from 'date-fns';
 import { useAuthStore } from '../stores/authStore';
 import { useFriendStore } from '../stores/friendStore';
 import { useFeedStore } from '../stores/feedStore';
 import { useInstanceHistoryStore } from '../stores/instanceHistoryStore';
+import { useSettingsStore } from '../stores/settingsStore';
 import UserAvatar from '../components/common/UserAvatar';
 import api from '../api/vrchat';
 import type { FeedEvent, UserStatus } from '../types/vrchat';
@@ -107,14 +115,7 @@ export default function Dashboard() {
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-surface-100">
-            Welcome back, <span className="text-gradient">{user?.displayName}</span>
-          </h1>
-          <p className="text-surface-500 text-sm mt-0.5">
-            Here's what's happening in your VRChat world
-          </p>
-        </div>
+        <DashboardGreeting />
       </div>
 
       {/* Stats row */}
@@ -328,6 +329,196 @@ export default function Dashboard() {
         </div>
         <WorldAnalyticsPanel limit={8} />
       </div>
+    </div>
+  );
+}
+
+// ─── Weather helpers ──────────────────────────────────────────────────────────
+
+interface WeatherInfo {
+  temp: number;
+  condition: string;
+  icon: 'sun' | 'cloud' | 'rain' | 'snow' | 'storm' | 'fog' | 'wind';
+}
+
+function wmoToWeather(code: number): Omit<WeatherInfo, 'temp'> {
+  if (code === 0) return { condition: 'Clear sky', icon: 'sun' };
+  if (code <= 3)  return { condition: 'Partly cloudy', icon: 'cloud' };
+  if (code <= 48) return { condition: 'Foggy', icon: 'fog' };
+  if (code <= 55) return { condition: 'Drizzle', icon: 'rain' };
+  if (code <= 67) return { condition: 'Rainy', icon: 'rain' };
+  if (code <= 77) return { condition: 'Snowy', icon: 'snow' };
+  if (code <= 82) return { condition: 'Rain showers', icon: 'rain' };
+  if (code <= 86) return { condition: 'Snow showers', icon: 'snow' };
+  if (code <= 99) return { condition: 'Thunderstorm', icon: 'storm' };
+  return { condition: 'Windy', icon: 'wind' };
+}
+
+const weatherIconMap: Record<WeatherInfo['icon'], typeof Sun> = {
+  sun: Sun, cloud: Cloud, rain: CloudRain, snow: Snowflake, storm: Zap, fog: Wind, wind: Wind,
+};
+
+const weatherColorMap: Record<WeatherInfo['icon'], string> = {
+  sun: 'text-amber-400', cloud: 'text-surface-400', rain: 'text-blue-400',
+  snow: 'text-cyan-300', storm: 'text-yellow-300', fog: 'text-surface-500', wind: 'text-surface-400',
+};
+
+function getTimeOfDay(h: number) {
+  if (h >= 5 && h < 12)  return 'Good morning';
+  if (h >= 12 && h < 17) return 'Good afternoon';
+  if (h >= 17 && h < 21) return 'Good evening';
+  return 'Good night';
+}
+
+// ─── Dashboard Greeting component ─────────────────────────────────────────────
+
+function DashboardGreeting() {
+  const { user } = useAuthStore();
+  const { settings } = useSettingsStore();
+  const { onlineFriends } = useFriendStore();
+
+  const [now, setNow] = useState(() => new Date());
+  const [weather, setWeather] = useState<WeatherInfo | null>(null);
+  const [tickerIndex, setTickerIndex] = useState(0);
+  const tickerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const displayName = settings.profile.nickname.trim() || user?.displayName || 'Traveler';
+
+  // Live clock — ticks every minute
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 60_000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Fetch weather once if enabled
+  useEffect(() => {
+    if (!settings.profile.showWeather || !settings.profile.greetingEnabled) return;
+    navigator.geolocation?.getCurrentPosition(
+      async ({ coords }) => {
+        try {
+          const url =
+            `https://api.open-meteo.com/v1/forecast?latitude=${coords.latitude.toFixed(4)}&longitude=${coords.longitude.toFixed(4)}&current=temperature_2m,weather_code&timezone=auto`;
+          const res = await fetch(url);
+          if (!res.ok) return;
+          const data = await res.json();
+          const code: number = data.current.weather_code;
+          const temp = Math.round(data.current.temperature_2m);
+          setWeather({ temp, ...wmoToWeather(code) });
+        } catch {}
+      },
+      () => {}
+    );
+  }, [settings.profile.showWeather, settings.profile.greetingEnabled]);
+
+  const joinMeFriends = useMemo(
+    () => onlineFriends.filter(f => f.status === 'join me'),
+    [onlineFriends]
+  );
+
+  const tickerMessages = useMemo(() => {
+    const msgs: Array<{ text: string; sub?: string }> = [];
+    // 1. Date & time
+    msgs.push({ text: format(now, 'EEEE, MMMM d'), sub: format(now, 'h:mm a') });
+    // 2. Friends status
+    if (onlineFriends.length === 0) {
+      msgs.push({ text: 'No friends online right now', sub: 'The perfect time to explore new worlds' });
+    } else {
+      msgs.push({
+        text: `${onlineFriends.length} friend${onlineFriends.length === 1 ? '' : 's'} online`,
+        sub: onlineFriends.length === 1
+          ? `${onlineFriends[0].displayName} is online`
+          : `Including ${onlineFriends[0].displayName} and ${onlineFriends.length - 1} more`,
+      });
+    }
+    // 3. Join-me friends
+    if (joinMeFriends.length > 0) {
+      const names = joinMeFriends.slice(0, 2).map(f => f.displayName).join(' & ');
+      msgs.push({
+        text: joinMeFriends.length === 1 ? `${names} is inviting you to join!` : `${joinMeFriends.length} friends want you to join`,
+        sub: joinMeFriends.length > 2 ? `${names} and ${joinMeFriends.length - 2} more` : names,
+      });
+    }
+    // 4. Weather (if fetched)
+    if (weather) {
+      msgs.push({ text: `${weather.condition}`, sub: `${weather.temp}°C outside right now` });
+    }
+    return msgs;
+  }, [now, onlineFriends, joinMeFriends, weather]);
+
+  // Rotate ticker every 8 seconds
+  useEffect(() => {
+    if (tickerRef.current) clearInterval(tickerRef.current);
+    if (tickerMessages.length <= 1) return;
+    tickerRef.current = setInterval(() => {
+      setTickerIndex(i => (i + 1) % tickerMessages.length);
+    }, 8_000);
+    return () => { if (tickerRef.current) clearInterval(tickerRef.current); };
+  }, [tickerMessages.length]);
+
+  const safeTicker = tickerIndex % Math.max(tickerMessages.length, 1);
+  const currentTicker = tickerMessages[safeTicker] ?? tickerMessages[0];
+
+  if (!settings.profile.greetingEnabled) {
+    return (
+      <div>
+        <h1 className="text-xl font-semibold text-surface-100">
+          Welcome back, <span className="text-gradient">{displayName}</span>
+        </h1>
+        <p className="text-surface-500 text-sm mt-0.5">Here's what's happening in your VRChat world</p>
+      </div>
+    );
+  }
+
+  const WeatherIcon = weather ? weatherIconMap[weather.icon] : Thermometer;
+  const weatherColor = weather ? weatherColorMap[weather.icon] : 'text-surface-500';
+  const hour = now.getHours();
+
+  return (
+    <div className="flex items-start justify-between gap-6 w-full">
+      <div className="min-w-0">
+        <h1 className="text-xl font-semibold text-surface-100">
+          {getTimeOfDay(hour)}, <span className="text-gradient">{displayName}</span>
+        </h1>
+        {/* Animated ticker */}
+        <div className="mt-1.5 h-9 overflow-hidden">
+          <div key={safeTicker} className="animate-fade-in">
+            <p className="text-sm text-surface-300 leading-tight">{currentTicker?.text}</p>
+            {currentTicker?.sub && (
+              <p className="text-xs text-surface-500 mt-0.5 leading-tight">{currentTicker.sub}</p>
+            )}
+          </div>
+        </div>
+        {/* Ticker dots */}
+        {tickerMessages.length > 1 && (
+          <div className="flex items-center gap-1 mt-1">
+            {tickerMessages.map((_, i) => (
+              <button
+                key={i}
+                onClick={() => setTickerIndex(i)}
+                className={`w-1.5 h-1.5 rounded-full transition-all duration-300 ${
+                  i === safeTicker ? 'bg-accent-400 w-3' : 'bg-surface-700 hover:bg-surface-600'
+                }`}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+      {/* Weather badge */}
+      {settings.profile.showWeather && weather && (
+        <div className="flex-shrink-0 glass-panel px-3 py-2 flex items-center gap-2 text-sm">
+          <WeatherIcon size={16} className={weatherColor} />
+          <div className="text-right">
+            <div className="text-surface-200 font-medium tabular-nums">{weather.temp}°C</div>
+            <div className="text-xs text-surface-500">{weather.condition}</div>
+          </div>
+        </div>
+      )}
+      {settings.profile.showWeather && !weather && (
+        <div className="flex-shrink-0 glass-panel px-3 py-2 flex items-center gap-2 text-sm opacity-50">
+          <Thermometer size={16} className="text-surface-500" />
+          <div className="text-xs text-surface-500">Fetching weather…</div>
+        </div>
+      )}
     </div>
   );
 }

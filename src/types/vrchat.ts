@@ -251,4 +251,9 @@ export interface AppSettings {
     prefetchImages: boolean;
     virtualizeListsThreshold: number;
   };
+  profile: {
+    nickname: string;
+    greetingEnabled: boolean;
+    showWeather: boolean;
+  };
 }
