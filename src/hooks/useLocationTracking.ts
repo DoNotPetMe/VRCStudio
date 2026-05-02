@@ -13,14 +13,19 @@ function parseInstanceType(location: string): string {
   return 'public';
 }
 
-function parseLocation(location: string): { worldId: string; instanceId: string } | null {
+function parseGroupId(location: string): string | undefined {
+  const m = location.match(/~group\((grp_[^)]+)\)/);
+  return m?.[1];
+}
+
+function parseLocation(location: string): { worldId: string; instanceId: string; groupId?: string } | null {
   if (!location || location === 'offline' || location === 'private') return null;
   const parts = location.split(':');
   if (parts.length < 2) return null;
   const worldId = parts[0];
   const instanceId = parts[1].split('~')[0];
   if (!worldId.startsWith('wrld_')) return null;
-  return { worldId, instanceId };
+  return { worldId, instanceId, groupId: parseGroupId(location) };
 }
 
 export function useLocationTracking() {
@@ -62,6 +67,7 @@ export function useLocationTracking() {
               worldName: parsed.worldId,
               worldImage: '',
               instanceType,
+              groupId: parsed.groupId,
             });
 
             // Enrich with world name/image in background
@@ -108,6 +114,7 @@ export function useLocationTracking() {
           worldName: parsed.worldId,
           worldImage: '',
           instanceType,
+          groupId: parsed.groupId,
         });
 
         // Fetch real world info in background

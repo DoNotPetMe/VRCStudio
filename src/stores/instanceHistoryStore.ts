@@ -7,6 +7,7 @@ export interface InstanceHistoryEntry {
   worldName: string;
   worldImage: string;
   instanceType: string;
+  groupId?: string;
   joinedAt: number;
   leftAt?: number;
 }

@@ -382,9 +382,11 @@ function DashboardGreeting() {
   const { user } = useAuthStore();
   const { settings } = useSettingsStore();
   const { onlineFriends } = useFriendStore();
+  const { history } = useInstanceHistoryStore();
 
   const [now, setNow] = useState(() => new Date());
   const [weather, setWeather] = useState<WeatherInfo | null>(null);
+  const [weatherFailed, setWeatherFailed] = useState(false);
   const [tickerIndex, setTickerIndex] = useState(0);
   const tickerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -396,24 +398,32 @@ function DashboardGreeting() {
     return () => clearInterval(id);
   }, []);
 
-  // Fetch weather once if enabled
+  // Fetch weather once if enabled — with timeout + error handling
   useEffect(() => {
     if (!settings.profile.showWeather || !settings.profile.greetingEnabled) return;
-    navigator.geolocation?.getCurrentPosition(
+    if (!navigator.geolocation) { setWeatherFailed(true); return; }
+
+    // If geolocation doesn't respond in 8 seconds, give up gracefully
+    const timeout = setTimeout(() => setWeatherFailed(true), 8_000);
+
+    navigator.geolocation.getCurrentPosition(
       async ({ coords }) => {
+        clearTimeout(timeout);
         try {
           const url =
             `https://api.open-meteo.com/v1/forecast?latitude=${coords.latitude.toFixed(4)}&longitude=${coords.longitude.toFixed(4)}&current=temperature_2m,weather_code&timezone=auto`;
           const res = await fetch(url);
-          if (!res.ok) return;
+          if (!res.ok) { setWeatherFailed(true); return; }
           const data = await res.json();
           const code: number = data.current.weather_code;
           const temp = Math.round(data.current.temperature_2m);
           setWeather({ temp, ...wmoToWeather(code) });
-        } catch {}
+        } catch { setWeatherFailed(true); }
       },
-      () => {}
+      () => { clearTimeout(timeout); setWeatherFailed(true); },
+      { timeout: 6000 }
     );
+    return () => clearTimeout(timeout);
   }, [settings.profile.showWeather, settings.profile.greetingEnabled]);
 
   const joinMeFriends = useMemo(
@@ -422,34 +432,98 @@ function DashboardGreeting() {
   );
 
   const tickerMessages = useMemo(() => {
+    const h = now.getHours();
     const msgs: Array<{ text: string; sub?: string }> = [];
-    // 1. Date & time
-    msgs.push({ text: format(now, 'EEEE, MMMM d'), sub: format(now, 'h:mm a') });
-    // 2. Friends status
-    if (onlineFriends.length === 0) {
-      msgs.push({ text: 'No friends online right now', sub: 'The perfect time to explore new worlds' });
+
+    // 1. Time-of-day contextual comment
+    if (h >= 0 && h < 5) {
+      msgs.push({ text: 'Late night session?', sub: format(now, 'h:mm a · EEEE, MMMM d') });
+    } else if (h >= 5 && h < 9) {
+      msgs.push({ text: 'Early start today', sub: format(now, 'h:mm a · EEEE, MMMM d') });
+    } else if (h >= 9 && h < 12) {
+      msgs.push({ text: 'Good morning', sub: format(now, 'h:mm a · EEEE, MMMM d') });
+    } else if (h >= 12 && h < 14) {
+      msgs.push({ text: 'Midday', sub: format(now, 'h:mm a · EEEE, MMMM d') });
+    } else if (h >= 14 && h < 18) {
+      msgs.push({ text: 'Good afternoon', sub: format(now, 'h:mm a · EEEE, MMMM d') });
+    } else if (h >= 18 && h < 22) {
+      msgs.push({ text: 'Good evening', sub: format(now, 'h:mm a · EEEE, MMMM d') });
+    } else {
+      msgs.push({ text: 'Good night', sub: format(now, 'h:mm a · EEEE, MMMM d') });
+    }
+
+    // 2. Friends — conversational, not just a number
+    const n = onlineFriends.length;
+    if (n === 0) {
+      msgs.push({
+        text: 'All quiet right now',
+        sub: 'Everyone seems to be offline — good time to explore',
+      });
+    } else if (n === 1) {
+      msgs.push({
+        text: `Just ${onlineFriends[0].displayName} is online`,
+        sub: 'You two have the place to yourselves',
+      });
+    } else if (n <= 5) {
+      msgs.push({
+        text: `${n} friends online right now`,
+        sub: `${onlineFriends[0].displayName} among them`,
+      });
+    } else if (n <= 15) {
+      msgs.push({
+        text: `${n} friends online — good turnout`,
+        sub: `${onlineFriends[0].displayName} and ${n - 1} others`,
+      });
     } else {
       msgs.push({
-        text: `${onlineFriends.length} friend${onlineFriends.length === 1 ? '' : 's'} online`,
-        sub: onlineFriends.length === 1
-          ? `${onlineFriends[0].displayName} is online`
-          : `Including ${onlineFriends[0].displayName} and ${onlineFriends.length - 1} more`,
+        text: `${n} friends online — the crew's all here`,
+        sub: `${onlineFriends[0].displayName} and ${n - 1} others are on`,
       });
     }
+
     // 3. Join-me friends
-    if (joinMeFriends.length > 0) {
+    if (joinMeFriends.length === 1) {
+      msgs.push({
+        text: `${joinMeFriends[0].displayName} has their doors open`,
+        sub: 'They\'re on Join Me — hop in any time',
+      });
+    } else if (joinMeFriends.length > 1) {
       const names = joinMeFriends.slice(0, 2).map(f => f.displayName).join(' & ');
       msgs.push({
-        text: joinMeFriends.length === 1 ? `${names} is inviting you to join!` : `${joinMeFriends.length} friends want you to join`,
+        text: `${joinMeFriends.length} friends are inviting you`,
         sub: joinMeFriends.length > 2 ? `${names} and ${joinMeFriends.length - 2} more` : names,
       });
     }
-    // 4. Weather (if fetched)
-    if (weather) {
-      msgs.push({ text: `${weather.condition}`, sub: `${weather.temp}°C outside right now` });
+
+    // 4. Recent world visit context
+    if (history.length > 0) {
+      const last = history[0];
+      const worldLabel = last.worldName && !last.worldName.startsWith('wrld_') ? last.worldName : 'a world';
+      const recent = last.leftAt && (Date.now() - last.leftAt) < 2 * 60 * 60 * 1000;
+      if (recent) {
+        msgs.push({
+          text: `You just left ${worldLabel}`,
+          sub: `Spent ${Math.round((last.leftAt! - last.joinedAt) / 60000)}m there`,
+        });
+      }
     }
+
+    // 5. Weather — with commentary
+    if (weather) {
+      const { temp, condition, icon } = weather;
+      let commentary = '';
+      if (icon === 'rain') commentary = 'Perfect weather to stay in VRChat';
+      else if (icon === 'snow') commentary = 'Snowing outside — cosy in here though';
+      else if (icon === 'storm') commentary = 'Stay safe out there — you\'re better off in here';
+      else if (icon === 'cloud') commentary = `${temp}°C and overcast outside`;
+      else if (temp <= 5) commentary = `${temp}°C — quite cold out there`;
+      else if (temp >= 28) commentary = `${temp}°C outside — peak VRChat weather`;
+      else commentary = `${temp}°C outside right now`;
+      msgs.push({ text: condition, sub: commentary });
+    }
+
     return msgs;
-  }, [now, onlineFriends, joinMeFriends, weather]);
+  }, [now, onlineFriends, joinMeFriends, weather, history]);
 
   // Rotate ticker every 8 seconds
   useEffect(() => {
@@ -509,7 +583,7 @@ function DashboardGreeting() {
           </div>
         )}
       </div>
-      {/* Weather badge */}
+      {/* Weather badge — only show if loaded or unavailable (never show eternal spinner) */}
       {settings.profile.showWeather && weather && (
         <div className="flex-shrink-0 glass-panel px-3 py-2 flex items-center gap-2 text-sm">
           <WeatherIcon size={16} className={weatherColor} />
@@ -517,12 +591,6 @@ function DashboardGreeting() {
             <div className="text-surface-200 font-medium tabular-nums">{weather.temp}°C</div>
             <div className="text-xs text-surface-500">{weather.condition}</div>
           </div>
-        </div>
-      )}
-      {settings.profile.showWeather && !weather && (
-        <div className="flex-shrink-0 glass-panel px-3 py-2 flex items-center gap-2 text-sm opacity-50">
-          <Thermometer size={16} className="text-surface-500" />
-          <div className="text-xs text-surface-500">Fetching weather…</div>
         </div>
       )}
     </div>

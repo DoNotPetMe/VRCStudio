@@ -9,11 +9,13 @@ import type { VRCAvatar } from '../types/vrchat';
 type AvatarTab = 'favorites' | 'own' | 'search';
 
 export default function AvatarsPage() {
-  const [tab, setTab] = useState<AvatarTab>('favorites');
+  const [tab, setTab] = useState<AvatarTab>('own');
   const [favoriteAvatars, setFavoriteAvatars] = useState<VRCAvatar[]>([]);
   const [ownAvatars, setOwnAvatars] = useState<VRCAvatar[]>([]);
   const [searchResults, setSearchResults] = useState<VRCAvatar[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [favLoading, setFavLoading] = useState(false);
+  const [ownLoading, setOwnLoading] = useState(false);
+  const [searchLoading, setSearchLoading] = useState(false);
   const [searchInput, setSearchInput] = useState('');
   const [selected, setSelected] = useState<VRCAvatar | null>(null);
   const [switching, setSwitching] = useState(false);
@@ -25,7 +27,7 @@ export default function AvatarsPage() {
   }, []);
 
   const loadFavoriteAvatars = async () => {
-    setIsLoading(true);
+    setFavLoading(true);
     try {
       const favorites = await api.getFavorites('avatar', 100);
       const avatarPromises = favorites.map(fav =>
@@ -34,10 +36,11 @@ export default function AvatarsPage() {
       const results = await Promise.all(avatarPromises);
       setFavoriteAvatars(results.filter((a): a is VRCAvatar => a !== null));
     } catch {}
-    setIsLoading(false);
+    setFavLoading(false);
   };
 
   const loadOwnAvatars = async () => {
+    setOwnLoading(true);
     try {
       setOwnAvatarsError(null);
       const avatars = await api.getOwnAvatars();
@@ -46,17 +49,18 @@ export default function AvatarsPage() {
       const errorMsg = err instanceof Error ? err.message : 'Failed to load uploaded avatars';
       setOwnAvatarsError(errorMsg);
     }
+    setOwnLoading(false);
   };
 
   const handleSearch = async () => {
     if (!searchInput.trim()) return;
     setTab('search');
-    setIsLoading(true);
+    setSearchLoading(true);
     try {
       const results = await api.searchAvatars({ query: searchInput.trim(), count: 30 });
       setSearchResults(results);
     } catch {}
-    setIsLoading(false);
+    setSearchLoading(false);
   };
 
   const handleSelect = async (avatarId: string) => {
@@ -68,6 +72,7 @@ export default function AvatarsPage() {
   };
 
   const avatars = tab === 'favorites' ? favoriteAvatars : tab === 'own' ? ownAvatars : searchResults;
+  const isLoading = tab === 'favorites' ? favLoading : tab === 'own' ? ownLoading : searchLoading;
 
   if (selected) {
     return (
@@ -133,8 +138,8 @@ export default function AvatarsPage() {
 
       <div className="flex gap-1 border-b border-surface-800 pb-px">
         {([
-          { key: 'favorites' as AvatarTab, icon: Heart, label: `Favorites (${favoriteAvatars.length})` },
-          { key: 'own' as AvatarTab, icon: Shirt, label: `My Uploads (${ownAvatars.length})` },
+          { key: 'own' as AvatarTab, icon: Shirt, label: `My Uploads${ownAvatars.length > 0 ? ` (${ownAvatars.length})` : ''}` },
+          { key: 'favorites' as AvatarTab, icon: Heart, label: `Favorites${favoriteAvatars.length > 0 ? ` (${favoriteAvatars.length})` : ''}` },
           ...(searchResults.length > 0 ? [{ key: 'search' as AvatarTab, icon: Search, label: `Search Results (${searchResults.length})` }] : []),
         ]).map(({ key, icon: Icon, label }) => (
           <button

@@ -825,10 +825,24 @@ export default function ScreenshotsPage() {
                 </>
               )}
 
-              <button onClick={() => setIsPhotoEditing(!isPhotoEditing)}
-                className="btn-secondary text-xs w-full flex items-center justify-center gap-1.5">
-                <Paintbrush size={12} /> {isPhotoEditing ? 'Done Editing' : 'Photo Editor'}
-              </button>
+              {/* Photo tools tab bar */}
+              <div className="border-t border-surface-700/40 pt-3">
+                <div className="text-[10px] text-surface-500 font-semibold uppercase tracking-wide mb-2">Photo Tools</div>
+                <div className="grid grid-cols-2 gap-1.5">
+                  <button
+                    onClick={() => setIsPhotoEditing(!isPhotoEditing)}
+                    className={`text-xs py-2 rounded-lg flex items-center justify-center gap-1.5 transition-colors ${isPhotoEditing ? 'bg-accent-600/30 text-accent-300 border border-accent-500/40' : 'btn-secondary'}`}
+                  >
+                    <Paintbrush size={12} /> {isPhotoEditing ? 'Editing…' : 'Photo Editor'}
+                  </button>
+                  <button
+                    onClick={() => { setIsPhotoEditing(false); setPrintTarget(selected); }}
+                    className="btn-secondary text-xs py-2 flex items-center justify-center gap-1.5"
+                  >
+                    <Printer size={12} /> Create Print
+                  </button>
+                </div>
+              </div>
 
               {isPhotoEditing && (
                 <div className="space-y-3 bg-surface-800/30 p-3 rounded-lg">
@@ -913,9 +927,6 @@ export default function ScreenshotsPage() {
                 </div>
               )}
 
-              <button onClick={() => setPrintTarget(selected)} className="btn-primary text-xs w-full flex items-center justify-center gap-1.5">
-                <Printer size={12} /> Create Print
-              </button>
               <button onClick={() => { setSelected(null); setIsEditing(false); setIsPhotoEditing(false); }} className="btn-ghost text-xs w-full">Close</button>
             </div>
           </div>

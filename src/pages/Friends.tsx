@@ -1,11 +1,12 @@
 import { useState, useMemo, useEffect } from 'react';
 import {
   Users, MapPin, StickyNote, UserMinus, Globe,
-  ChevronRight, RotateCw, X,
+  ChevronRight, RotateCw, X, Star,
 } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
 import { useFriendStore } from '../stores/friendStore';
 import { useWorldStore } from '../stores/worldStore';
+import { useStarredFriendsStore } from '../stores/starredFriendsStore';
 import SearchInput from '../components/common/SearchInput';
 import UserAvatar from '../components/common/UserAvatar';
 import EmptyState from '../components/common/EmptyState';
@@ -15,7 +16,7 @@ import type { VRCUser, UserStatus, VRCWorld } from '../types/vrchat';
 import api from '../api/vrchat';
 import { getBestAvatarUrl } from '../utils/avatar';
 
-type FriendTab = 'online' | 'offline' | 'all' | 'gps';
+type FriendTab = 'online' | 'offline' | 'all' | 'starred' | 'gps';
 type SortBy = 'name' | 'status';
 
 const statusOrder: Record<UserStatus, number> = {
@@ -60,6 +61,7 @@ function useDetailPanel() {
 export default function FriendsPage() {
   const { onlineFriends, offlineFriends, notes, setNote, isLoading, fetchAllFriends } = useFriendStore();
   const { worldCache, getWorld } = useWorldStore();
+  const { starredIds, toggleStar, isStarred } = useStarredFriendsStore();
   const [tab, setTab] = useState<FriendTab>('online');
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState<SortBy>('status');
@@ -91,11 +93,14 @@ export default function FriendsPage() {
       .sort((a, b) => b.friends.length - a.friends.length);
   }, [onlineFriends, worldCache]);
 
+  const allFriends = useMemo(() => [...onlineFriends, ...offlineFriends], [onlineFriends, offlineFriends]);
+
   const friends = useMemo(() => {
     let list: VRCUser[] = [];
     if (tab === 'online') list = [...onlineFriends];
     else if (tab === 'offline') list = [...offlineFriends];
     else if (tab === 'all') list = [...onlineFriends, ...offlineFriends];
+    else if (tab === 'starred') list = allFriends.filter(f => isStarred(f.id));
     else return [];
 
     if (statusFilter !== 'all') list = list.filter(f => f.status === statusFilter);
@@ -111,12 +116,23 @@ export default function FriendsPage() {
     }
 
     if (sortBy === 'status') {
-      list.sort((a, b) => statusOrder[a.status] - statusOrder[b.status] || a.displayName.localeCompare(b.displayName));
+      list.sort((a, b) => {
+        // Starred friends float to the top within status sort
+        const starA = isStarred(a.id) ? 0 : 1;
+        const starB = isStarred(b.id) ? 0 : 1;
+        if (starA !== starB) return starA - starB;
+        return statusOrder[a.status] - statusOrder[b.status] || a.displayName.localeCompare(b.displayName);
+      });
     } else {
-      list.sort((a, b) => a.displayName.localeCompare(b.displayName));
+      list.sort((a, b) => {
+        const starA = isStarred(a.id) ? 0 : 1;
+        const starB = isStarred(b.id) ? 0 : 1;
+        if (starA !== starB) return starA - starB;
+        return a.displayName.localeCompare(b.displayName);
+      });
     }
     return list;
-  }, [tab, onlineFriends, offlineFriends, search, sortBy, statusFilter, notes]);
+  }, [tab, onlineFriends, offlineFriends, allFriends, search, sortBy, statusFilter, notes, starredIds]);
 
   const openNoteEditor = (u: VRCUser) => {
     const n = notes[u.id];
@@ -157,11 +173,12 @@ export default function FriendsPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b border-surface-800 pb-px">
+      <div className="flex gap-1 border-b border-surface-800 pb-px flex-wrap">
         {([
           { key: 'online' as FriendTab, label: `Online (${onlineFriends.length})` },
           { key: 'offline' as FriendTab, label: `Offline (${offlineFriends.length})` },
           { key: 'all' as FriendTab, label: `All (${onlineFriends.length + offlineFriends.length})` },
+          { key: 'starred' as FriendTab, label: `Starred (${starredIds.length})` },
           { key: 'gps' as FriendTab, label: `GPS Map (${worldGroups.length} worlds)` },
         ]).map(({ key, label }) => (
           <button
@@ -267,7 +284,15 @@ export default function FriendsPage() {
       {tab !== 'gps' && (
         isLoading ? <LoadingSpinner className="py-16" /> :
         friends.length === 0 ? (
-          <EmptyState icon={Users} title="No friends found" description={search ? 'Try a different search' : 'Friends appear once data loads'} />
+          <EmptyState
+            icon={tab === 'starred' ? Star : Users}
+            title={tab === 'starred' ? 'No starred friends' : 'No friends found'}
+            description={
+              tab === 'starred'
+                ? 'Hover over a friend and click the star to add them here'
+                : search ? 'Try a different search' : 'Friends appear once data loads'
+            }
+          />
         ) : (
           <div className="space-y-0.5">
             {friends.map(friend => {
@@ -305,6 +330,17 @@ export default function FriendsPage() {
                     <span className="text-xs text-surface-600 flex-shrink-0">Private</span>
                   )}
                   {note?.note && <StickyNote size={12} className="text-amber-400/70 flex-shrink-0" />}
+                  <button
+                    onClick={e => { e.stopPropagation(); toggleStar(friend.id); }}
+                    className={`p-1 rounded transition-colors flex-shrink-0 ${
+                      isStarred(friend.id)
+                        ? 'text-amber-400 hover:text-amber-300'
+                        : 'text-surface-700 hover:text-surface-400 opacity-0 group-hover:opacity-100'
+                    }`}
+                    title={isStarred(friend.id) ? 'Remove from starred' : 'Star this friend'}
+                  >
+                    <Star size={13} fill={isStarred(friend.id) ? 'currentColor' : 'none'} />
+                  </button>
                 </button>
               );
             })}

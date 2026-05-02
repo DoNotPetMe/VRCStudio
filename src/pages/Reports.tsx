@@ -223,6 +223,9 @@ function MyVisitsTab({ onReportFromInstance }: {
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-semibold text-sm truncate">{entry.worldName || entry.worldId}</span>
                           {instanceTypeBadge(entry.instanceType)}
+                          {entry.groupId && (
+                            <span className="text-[10px] font-mono text-purple-400/70 truncate max-w-[120px]" title={entry.groupId}>{entry.groupId}</span>
+                          )}
                           {!entry.leftAt && <span className="text-[10px] text-green-400 font-semibold">● now</span>}
                         </div>
                         <div className="text-xs text-surface-500 mt-0.5 flex items-center gap-2 flex-wrap">
@@ -328,6 +331,11 @@ function ReportWizardTab({ prefillInstance }: {
     setW(prev => ({ ...prev, ...patch }));
   }
 
+  function cleanSubtype(sub: string): string | undefined {
+    if (!sub) return undefined;
+    return sub.startsWith('custom:') ? sub.slice(7).trim() || undefined : sub;
+  }
+
   function goNext() {
     if (w.step === 4) {
       // Generate boilerplate before showing preview
@@ -336,7 +344,7 @@ function ReportWizardTab({ prefillInstance }: {
         targetId: w.targetId,
         targetName: w.targetName,
         violationCategory: w.violationCategory as ViolationCategory,
-        violationSubtype: w.violationSubtype || undefined,
+        violationSubtype: cleanSubtype(w.violationSubtype),
         hasEvidence: w.hasEvidence,
         evidenceType: w.evidenceType || undefined,
         worldId: w.worldId || undefined,
@@ -363,7 +371,7 @@ function ReportWizardTab({ prefillInstance }: {
       targetName: w.targetName,
       targetImageUrl: w.targetImageUrl || undefined,
       violationCategory: w.violationCategory as ViolationCategory,
-      violationSubtype: w.violationSubtype || undefined,
+      violationSubtype: cleanSubtype(w.violationSubtype),
       hasEvidence: w.hasEvidence,
       evidenceType: w.evidenceType || undefined,
       worldId: w.worldId || undefined,
@@ -455,7 +463,7 @@ function ReportWizardTab({ prefillInstance }: {
           </h2>
 
           <div className="space-y-2">
-            <label className="text-xs font-semibold text-surface-400">Display name</label>
+            <label className="text-xs font-semibold text-surface-200">Display name</label>
             <input
               type="text"
               placeholder={w.reportType === 'player' ? 'Enter VRChat display name' : 'Enter group name'}
@@ -466,7 +474,7 @@ function ReportWizardTab({ prefillInstance }: {
           </div>
 
           <div className="space-y-2">
-            <label className="text-xs font-semibold text-surface-400">
+            <label className="text-xs font-semibold text-surface-200">
               {w.reportType === 'player' ? 'User ID (optional but recommended)' : 'Group ID (optional but recommended)'}
             </label>
             <input
@@ -480,7 +488,7 @@ function ReportWizardTab({ prefillInstance }: {
 
           {w.reportType === 'player' && recentFriends.length > 0 && (
             <div>
-              <div className="text-xs font-semibold text-surface-400 mb-2">Quick pick from friends</div>
+              <div className="text-xs font-semibold text-surface-200 mb-2">Quick pick from friends</div>
               <div className="flex flex-wrap gap-2">
                 {recentFriends.map(f => (
                   <button
@@ -535,7 +543,7 @@ function ReportWizardTab({ prefillInstance }: {
           {/* Subtype if applicable */}
           {catDef?.subtypes && (
             <div className="space-y-2">
-              <label className="text-xs font-semibold text-surface-400">{catDef.subtypeLabel}</label>
+              <label className="text-xs font-semibold text-surface-200">{catDef.subtypeLabel}</label>
               <div className="flex flex-wrap gap-2">
                 {catDef.subtypes.map(sub => (
                   <button
@@ -546,13 +554,31 @@ function ReportWizardTab({ prefillInstance }: {
                     {sub}
                   </button>
                 ))}
+                {catDef.subtypeAllowCustom && (
+                  <button
+                    onClick={() => update({ violationSubtype: 'custom:' })}
+                    className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${w.violationSubtype?.startsWith('custom:') ? 'border-accent-500 bg-accent-500/10 text-accent-300' : 'border-surface-700 hover:border-surface-600'}`}
+                  >
+                    Describe it myself
+                  </button>
+                )}
               </div>
+              {w.violationSubtype?.startsWith('custom:') && (
+                <input
+                  type="text"
+                  placeholder="Briefly describe the subtype..."
+                  value={w.violationSubtype.slice(7)}
+                  onChange={e => update({ violationSubtype: 'custom:' + e.target.value })}
+                  className="input text-sm w-full mt-1"
+                  autoFocus
+                />
+              )}
             </div>
           )}
 
           {/* When did it happen */}
           <div className="space-y-2">
-            <label className="text-xs font-semibold text-surface-400">When did this happen?</label>
+            <label className="text-xs font-semibold text-surface-200">When did this happen?</label>
             <input
               type="datetime-local"
               value={new Date(w.incidentTime - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)}
@@ -563,7 +589,7 @@ function ReportWizardTab({ prefillInstance }: {
 
           {/* Instance context */}
           <div className="space-y-2">
-            <label className="text-xs font-semibold text-surface-400">World / instance (optional)</label>
+            <label className="text-xs font-semibold text-surface-200">World / instance (optional)</label>
             <div className="grid grid-cols-2 gap-2">
               <input
                 type="text"
@@ -584,7 +610,7 @@ function ReportWizardTab({ prefillInstance }: {
 
           {/* Evidence */}
           <div className="space-y-2">
-            <label className="text-xs font-semibold text-surface-400">Do you have evidence?</label>
+            <label className="text-xs font-semibold text-surface-200">Do you have evidence?</label>
             <div className="flex flex-wrap gap-2">
               {[
                 { val: false, label: 'No evidence' },
@@ -616,7 +642,7 @@ function ReportWizardTab({ prefillInstance }: {
 
           {/* Witnesses */}
           <div className="space-y-2">
-            <label className="text-xs font-semibold text-surface-400">Other witnesses? (optional — VRChat usernames, comma-separated)</label>
+            <label className="text-xs font-semibold text-surface-200">Other people present? (optional — VRChat usernames)</label>
             <input
               type="text"
               placeholder="e.g. FriendName1, FriendName2"
