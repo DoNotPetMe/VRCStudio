@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import {
   Shirt, Search, ArrowLeft, Heart, AlertCircle, RotateCw,
   Pin, PinOff, Zap, Copy, Check, Database, ExternalLink,
+  ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import api from '../api/vrchat';
 import { vrcdb, VRCDB_PROVIDERS, getProviderId, setProviderId } from '../api/vrcdb';
@@ -283,6 +284,8 @@ export default function AvatarsPage() {
   );
 }
 
+const VRCDB_PAGE_SIZE = 20;
+
 // ── VRCDB Panel ────────────────────────────────────────────────────────────────
 
 function VrcdbPanel({
@@ -302,6 +305,13 @@ function VrcdbPanel({
 }) {
   const [wearingId, setWearingId] = useState<string | null>(null);
   const [wornId, setWornId] = useState<string | null>(null);
+  const [page, setPage] = useState(0);
+
+  // Reset to page 0 whenever results change
+  useEffect(() => { setPage(0); }, [results]);
+
+  const totalPages = Math.max(1, Math.ceil(results.length / VRCDB_PAGE_SIZE));
+  const pageResults = results.slice(page * VRCDB_PAGE_SIZE, (page + 1) * VRCDB_PAGE_SIZE);
 
   const handleWear = async (id: string) => {
     setWearingId(id);
@@ -357,73 +367,153 @@ function VrcdbPanel({
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {results.map(avatar => {
-            const isWearing = wearingId === avatar.id;
-            const isWorn = wornId === avatar.id;
-            const wasCopied = copiedId === avatar.id;
-            const imgUrl = avatar.thumbnailImageUrl || avatar.imageUrl;
+        <>
+          {/* Results count + pagination header */}
+          <div className="flex items-center justify-between text-xs text-surface-500">
+            <span>
+              {results.length} avatar{results.length !== 1 ? 's' : ''} found
+              {results.length >= 200 && <span className="ml-1 text-amber-400/80">(max 200 per search — refine for more specific results)</span>}
+            </span>
+            {totalPages > 1 && (
+              <span>Page {page + 1} of {totalPages}</span>
+            )}
+          </div>
 
-            return (
-              <div key={avatar.id} className="glass-panel-solid overflow-hidden flex flex-col">
-                <div className="aspect-square overflow-hidden bg-surface-800">
-                  {imgUrl ? (
-                    <img src={imgUrl} alt="" className="w-full h-full object-cover" loading="lazy" />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center">
-                      <Shirt size={32} className="text-surface-700" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {pageResults.map(avatar => {
+              const isWearing = wearingId === avatar.id;
+              const isWorn = wornId === avatar.id;
+              const wasCopied = copiedId === avatar.id;
+              const imgUrl = avatar.thumbnailImageUrl || avatar.imageUrl;
+
+              return (
+                <div key={avatar.id} className="glass-panel-solid overflow-hidden flex flex-col">
+                  <div className="aspect-square overflow-hidden bg-surface-800">
+                    {imgUrl ? (
+                      <img src={imgUrl} alt="" className="w-full h-full object-cover" loading="lazy" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <Shirt size={32} className="text-surface-700" />
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="p-3 flex flex-col gap-2 flex-1">
+                    <div>
+                      <h3 className="text-sm font-semibold truncate" title={avatar.name}>{avatar.name}</h3>
+                      <p className="text-xs text-surface-400 truncate">by {avatar.authorName}</p>
                     </div>
-                  )}
-                </div>
 
-                <div className="p-3 flex flex-col gap-2 flex-1">
-                  <div>
-                    <h3 className="text-sm font-semibold truncate" title={avatar.name}>{avatar.name}</h3>
-                    <p className="text-xs text-surface-400 truncate">by {avatar.authorName}</p>
-                  </div>
+                    {avatar.description && (
+                      <p className="text-[11px] text-surface-500 line-clamp-2 leading-relaxed">{avatar.description}</p>
+                    )}
 
-                  {avatar.description && (
-                    <p className="text-[11px] text-surface-500 line-clamp-2 leading-relaxed">{avatar.description}</p>
-                  )}
-
-                  <div className="flex items-center gap-1.5 mt-auto pt-1">
-                    <button
-                      onClick={() => handleWear(avatar.id)}
-                      disabled={!!wearingId}
-                      className={`flex-1 text-xs py-1.5 rounded-lg font-medium transition-colors flex items-center justify-center gap-1 ${
-                        isWorn ? 'bg-green-500/20 text-green-400' : 'btn-primary'
-                      }`}
-                    >
-                      {isWorn ? <><Check size={11} /> Worn</> : isWearing ? 'Switching...' : 'Wear'}
-                    </button>
-                    <button
-                      onClick={() => onCopy(avatar.id)}
-                      className="p-1.5 rounded-lg border border-surface-700 hover:border-surface-500 transition-colors text-surface-400 hover:text-surface-200"
-                      title="Copy avatar ID"
-                    >
-                      {wasCopied ? <Check size={12} className="text-green-400" /> : <Copy size={12} />}
-                    </button>
-                    <a
-                      href={`https://vrchat.com/home/avatar/${avatar.id}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={e => {
-                        if (window.electronAPI?.openExternal) {
-                          e.preventDefault();
-                          window.electronAPI.openExternal(`https://vrchat.com/home/avatar/${avatar.id}`);
-                        }
-                      }}
-                      className="p-1.5 rounded-lg border border-surface-700 hover:border-surface-500 transition-colors text-surface-400 hover:text-surface-200"
-                      title="Open on VRChat website"
-                    >
-                      <ExternalLink size={12} />
-                    </a>
+                    <div className="flex items-center gap-1.5 mt-auto pt-1">
+                      <button
+                        onClick={() => handleWear(avatar.id)}
+                        disabled={!!wearingId}
+                        className={`flex-1 text-xs py-1.5 rounded-lg font-medium transition-colors flex items-center justify-center gap-1 ${
+                          isWorn ? 'bg-green-500/20 text-green-400' : 'btn-primary'
+                        }`}
+                      >
+                        {isWorn ? <><Check size={11} /> Worn</> : isWearing ? 'Switching...' : 'Wear'}
+                      </button>
+                      <button
+                        onClick={() => onCopy(avatar.id)}
+                        className="p-1.5 rounded-lg border border-surface-700 hover:border-surface-500 transition-colors text-surface-400 hover:text-surface-200"
+                        title="Copy avatar ID"
+                      >
+                        {wasCopied ? <Check size={12} className="text-green-400" /> : <Copy size={12} />}
+                      </button>
+                      <a
+                        href={`https://vrchat.com/home/avatar/${avatar.id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={e => {
+                          if (window.electronAPI?.openExternal) {
+                            e.preventDefault();
+                            window.electronAPI.openExternal(`https://vrchat.com/home/avatar/${avatar.id}`);
+                          }
+                        }}
+                        className="p-1.5 rounded-lg border border-surface-700 hover:border-surface-500 transition-colors text-surface-400 hover:text-surface-200"
+                        title="Open on VRChat website"
+                      >
+                        <ExternalLink size={12} />
+                      </a>
+                    </div>
                   </div>
                 </div>
+              );
+            })}
+          </div>
+
+          {/* Pagination controls */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-center gap-2 pt-2">
+              <button
+                onClick={() => { setPage(0); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                disabled={page === 0}
+                className="p-1.5 rounded border border-surface-700 text-surface-400 hover:text-surface-200 hover:border-surface-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                title="First page"
+              >
+                <ChevronLeft size={14} className="inline" /><ChevronLeft size={14} className="inline -ml-2" />
+              </button>
+              <button
+                onClick={() => { setPage(p => p - 1); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                disabled={page === 0}
+                className="p-1.5 rounded border border-surface-700 text-surface-400 hover:text-surface-200 hover:border-surface-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                title="Previous page"
+              >
+                <ChevronLeft size={14} />
+              </button>
+
+              {/* Page number buttons — show up to 7 around current page */}
+              <div className="flex gap-1">
+                {Array.from({ length: totalPages }, (_, i) => i)
+                  .filter(i => Math.abs(i - page) <= 3 || i === 0 || i === totalPages - 1)
+                  .reduce<(number | 'gap')[]>((acc, i, idx, arr) => {
+                    if (idx > 0 && i - (arr[idx - 1] as number) > 1) acc.push('gap');
+                    acc.push(i);
+                    return acc;
+                  }, [])
+                  .map((item, idx) =>
+                    item === 'gap' ? (
+                      <span key={`gap-${idx}`} className="px-1.5 py-1 text-xs text-surface-600">…</span>
+                    ) : (
+                      <button
+                        key={item}
+                        onClick={() => { setPage(item as number); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                        className={`min-w-[28px] h-7 px-1.5 rounded text-xs border transition-colors ${
+                          page === item
+                            ? 'border-accent-500 bg-accent-500/20 text-accent-400 font-semibold'
+                            : 'border-surface-700 text-surface-400 hover:text-surface-200 hover:border-surface-500'
+                        }`}
+                      >
+                        {(item as number) + 1}
+                      </button>
+                    )
+                  )}
               </div>
-            );
-          })}
-        </div>
+
+              <button
+                onClick={() => { setPage(p => p + 1); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                disabled={page === totalPages - 1}
+                className="p-1.5 rounded border border-surface-700 text-surface-400 hover:text-surface-200 hover:border-surface-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                title="Next page"
+              >
+                <ChevronRight size={14} />
+              </button>
+              <button
+                onClick={() => { setPage(totalPages - 1); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                disabled={page === totalPages - 1}
+                className="p-1.5 rounded border border-surface-700 text-surface-400 hover:text-surface-200 hover:border-surface-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                title="Last page"
+              >
+                <ChevronRight size={14} className="inline" /><ChevronRight size={14} className="inline -ml-2" />
+              </button>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
