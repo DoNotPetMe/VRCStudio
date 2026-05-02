@@ -222,4 +222,9 @@ export interface AppSettings {
     showOfflineFriends: boolean;
     timeFormat: '12h' | '24h';
   };
+  profile: {
+    nickname: string;
+    greetingEnabled: boolean;
+    showWeather: boolean;
+  };
 }

@@ -26,13 +26,25 @@ const defaultSettings: AppSettings = {
     showOfflineFriends: true,
     timeFormat: '24h',
   },
+  profile: {
+    nickname: '',
+    greetingEnabled: true,
+    showWeather: true,
+  },
 };
 
 function loadSettings(): AppSettings {
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
     if (!raw) return defaultSettings;
-    return { ...defaultSettings, ...JSON.parse(raw) };
+    const saved = JSON.parse(raw);
+    return {
+      general: { ...defaultSettings.general, ...saved.general },
+      notifications: { ...defaultSettings.notifications, ...saved.notifications },
+      polling: { ...defaultSettings.polling, ...saved.polling },
+      display: { ...defaultSettings.display, ...saved.display },
+      profile: { ...defaultSettings.profile, ...saved.profile },
+    };
   } catch {
     return defaultSettings;
   }
@@ -48,6 +60,7 @@ interface SettingsState {
   updateNotifications: (updates: Partial<AppSettings['notifications']>) => void;
   updatePolling: (updates: Partial<AppSettings['polling']>) => void;
   updateDisplay: (updates: Partial<AppSettings['display']>) => void;
+  updateProfile: (updates: Partial<AppSettings['profile']>) => void;
   resetSettings: () => void;
 }
 
@@ -86,6 +99,12 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       ...get().settings,
       display: { ...get().settings.display, ...updates },
     };
+    saveSettings(settings);
+    set({ settings });
+  },
+
+  updateProfile: (updates) => {
+    const settings = { ...get().settings, profile: { ...get().settings.profile, ...updates } };
     saveSettings(settings);
     set({ settings });
   },

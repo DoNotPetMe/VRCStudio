@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import {
   Settings as SettingsIcon, Bell, Monitor, Clock, RotateCcw,
   Palette, Download, Upload, UserCircle, Globe2, Zap, Shield,
-  Plus, Trash2, Check, ChevronDown,
+  Trash2, Smile, X,
 } from 'lucide-react';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useAuthStore } from '../stores/authStore';
@@ -15,22 +15,24 @@ import api from '../api/vrchat';
 
 type SettingsSection =
   | 'account' | 'accounts' | 'notifications' | 'polling'
-  | 'display' | 'appearance' | 'discord' | 'general' | 'data';
+  | 'display' | 'appearance' | 'discord' | 'general' | 'data'
+  | 'profile';
 
 const sections: Array<{ key: SettingsSection; label: string; icon: typeof SettingsIcon }> = [
-  { key: 'account', label: 'Account', icon: UserCircle },
-  { key: 'accounts', label: 'Multiple Accounts', icon: Shield },
-  { key: 'notifications', label: 'Notifications', icon: Bell },
-  { key: 'polling', label: 'Update Intervals', icon: Clock },
-  { key: 'display', label: 'Display', icon: Monitor },
-  { key: 'appearance', label: 'Appearance', icon: Palette },
-  { key: 'discord', label: 'Discord Rich Presence', icon: Zap },
-  { key: 'general', label: 'General', icon: SettingsIcon },
-  { key: 'data', label: 'Data & Backup', icon: Download },
+  { key: 'profile',       label: 'Personalization',       icon: Smile },
+  { key: 'account',       label: 'Account',               icon: UserCircle },
+  { key: 'accounts',      label: 'Multiple Accounts',     icon: Shield },
+  { key: 'notifications', label: 'Notifications',         icon: Bell },
+  { key: 'polling',       label: 'Update Intervals',      icon: Clock },
+  { key: 'display',       label: 'Display',               icon: Monitor },
+  { key: 'appearance',    label: 'Appearance',            icon: Palette },
+  { key: 'discord',       label: 'Discord Rich Presence', icon: Zap },
+  { key: 'general',       label: 'General',               icon: SettingsIcon },
+  { key: 'data',          label: 'Data & Backup',         icon: Download },
 ];
 
 export default function SettingsPage() {
-  const { settings, updateGeneral, updateNotifications, updatePolling, updateDisplay, resetSettings } = useSettingsStore();
+  const { settings, updateGeneral, updateNotifications, updatePolling, updateDisplay, updateProfile, resetSettings } = useSettingsStore();
   const { user } = useAuthStore();
   const { onlineFriends, offlineFriends } = useFriendStore();
   const { theme, setMode, setAccentColor, setCustomCSS, setFontSize, setSidebarWidth, resetTheme } = useThemeStore();
@@ -39,6 +41,7 @@ export default function SettingsPage() {
   const [importStatus, setImportStatus] = useState<string | null>(null);
   const [lang, setLang] = useState(getLanguage());
   const [autoLaunch, setAutoLaunch] = useState(false);
+  const [nicknameInput, setNicknameInput] = useState(settings.profile.nickname);
   const importRef = useRef<HTMLInputElement>(null);
 
   // Discord settings stored in a simple local state backed to localStorage
@@ -131,6 +134,93 @@ export default function SettingsPage() {
 
         {/* Content */}
         <div className="flex-1 min-w-0 space-y-4">
+
+          {/* ── Personalization ── */}
+          {active === 'profile' && (
+            <>
+              <Section title="Your Identity" icon={Smile}>
+                <p className="text-xs text-surface-500">
+                  Set a preferred name that VRC Studio uses to greet you. Leave blank to use your VRChat display name.
+                </p>
+                <div className="space-y-1">
+                  <label className="block text-sm font-medium">Preferred Name</label>
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <input
+                        type="text"
+                        value={nicknameInput}
+                        onChange={e => setNicknameInput(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') updateProfile({ nickname: nicknameInput.trim() });
+                          if (e.key === 'Escape') { setNicknameInput(settings.profile.nickname); }
+                        }}
+                        placeholder={user?.displayName || 'Your VRChat name'}
+                        maxLength={40}
+                        className="input-field w-full pr-8"
+                      />
+                      {nicknameInput && (
+                        <button
+                          onClick={() => { setNicknameInput(''); updateProfile({ nickname: '' }); }}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-surface-500 hover:text-surface-300 transition-colors"
+                          title="Clear name"
+                        >
+                          <X size={14} />
+                        </button>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => updateProfile({ nickname: nicknameInput.trim() })}
+                      disabled={nicknameInput.trim() === settings.profile.nickname}
+                      className="btn-primary text-sm disabled:opacity-40"
+                    >
+                      Save
+                    </button>
+                  </div>
+                  <p className="text-xs text-surface-600">
+                    {nicknameInput.trim()
+                      ? `You'll be greeted as "${nicknameInput.trim()}"`
+                      : `You'll be greeted as "${user?.displayName || 'Traveler'}"`}
+                  </p>
+                </div>
+              </Section>
+
+              <Section title="Dashboard Greeting" icon={Smile}>
+                <Toggle
+                  label="Show Greeting"
+                  description="Display a personalized greeting with live info on the Dashboard"
+                  checked={settings.profile.greetingEnabled}
+                  onChange={v => updateProfile({ greetingEnabled: v })}
+                />
+                {settings.profile.greetingEnabled && (
+                  <Toggle
+                    label="Show Local Weather"
+                    description="Fetch and display your current weather in the greeting — requires location permission"
+                    checked={settings.profile.showWeather}
+                    onChange={v => updateProfile({ showWeather: v })}
+                  />
+                )}
+                {settings.profile.greetingEnabled && (
+                  <div className="glass-panel p-3 mt-1">
+                    <div className="text-xs text-surface-500 mb-2 font-medium uppercase tracking-wide">Preview</div>
+                    <div className="text-sm font-semibold text-surface-200">
+                      {(() => {
+                        const h = new Date().getHours();
+                        let g = 'Good night';
+                        if (h >= 5 && h < 12)  g = 'Good morning';
+                        else if (h >= 12 && h < 17) g = 'Good afternoon';
+                        else if (h >= 17 && h < 21) g = 'Good evening';
+                        const name = nicknameInput.trim() || user?.displayName || 'Traveler';
+                        return <>{g}, <span className="text-gradient">{name}</span></>;
+                      })()}
+                    </div>
+                    <p className="text-xs text-surface-500 mt-1">
+                      The greeting rotates through: current time, friends online, join-me invites{settings.profile.showWeather ? ', and weather' : ''}.
+                    </p>
+                  </div>
+                )}
+              </Section>
+            </>
+          )}
 
           {/* ── Account ── */}
           {active === 'account' && (
