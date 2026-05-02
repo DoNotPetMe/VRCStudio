@@ -1,11 +1,13 @@
 // Avatar search using community VRChat avatar databases.
 //
-// Primary provider is api.avtrdb.com (used by VRCX itself). It gates on a
-// VRCX-ID UUID + Referer: https://vrcx.app header — without those it returns
-// 403 "Host not in allowlist". We persist a stable UUID per install.
+// Primary provider is api.avtrdb.com. Per their FAQ they require:
+//   - User-Agent that identifies the app AND contains contact info (URL/email)
+//   - Referer: https://vrcx.app + VRCX-ID UUID (allowlist gate)
+// Without these we get 403 "Host not in allowlist" or 403 "Please add proper
+// contact information to your user-agent".
 //
-// Routes through Electron's main process so we can set Referer (which the
-// browser fetch() blocks for security reasons).
+// Routes through Electron's main process so we can set Referer + custom
+// User-Agent (which browser fetch() blocks for security reasons).
 
 const VRCX_ID_KEY = 'vrcstudio_vrcx_id';
 
@@ -20,9 +22,18 @@ function getVrcxId(): string {
   return id;
 }
 
-const VRCX_HEADERS = (): Record<string, string> => ({
+// User-Agent that satisfies avtrdb's contact-info requirement.
+// Format: <App>/<Version> (+<contact URL>; <contact email>)
+const CONTACT_UA = 'VRCStudio/1.0.0 (+https://github.com/crystaldusty/vrcstudio; contact: vrcstudio@proton.me)';
+
+const AVTRDB_HEADERS = (): Record<string, string> => ({
+  'User-Agent': CONTACT_UA,
   'Referer': 'https://vrcx.app',
   'VRCX-ID': getVrcxId(),
+});
+
+const FALLBACK_HEADERS = (): Record<string, string> => ({
+  'User-Agent': CONTACT_UA,
 });
 
 export const VRCDB_PROVIDERS = [
@@ -32,15 +43,7 @@ export const VRCDB_PROVIDERS = [
     searchUrl: (q: string) => `https://api.avtrdb.com/v3/avatar/search/vrcx?search=${encodeURIComponent(q)}&n=200`,
     byAuthorUrl: (id: string) => `https://api.avtrdb.com/v3/avatar/search/vrcx?authorId=${encodeURIComponent(id)}`,
     byIdUrl: (id: string) => `https://api.avtrdb.com/v3/avatar/search/vrcx?fileId=${encodeURIComponent(id)}`,
-    headers: VRCX_HEADERS,
-  },
-  {
-    id: 'requi',
-    label: 'requi.dev',
-    searchUrl: (q: string) => `https://requi.dev/vrcx_search.php?search=${encodeURIComponent(q)}&n=40`,
-    byAuthorUrl: (id: string) => `https://requi.dev/vrcx_search.php?authorId=${encodeURIComponent(id)}&n=50`,
-    byIdUrl: (id: string) => `https://requi.dev/vrcx_search.php?avatarId=${encodeURIComponent(id)}`,
-    headers: () => ({}),
+    headers: AVTRDB_HEADERS,
   },
   {
     id: 'justh',
@@ -48,7 +51,7 @@ export const VRCDB_PROVIDERS = [
     searchUrl: (q: string) => `https://avtr.just-h.party/vrcx_search.php?search=${encodeURIComponent(q)}&n=40`,
     byAuthorUrl: (id: string) => `https://avtr.just-h.party/vrcx_search.php?authorId=${encodeURIComponent(id)}&n=50`,
     byIdUrl: (id: string) => `https://avtr.just-h.party/vrcx_search.php?avatarId=${encodeURIComponent(id)}`,
-    headers: () => ({}),
+    headers: FALLBACK_HEADERS,
   },
 ] as const;
 

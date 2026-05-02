@@ -727,9 +727,9 @@ export default function SettingsPage() {
                   To request removal of your avatar from an index, contact the provider directly.{' '}
                   <button
                     className="text-accent-400 hover:text-accent-300 underline"
-                    onClick={() => window.electronAPI?.openExternal('https://requi.dev')}
+                    onClick={() => window.electronAPI?.openExternal('https://avtrdb.com/faq')}
                   >
-                    requi.dev
+                    avtrdb.com/faq
                   </button>
                 </p>
               </div>
