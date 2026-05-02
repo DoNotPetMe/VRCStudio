@@ -381,35 +381,61 @@ ipcMain.handle('vrchat:request', async (_e, opts: {
 
 // Generic outbound GET — used for third-party APIs (VRCDB, etc.)
 // Runs in main process so we can set any User-Agent header.
+// Follows up to 3 redirects.
 ipcMain.handle('http:get', async (_e, url: string, headers?: Record<string, string>) => {
-  return new Promise((resolve) => {
+  const doRequest = (targetUrl: string, hops = 0): Promise<any> => new Promise((resolve) => {
     let parsed: URL;
-    try { parsed = new URL(url); } catch {
-      return resolve({ ok: false, status: 0, data: null, raw: 'Invalid URL' });
+    try { parsed = new URL(targetUrl); } catch {
+      return resolve({ ok: false, status: 0, data: null, raw: 'Invalid URL', url: targetUrl });
     }
+
+    const finalHeaders: Record<string, string> = {
+      'User-Agent': 'VRCX',
+      'Accept': 'application/json, text/plain, */*',
+      ...headers,
+    };
 
     const req = https.request(
       {
         hostname: parsed.hostname,
-        port: parsed.port || 443,
+        port: parsed.port ? Number(parsed.port) : 443,
         path: parsed.pathname + parsed.search,
         method: 'GET',
-        headers: { 'User-Agent': 'VRCX', ...headers },
+        headers: finalHeaders,
       },
       (res) => {
+        // Follow redirects
+        if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location && hops < 3) {
+          const next = new URL(res.headers.location, parsed).toString();
+          res.resume();
+          return resolve(doRequest(next, hops + 1));
+        }
+
         const chunks: Buffer[] = [];
         res.on('data', (chunk: Buffer) => chunks.push(chunk));
         res.on('end', () => {
           const raw = Buffer.concat(chunks).toString('utf-8');
           let data: any = null;
           try { data = JSON.parse(raw); } catch {}
-          resolve({ ok: res.statusCode! >= 200 && res.statusCode! < 300, status: res.statusCode, data, raw });
+          const ok = res.statusCode! >= 200 && res.statusCode! < 300;
+          if (!ok) {
+            console.warn(`[http:get] ${targetUrl} → ${res.statusCode}: ${raw.slice(0, 200)}`);
+          }
+          resolve({ ok, status: res.statusCode, data, raw, url: targetUrl, headers: res.headers });
         });
       }
     );
-    req.on('error', (err) => resolve({ ok: false, status: 0, data: null, raw: err.message }));
+    req.on('error', (err) => {
+      console.warn(`[http:get] ${targetUrl} failed:`, err.message);
+      resolve({ ok: false, status: 0, data: null, raw: err.message, url: targetUrl });
+    });
+    req.setTimeout(15000, () => {
+      req.destroy(new Error('Request timeout'));
+    });
     req.end();
   });
+
+  return doRequest(url);
 });
 
 // ─── App lifecycle ────────────────────────────────────────────────────────────
