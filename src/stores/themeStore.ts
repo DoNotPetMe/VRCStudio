@@ -6,6 +6,9 @@ export interface ThemeConfig {
   customCSS: string;
   fontSize: 'small' | 'medium' | 'large';
   sidebarWidth: 'compact' | 'normal' | 'wide';
+  borderRadius: 'sharp' | 'rounded' | 'pill';
+  animationSpeed: 'none' | 'subtle' | 'normal';
+  glassEffect: 'none' | 'light' | 'medium';
 }
 
 const THEME_KEY = 'vrcstudio_theme';
@@ -16,6 +19,9 @@ const defaultTheme: ThemeConfig = {
   customCSS: '',
   fontSize: 'medium',
   sidebarWidth: 'normal',
+  borderRadius: 'rounded',
+  animationSpeed: 'normal',
+  glassEffect: 'medium',
 };
 
 function loadTheme(): ThemeConfig {
@@ -96,6 +102,9 @@ interface ThemeState {
   setCustomCSS: (css: string) => void;
   setFontSize: (size: ThemeConfig['fontSize']) => void;
   setSidebarWidth: (width: ThemeConfig['sidebarWidth']) => void;
+  setBorderRadius: (radius: ThemeConfig['borderRadius']) => void;
+  setAnimationSpeed: (speed: ThemeConfig['animationSpeed']) => void;
+  setGlassEffect: (effect: ThemeConfig['glassEffect']) => void;
   applyTheme: () => void;
   resetTheme: () => void;
 }
@@ -138,6 +147,27 @@ export const useThemeStore = create<ThemeState>((set, get) => ({
     get().applyTheme();
   },
 
+  setBorderRadius: (borderRadius) => {
+    const theme = { ...get().theme, borderRadius };
+    saveTheme(theme);
+    set({ theme });
+    get().applyTheme();
+  },
+
+  setAnimationSpeed: (animationSpeed) => {
+    const theme = { ...get().theme, animationSpeed };
+    saveTheme(theme);
+    set({ theme });
+    get().applyTheme();
+  },
+
+  setGlassEffect: (glassEffect) => {
+    const theme = { ...get().theme, glassEffect };
+    saveTheme(theme);
+    set({ theme });
+    get().applyTheme();
+  },
+
   applyTheme: () => {
     const { theme } = get();
     const root = document.documentElement;
@@ -158,6 +188,18 @@ export const useThemeStore = create<ThemeState>((set, get) => ({
     root.classList.remove('text-sm', 'text-base', 'text-lg');
     const fontClass = theme.fontSize === 'small' ? 'text-sm' : theme.fontSize === 'large' ? 'text-lg' : 'text-base';
     root.classList.add(fontClass);
+
+    // Border radius
+    const radiusMap: Record<string, string> = { sharp: '0px', rounded: '8px', pill: '16px' };
+    root.style.setProperty('--radius-base', radiusMap[theme.borderRadius ?? 'rounded']);
+
+    // Animation speed
+    const durationMap: Record<string, string> = { none: '0ms', subtle: '100ms', normal: '200ms' };
+    root.style.setProperty('--transition-duration', durationMap[theme.animationSpeed ?? 'normal']);
+
+    // Glass effect opacity
+    const glassMap: Record<string, string> = { none: '1', light: '0.85', medium: '0.7' };
+    root.style.setProperty('--glass-opacity', glassMap[theme.glassEffect ?? 'medium']);
 
     // Light mode: adjust body text color
     if (theme.mode === 'light') {

@@ -204,6 +204,9 @@ export interface AppSettings {
     startMinimized: boolean;
     minimizeToTray: boolean;
     launchOnStartup: boolean;
+    confirmClose: boolean;
+    checkForUpdates: boolean;
+    hardwareAcceleration: boolean;
   };
   notifications: {
     friendOnline: boolean;
@@ -212,14 +215,45 @@ export interface AppSettings {
     friendStatus: boolean;
     invites: boolean;
     sound: boolean;
+    desktopNotifications: boolean;
+    notificationDuration: number;
+    dndEnabled: boolean;
+    dndStart: string;
+    dndEnd: string;
+    groupUpdates: boolean;
   };
   polling: {
     friendsInterval: number;
     worldInterval: number;
+    notificationsInterval: number;
+    feedInterval: number;
   };
   display: {
     compactMode: boolean;
     showOfflineFriends: boolean;
     timeFormat: '12h' | '24h';
+    friendsSortBy: 'name' | 'status' | 'trust';
+    groupByStatus: boolean;
+    showTrustBadges: boolean;
+    showBioPreview: boolean;
+    showAvatarInList: boolean;
+  };
+  privacy: {
+    showOnlineStatus: boolean;
+    showCurrentWorld: boolean;
+    allowFriendRequests: boolean;
+    showLastSeen: boolean;
+  };
+  performance: {
+    enableAnimations: boolean;
+    imageQuality: 'low' | 'medium' | 'high';
+    backgroundSync: boolean;
+    prefetchImages: boolean;
+    virtualizeListsThreshold: number;
+  };
+  profile: {
+    nickname: string;
+    greetingEnabled: boolean;
+    showWeather: boolean;
   };
 }
