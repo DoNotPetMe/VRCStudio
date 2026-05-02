@@ -82,13 +82,20 @@ function createTray() {
 // ─── Discord RPC ─────────────────────────────────────────────────────────────
 
 async function initDiscordRPC(clientId: string) {
+  // Require a non-empty, plausible clientId (Discord app IDs are 17-19 digits)
+  if (!clientId || clientId.length < 10) {
+    console.warn('[Discord RPC] No valid clientId provided — skipping init');
+    return;
+  }
+  // Disconnect any existing session first
+  disconnectDiscordRPC();
   try {
-    const { Client } = await import('discord-rpc' as string);
+    const { Client } = await import('discord-rpc');
     discordRPC = new Client({ transport: 'ipc' });
 
     discordRPC.on('ready', () => {
       rpcConnected = true;
-      console.log('[Discord RPC] Connected');
+      console.log('[Discord RPC] Connected as', (discordRPC as any).user?.username);
     });
 
     discordRPC.on('disconnected', () => {
@@ -96,11 +103,11 @@ async function initDiscordRPC(clientId: string) {
       console.log('[Discord RPC] Disconnected');
     });
 
-    discordRPC.login({ clientId }).catch((err: Error) => {
-      console.warn('[Discord RPC] Login failed:', err.message);
-    });
-  } catch {
-    console.warn('[Discord RPC] discord-rpc not installed, skipping');
+    await discordRPC.login({ clientId });
+  } catch (err: any) {
+    console.warn('[Discord RPC] Failed to connect:', err?.message ?? err);
+    discordRPC = null;
+    rpcConnected = false;
   }
 }
 
@@ -115,9 +122,9 @@ function disconnectDiscordRPC() {
 function setDiscordActivity(activity: {
   details?: string;
   state?: string;
-  largeImageKey?: string;
+  largeImageKey?: string;   // asset key OR https:// URL
   largeImageText?: string;
-  smallImageKey?: string;
+  smallImageKey?: string;   // asset key OR https:// URL
   smallImageText?: string;
   startTimestamp?: number;
   instance?: boolean;
@@ -125,7 +132,13 @@ function setDiscordActivity(activity: {
   if (!rpcConnected || !discordRPC) return;
   try {
     discordRPC.setActivity({
-      ...activity,
+      details: activity.details,
+      state: activity.state,
+      largeImageKey: activity.largeImageKey,
+      largeImageText: activity.largeImageText,
+      smallImageKey: activity.smallImageKey,
+      smallImageText: activity.smallImageText,
+      startTimestamp: activity.startTimestamp,
       instance: activity.instance ?? false,
     });
   } catch (err) {

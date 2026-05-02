@@ -24,9 +24,19 @@ function readConfig(): DiscordConfig {
   }
 }
 
+function fmtDuration(ms: number): string {
+  const m = Math.floor(ms / 60000);
+  if (m < 1) return 'just joined';
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  const rem = m % 60;
+  return rem ? `${h}h ${rem}m` : `${h}h`;
+}
+
 export function useDiscordRPC() {
   const initialized = useRef(false);
   const startTs = useRef(Date.now());
+  const lastClientId = useRef('');
 
   useEffect(() => {
     if (!window.electronAPI) return;
@@ -37,13 +47,30 @@ export function useDiscordRPC() {
       const user = useAuthStore.getState().user;
       const current = useInstanceHistoryStore.getState().currentInstance;
 
-      window.electronAPI.discordSetActivity({
-        details: user ? `Playing as ${user.displayName}` : 'In VRChat',
-        state: cfg.showWorld && current?.worldName
-          ? `In ${current.worldName}`
-          : (user?.statusDescription || 'Online'),
-        largeImageKey: 'vrchat_logo',
-        largeImageText: 'VRChat',
+      // details = first line (bold) — who you are
+      const details = user
+        ? `${user.displayName} · ${user.statusDescription || user.status || 'Online'}`
+        : 'Playing VRChat';
+
+      // state = second line — where you are
+      let state: string;
+      if (cfg.showWorld && current?.worldName) {
+        const dur = fmtDuration(Date.now() - current.joinedAt);
+        const type = current.instanceType !== 'public' ? ` (${current.instanceType})` : '';
+        state = `${current.worldName}${type} · ${dur}`;
+      } else {
+        state = 'In menus';
+      }
+
+      // Use the world thumbnail URL directly — Discord supports external URLs
+      // since 2022, no need to pre-upload assets
+      const worldImageUrl = current?.worldImage || null;
+
+      window.electronAPI!.discordSetActivity({
+        details,
+        state,
+        largeImageKey: worldImageUrl || 'vrchat_logo',
+        largeImageText: current?.worldName || 'VRChat',
         startTimestamp: startTs.current,
         instance: !!current,
       });
@@ -53,16 +80,22 @@ export function useDiscordRPC() {
       const cfg = readConfig();
       const auth = useAuthStore.getState();
 
-      if (cfg.enabled && auth.isLoggedIn) {
-        if (!initialized.current) {
-          window.electronAPI!.discordInit(cfg.clientId || '');
+      if (cfg.enabled && auth.isLoggedIn && cfg.clientId) {
+        // Re-init only if clientId changed
+        if (!initialized.current || lastClientId.current !== cfg.clientId) {
+          window.electronAPI!.discordInit(cfg.clientId);
           initialized.current = true;
+          lastClientId.current = cfg.clientId;
           startTs.current = Date.now();
+          // Give the RPC a moment to connect before pushing activity
+          setTimeout(pushActivity, 2000);
+        } else {
+          pushActivity();
         }
-        pushActivity();
-      } else if (!cfg.enabled && initialized.current) {
+      } else if ((!cfg.enabled || !cfg.clientId) && initialized.current) {
         window.electronAPI!.discordDisconnect();
         initialized.current = false;
+        lastClientId.current = '';
       }
     }
 
@@ -72,7 +105,7 @@ export function useDiscordRPC() {
     // for same-window writes in Electron's single-renderer setup)
     const pollId = setInterval(applyConfig, 5000);
 
-    // Push activity updates whenever the auth store changes (location, status)
+    // Push activity updates whenever auth store changes (location, status)
     const unsub = useAuthStore.subscribe(() => {
       if (initialized.current) pushActivity();
     });
@@ -83,6 +116,7 @@ export function useDiscordRPC() {
       if (initialized.current) {
         window.electronAPI?.discordDisconnect();
         initialized.current = false;
+        lastClientId.current = '';
       }
     };
   }, []);

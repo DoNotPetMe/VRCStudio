@@ -76,9 +76,9 @@ export default function SettingsPage() {
 
   const saveDiscord = (enabled: boolean, clientId: string, showWorld: boolean, showAvatar: boolean) => {
     localStorage.setItem('vrcstudio_discord', JSON.stringify({ enabled, clientId, showWorld, showAvatar }));
-    if (enabled && window.electronAPI) {
-      window.electronAPI.discordInit(clientId || '1234567890');
-    } else {
+    if (enabled && clientId && window.electronAPI) {
+      window.electronAPI.discordInit(clientId);
+    } else if (!enabled) {
       window.electronAPI?.discordDisconnect();
     }
   };
@@ -623,41 +623,43 @@ export default function SettingsPage() {
           {/* ── Discord RPC ── */}
           {active === 'discord' && (
             <Section title="Discord Rich Presence" icon={Zap}>
-              <p className="text-xs text-surface-500 mb-4">
-                Show your VRChat activity on Discord. Requires the desktop app (Electron).
-                {!window.electronAPI && <span className="text-amber-400"> Not available in browser mode.</span>}
-              </p>
+              {!window.electronAPI && (
+                <div className="mb-4 bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 text-xs text-amber-300">
+                  Not available in browser mode — requires the Electron desktop app.
+                </div>
+              )}
+
+              {/* Setup guide */}
+              <div className="mb-4 bg-surface-800/50 rounded-lg p-3 space-y-1.5 text-xs text-surface-400">
+                <p className="text-surface-200 font-semibold text-xs">Setup required</p>
+                <ol className="list-decimal list-inside space-y-1">
+                  <li>Go to <span className="text-accent-400">discord.com/developers/applications</span> and create a New Application</li>
+                  <li>Name it whatever you want (e.g. "VRChat" or "VRC Studio")</li>
+                  <li>Copy the <span className="font-semibold text-surface-200">Application ID</span> from the General Information page</li>
+                  <li>Paste it in the Client ID field below and click Apply</li>
+                </ol>
+                <p className="text-surface-500 mt-1">The world thumbnail will be used automatically as your presence image — no assets upload needed.</p>
+              </div>
+
               <Toggle
                 label="Enable Discord Rich Presence"
-                description="Show your VRChat activity on your Discord profile"
+                description="Show your current VRChat world and playtime on Discord"
                 checked={discordEnabled}
                 onChange={v => { setDiscordEnabled(v); saveDiscord(v, discordClientId, discordShowWorld, discordShowAvatar); }}
               />
               {discordEnabled && (
                 <>
-                  <Toggle
-                    label="Show Current World"
-                    description="Include the world name in your Discord status"
-                    checked={discordShowWorld}
-                    onChange={v => { setDiscordShowWorld(v); saveDiscord(discordEnabled, discordClientId, v, discordShowAvatar); }}
-                  />
-                  <Toggle
-                    label="Show Current Avatar"
-                    description="Include your avatar name in your Discord status"
-                    checked={discordShowAvatar}
-                    onChange={v => { setDiscordShowAvatar(v); saveDiscord(discordEnabled, discordClientId, discordShowWorld, v); }}
-                  />
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Discord Application Client ID</label>
-                    <p className="text-xs text-surface-500 mb-2">
-                      Optional: use your own Discord application for custom branding. Leave blank for the VRC Studio default.
+                  <div className="space-y-1.5">
+                    <label className="block text-sm font-medium">Discord Application Client ID</label>
+                    <p className="text-xs text-surface-500">
+                      Required — paste your Discord Application ID here.
                     </p>
                     <div className="flex gap-2">
                       <input
                         type="text"
                         value={discordClientId}
                         onChange={e => setDiscordClientId(e.target.value)}
-                        placeholder="e.g. 1234567890123456789"
+                        placeholder="1234567890123456789"
                         className="input-field flex-1 font-mono text-sm"
                       />
                       <button
@@ -667,7 +669,16 @@ export default function SettingsPage() {
                         Apply
                       </button>
                     </div>
+                    {discordEnabled && !discordClientId && (
+                      <p className="text-xs text-amber-400">⚠ Enter a Client ID to activate rich presence.</p>
+                    )}
                   </div>
+                  <Toggle
+                    label="Show Current World"
+                    description="Include the world name and how long you've been there"
+                    checked={discordShowWorld}
+                    onChange={v => { setDiscordShowWorld(v); saveDiscord(discordEnabled, discordClientId, v, discordShowAvatar); }}
+                  />
                 </>
               )}
             </Section>
