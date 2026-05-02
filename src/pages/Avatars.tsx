@@ -15,7 +15,7 @@ import { useAvatarSwitcherStore } from '../stores/avatarSwitcherStore';
 type AvatarTab = 'own' | 'favorites' | 'vrc_search' | 'vrcdb';
 
 export default function AvatarsPage() {
-  const { togglePin, isPinned, toggle: openSwitcher, cachedAvatars: switcherCache } = useAvatarSwitcherStore();
+  const { togglePin, isPinned, toggle: openSwitcher } = useAvatarSwitcherStore();
   const [tab, setTab] = useState<AvatarTab>('own');
   const [favoriteAvatars, setFavoriteAvatars] = useState<VRCAvatar[]>([]);
   const [ownAvatars, setOwnAvatars] = useState<VRCAvatar[]>([]);
@@ -107,12 +107,6 @@ export default function AvatarsPage() {
     setVrcdbError(null);
   };
 
-  // Set of avatar IDs the user can wear (own uploads + favorites + switcher cache)
-  const wearableIds = new Set([
-    ...ownAvatars.map(a => a.id),
-    ...favoriteAvatars.map(a => a.id),
-    ...switcherCache.map(a => a.id),
-  ]);
 
   const searchPlaceholder = tab === 'vrcdb'
     ? 'Search VRCDB — name, author, or avtr_ ID...'
@@ -214,7 +208,6 @@ export default function AvatarsPage() {
           results={vrcdbResults}
           loading={vrcdbLoading}
           error={vrcdbError}
-          wearableIds={wearableIds}
           copiedId={copiedId}
           providerId={providerId}
           onCopy={copyId}
@@ -293,13 +286,12 @@ export default function AvatarsPage() {
 // ── VRCDB Panel ────────────────────────────────────────────────────────────────
 
 function VrcdbPanel({
-  results, loading, error, wearableIds, copiedId, providerId,
+  results, loading, error, copiedId, providerId,
   onCopy, onWear, onChangeProvider, onSearch, hasQuery,
 }: {
   results: VRCDBAvatar[];
   loading: boolean;
   error: string | null;
-  wearableIds: Set<string>;
   copiedId: string | null;
   providerId: ProviderId;
   onCopy: (id: string) => void;
@@ -321,11 +313,10 @@ function VrcdbPanel({
 
   return (
     <div className="space-y-4">
-      {/* Provider selector + info */}
+      {/* Provider selector */}
       <div className="flex items-center gap-3 flex-wrap">
         <div className="flex items-center gap-1.5 text-xs text-surface-500">
-          <Database size={12} />
-          Provider:
+          <Database size={12} /> Provider:
         </div>
         <div className="flex gap-1">
           {VRCDB_PROVIDERS.map(p => (
@@ -342,9 +333,7 @@ function VrcdbPanel({
             </button>
           ))}
         </div>
-        <p className="text-xs text-surface-600 ml-auto">
-          Community-run public avatar index · avatars you can wear are marked
-        </p>
+        <p className="text-xs text-surface-600 ml-auto">Community-run public avatar index</p>
       </div>
 
       {loading ? (
@@ -361,19 +350,15 @@ function VrcdbPanel({
       ) : results.length === 0 ? (
         <div className="text-center py-16 text-surface-500">
           <Database size={40} className="mx-auto mb-3 opacity-30" />
-          <p className="font-semibold">
-            {hasQuery ? 'No avatars found' : 'Search the VRCDB'}
-          </p>
+          <p className="font-semibold">{hasQuery ? 'No avatars found' : 'Search the VRCDB'}</p>
           <p className="text-xs mt-1 text-surface-600">
-            {hasQuery
-              ? 'Try a different name, author, or paste an avtr_ ID'
+            {hasQuery ? 'Try a different name, author, or paste an avtr_ ID'
               : 'Type a name or author in the search bar above and press Search'}
           </p>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {results.map(avatar => {
-            const canWear = wearableIds.has(avatar.id);
             const isWearing = wearingId === avatar.id;
             const isWorn = wornId === avatar.id;
             const wasCopied = copiedId === avatar.id;
@@ -381,22 +366,12 @@ function VrcdbPanel({
 
             return (
               <div key={avatar.id} className="glass-panel-solid overflow-hidden flex flex-col">
-                <div className="aspect-square overflow-hidden bg-surface-800 relative">
+                <div className="aspect-square overflow-hidden bg-surface-800">
                   {imgUrl ? (
-                    <img
-                      src={imgUrl}
-                      alt=""
-                      className="w-full h-full object-cover"
-                      loading="lazy"
-                    />
+                    <img src={imgUrl} alt="" className="w-full h-full object-cover" loading="lazy" />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">
                       <Shirt size={32} className="text-surface-700" />
-                    </div>
-                  )}
-                  {canWear && (
-                    <div className="absolute top-2 left-2 bg-accent-600/90 text-white text-[10px] px-1.5 py-0.5 rounded font-semibold backdrop-blur-sm">
-                      Wearable
                     </div>
                   )}
                 </div>
@@ -412,21 +387,15 @@ function VrcdbPanel({
                   )}
 
                   <div className="flex items-center gap-1.5 mt-auto pt-1">
-                    {canWear ? (
-                      <button
-                        onClick={() => handleWear(avatar.id)}
-                        disabled={!!wearingId}
-                        className={`flex-1 text-xs py-1.5 rounded-lg font-medium transition-colors flex items-center justify-center gap-1 ${
-                          isWorn
-                            ? 'bg-green-500/20 text-green-400'
-                            : 'btn-primary'
-                        }`}
-                      >
-                        {isWorn ? <><Check size={11} /> Worn</> : isWearing ? 'Switching...' : 'Wear'}
-                      </button>
-                    ) : (
-                      <span className="flex-1 text-[10px] text-surface-600 italic">Find in-game to wear</span>
-                    )}
+                    <button
+                      onClick={() => handleWear(avatar.id)}
+                      disabled={!!wearingId}
+                      className={`flex-1 text-xs py-1.5 rounded-lg font-medium transition-colors flex items-center justify-center gap-1 ${
+                        isWorn ? 'bg-green-500/20 text-green-400' : 'btn-primary'
+                      }`}
+                    >
+                      {isWorn ? <><Check size={11} /> Worn</> : isWearing ? 'Switching...' : 'Wear'}
+                    </button>
                     <button
                       onClick={() => onCopy(avatar.id)}
                       className="p-1.5 rounded-lg border border-surface-700 hover:border-surface-500 transition-colors text-surface-400 hover:text-surface-200"
@@ -445,7 +414,7 @@ function VrcdbPanel({
                         }
                       }}
                       className="p-1.5 rounded-lg border border-surface-700 hover:border-surface-500 transition-colors text-surface-400 hover:text-surface-200"
-                      title="Open in VRChat website"
+                      title="Open on VRChat website"
                     >
                       <ExternalLink size={12} />
                     </a>

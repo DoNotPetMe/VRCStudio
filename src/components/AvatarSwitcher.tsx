@@ -121,7 +121,6 @@ export default function AvatarSwitcher({ open, onClose }: Props) {
 
   if (!open) return null;
 
-  const wearableIds = new Set(cachedAvatars.map(a => a.id));
   const q = filter.toLowerCase();
   const byId = new Map(cachedAvatars.map(a => [a.id, a]));
   const allFiltered = cachedAvatars.filter(a =>
@@ -298,13 +297,12 @@ export default function AvatarSwitcher({ open, onClose }: Props) {
               <div className="py-2">
                 <Section label={`${vrcdbResults.length} results`}>
                   {vrcdbResults.map(a => {
-                    const canWear = wearableIds.has(a.id);
                     const isWearing = wearingId === a.id;
                     const isWorn = wornId === a.id;
                     const imgUrl = a.thumbnailImageUrl || a.imageUrl;
                     return (
                       <div key={a.id} className="group flex items-center gap-2.5 px-3 py-1.5 hover:bg-surface-800/60 transition-colors">
-                        <div className="relative flex-shrink-0">
+                        <div className="flex-shrink-0">
                           {imgUrl ? (
                             <img src={imgUrl} alt="" className="w-9 h-9 rounded-lg object-cover bg-surface-800" loading="lazy" />
                           ) : (
@@ -325,19 +323,15 @@ export default function AvatarSwitcher({ open, onClose }: Props) {
                           >
                             {copiedId === a.id ? <Check size={11} className="text-green-400" /> : <Copy size={11} />}
                           </button>
-                          {canWear ? (
-                            <button
-                              onClick={() => handleWear(a.id)}
-                              disabled={!!wearingId}
-                              className={`text-[11px] px-2 py-1 rounded font-medium transition-colors ${
-                                isWorn ? 'bg-green-500/20 text-green-400' : 'bg-accent-600/20 text-accent-400 hover:bg-accent-600/30'
-                              }`}
-                            >
-                              {isWorn ? '✓' : isWearing ? '...' : 'Wear'}
-                            </button>
-                          ) : (
-                            <span className="text-[10px] text-surface-700 italic">not owned</span>
-                          )}
+                          <button
+                            onClick={() => handleWear(a.id)}
+                            disabled={!!wearingId}
+                            className={`text-[11px] px-2 py-1 rounded font-medium transition-colors ${
+                              isWorn ? 'bg-green-500/20 text-green-400' : 'bg-accent-600/20 text-accent-400 hover:bg-accent-600/30'
+                            }`}
+                          >
+                            {isWorn ? '✓' : isWearing ? '...' : 'Wear'}
+                          </button>
                         </div>
                       </div>
                     );

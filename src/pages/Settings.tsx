@@ -722,7 +722,7 @@ export default function SettingsPage() {
 
               <div className="pt-3 border-t border-surface-800 text-xs text-surface-600 space-y-1">
                 <p>These providers index only <strong className="text-surface-400">public</strong> avatars shared by their creators.</p>
-                <p>You can wear an avatar from VRCDB only if it's already in your Uploads or Favorites — the VRChat API doesn't allow wearing arbitrary public avatars by ID.</p>
+                <p>Any public avatar can be worn directly via the Wear button — same as clicking an avatar on the VRChat website.</p>
                 <p>
                   To request removal of your avatar from an index, contact the provider directly.{' '}
                   <button
