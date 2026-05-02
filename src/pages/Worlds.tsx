@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Globe, TrendingUp, Clock, Star, Search, Users, Heart, ArrowLeft } from 'lucide-react';
+import { Globe, TrendingUp, Clock, Star, Search, Users, Heart, ArrowLeft, LogIn } from 'lucide-react';
 import { useWorldStore } from '../stores/worldStore';
 import { useFriendStore } from '../stores/friendStore';
 import SearchInput from '../components/common/SearchInput';
@@ -9,6 +9,7 @@ import LoadingSpinner from '../components/common/LoadingSpinner';
 import InstanceModal from '../components/InstanceModal';
 import type { VRCWorld } from '../types/vrchat';
 import { getBestAvatarUrl } from '../utils/avatar';
+import api from '../api/vrchat';
 
 type WorldTab = 'search' | 'active' | 'recent' | 'favorites';
 
@@ -24,6 +25,16 @@ export default function WorldsPage() {
   const [selectedWorld, setSelectedWorld] = useState<VRCWorld | null>(null);
   const [searchInput, setSearchInput] = useState('');
   const [instanceModal, setInstanceModal] = useState<{ worldId: string; instanceId: string } | null>(null);
+  const [rejoiningInstance, setRejoiningInstance] = useState<string | null>(null);
+
+  async function handleSelfInvite(worldId: string, instanceId: string) {
+    if (rejoiningInstance) return;
+    setRejoiningInstance(instanceId);
+    try {
+      await api.selfInvite(worldId, instanceId);
+    } catch {}
+    setTimeout(() => setRejoiningInstance(null), 3000);
+  }
 
   useEffect(() => {
     fetchActiveWorlds();
@@ -145,16 +156,30 @@ export default function WorldsPage() {
                 </h3>
                 <div className="grid grid-cols-2 gap-2">
                   {selectedWorld.instances.map(([id, count]) => (
-                    <button
-                      key={id}
-                      onClick={() => setInstanceModal({ worldId: selectedWorld.id, instanceId: id })}
-                      className="glass-panel p-3 flex items-center justify-between hover:border-accent-500/30 transition-colors"
-                    >
-                      <span className="text-xs font-mono truncate">{id}</span>
-                      <span className="text-xs text-surface-400 flex items-center gap-1 flex-shrink-0 ml-2">
-                        <Users size={11} /> {count}
-                      </span>
-                    </button>
+                    <div key={id} className="glass-panel p-3 flex items-center gap-2 hover:border-accent-500/30 transition-colors">
+                      <button
+                        className="flex-1 flex items-center gap-2 min-w-0 text-left"
+                        onClick={() => setInstanceModal({ worldId: selectedWorld.id, instanceId: id })}
+                      >
+                        <span className="text-xs font-mono truncate">{id}</span>
+                        <span className="text-xs text-surface-400 flex items-center gap-1 flex-shrink-0">
+                          <Users size={11} /> {count}
+                        </span>
+                      </button>
+                      <button
+                        onClick={() => handleSelfInvite(selectedWorld.id, id)}
+                        disabled={!!rejoiningInstance}
+                        title="Invite yourself to this instance"
+                        className={`flex items-center gap-1 text-xs flex-shrink-0 px-1.5 py-0.5 rounded transition-colors ${
+                          rejoiningInstance === id
+                            ? 'text-green-400'
+                            : 'text-accent-400 hover:text-accent-300'
+                        }`}
+                      >
+                        <LogIn size={11} />
+                        <span className="text-[10px]">{rejoiningInstance === id ? 'Sent!' : 'Join'}</span>
+                      </button>
+                    </div>
                   ))}
                 </div>
               </div>

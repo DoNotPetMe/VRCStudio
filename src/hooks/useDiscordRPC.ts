@@ -24,18 +24,9 @@ function readConfig(): DiscordConfig {
   }
 }
 
-function fmtDuration(ms: number): string {
-  const m = Math.floor(ms / 60000);
-  if (m < 1) return 'just joined';
-  if (m < 60) return `${m}m`;
-  const h = Math.floor(m / 60);
-  const rem = m % 60;
-  return rem ? `${h}h ${rem}m` : `${h}h`;
-}
-
 export function useDiscordRPC() {
   const initialized = useRef(false);
-  const startTs = useRef(Date.now());
+  const sessionStartTs = useRef(Date.now());
   const lastClientId = useRef('');
 
   useEffect(() => {
@@ -47,31 +38,31 @@ export function useDiscordRPC() {
       const user = useAuthStore.getState().user;
       const current = useInstanceHistoryStore.getState().currentInstance;
 
-      // details = first line (bold) — who you are
+      // First line: who you are
       const details = user
         ? `${user.displayName} · ${user.statusDescription || user.status || 'Online'}`
         : 'Playing VRChat';
 
-      // state = second line — where you are
-      let state: string;
-      if (cfg.showWorld && current?.worldName) {
-        const dur = fmtDuration(Date.now() - current.joinedAt);
+      // Second line: only shown when in a world — no "In menus" fallback
+      let state: string | undefined;
+      if (cfg.showWorld && current?.worldName && !current.worldName.startsWith('wrld_')) {
         const type = current.instanceType !== 'public' ? ` (${current.instanceType})` : '';
-        state = `${current.worldName}${type} · ${dur}`;
-      } else {
-        state = 'In menus';
+        state = `${current.worldName}${type}`;
       }
 
-      // Use the world thumbnail URL directly — Discord supports external URLs
-      // since 2022, no need to pre-upload assets
-      const worldImageUrl = current?.worldImage || null;
+      // World thumbnail as large image; falls back to nothing (Discord shows generic game icon)
+      const worldImageUrl = current?.worldImage || undefined;
+
+      // startTimestamp drives the elapsed timer Discord shows.
+      // Use join time when in a world so it shows "time in this world".
+      const startTimestamp = current ? current.joinedAt : sessionStartTs.current;
 
       window.electronAPI!.discordSetActivity({
         details,
         state,
-        largeImageKey: worldImageUrl || 'vrchat_logo',
-        largeImageText: current?.worldName || 'VRChat',
-        startTimestamp: startTs.current,
+        largeImageKey: worldImageUrl,
+        largeImageText: current?.worldName,
+        startTimestamp,
         instance: !!current,
       });
     }
@@ -81,13 +72,11 @@ export function useDiscordRPC() {
       const auth = useAuthStore.getState();
 
       if (cfg.enabled && auth.isLoggedIn && cfg.clientId) {
-        // Re-init only if clientId changed
         if (!initialized.current || lastClientId.current !== cfg.clientId) {
           window.electronAPI!.discordInit(cfg.clientId);
           initialized.current = true;
           lastClientId.current = cfg.clientId;
-          startTs.current = Date.now();
-          // Give the RPC a moment to connect before pushing activity
+          sessionStartTs.current = Date.now();
           setTimeout(pushActivity, 2000);
         } else {
           pushActivity();
@@ -105,14 +94,18 @@ export function useDiscordRPC() {
     // for same-window writes in Electron's single-renderer setup)
     const pollId = setInterval(applyConfig, 5000);
 
-    // Push activity updates whenever auth store changes (location, status)
-    const unsub = useAuthStore.subscribe(() => {
+    // Push activity whenever auth (status, displayName) or instance (world join/leave) changes
+    const unsubAuth = useAuthStore.subscribe(() => {
+      if (initialized.current) pushActivity();
+    });
+    const unsubInstance = useInstanceHistoryStore.subscribe(() => {
       if (initialized.current) pushActivity();
     });
 
     return () => {
       clearInterval(pollId);
-      unsub();
+      unsubAuth();
+      unsubInstance();
       if (initialized.current) {
         window.electronAPI?.discordDisconnect();
         initialized.current = false;

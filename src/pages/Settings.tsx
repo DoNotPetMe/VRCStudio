@@ -848,6 +848,8 @@ export default function SettingsPage() {
                 </div>
               )}
 
+              <StorageUsage />
+
               <div className="pt-4 border-t border-surface-800">
                 <div className="flex items-center justify-between">
                   <div>
@@ -992,6 +994,88 @@ function OptionRow({ options, value, onChange }: {
           {opt}
         </button>
       ))}
+    </div>
+  );
+}
+
+const STORAGE_STORES: Array<{ key: string; label: string; clearable: boolean }> = [
+  { key: 'vrcstudio_instance_history', label: 'Visit history',       clearable: true  },
+  { key: 'vrcstudio_reports',          label: 'Filed reports',       clearable: false },
+  { key: 'vrcstudio_world_analytics',  label: 'World analytics',     clearable: true  },
+  { key: 'vrcstudio_settings',         label: 'App settings',        clearable: false },
+  { key: 'vrcstudio_theme',            label: 'Theme preferences',   clearable: false },
+  { key: 'vrcstudio_discord',          label: 'Discord RPC config',  clearable: false },
+  { key: 'vrcstudio_starred_friends',  label: 'Starred friends',     clearable: false },
+  { key: 'vrcstudio_multi_accounts',   label: 'Saved accounts',      clearable: false },
+];
+
+function fmtBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+function StorageUsage() {
+  const [tick, setTick] = useState(0);
+
+  const rows = STORAGE_STORES.map(store => {
+    const raw = localStorage.getItem(store.key) ?? '';
+    const bytes = new Blob([raw]).size;
+    return { ...store, bytes };
+  });
+
+  // Also capture any other vrcstudio_ keys not in the list
+  const knownKeys = new Set(STORAGE_STORES.map(s => s.key));
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i) ?? '';
+    if (k.startsWith('vrcstudio_') && !knownKeys.has(k)) {
+      const raw = localStorage.getItem(k) ?? '';
+      rows.push({ key: k, label: k.replace('vrcstudio_', ''), bytes: new Blob([raw]).size, clearable: true });
+    }
+  }
+
+  const total = rows.reduce((s, r) => s + r.bytes, 0);
+  const maxBytes = Math.max(...rows.map(r => r.bytes), 1);
+
+  function clearStore(key: string) {
+    localStorage.removeItem(key);
+    setTick(t => t + 1);
+  }
+
+  return (
+    <div className="pt-4 border-t border-surface-800 space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="text-sm font-medium">Storage Usage</div>
+        <div className="text-xs text-surface-500">{fmtBytes(total)} total</div>
+      </div>
+      <div className="space-y-2">
+        {rows.filter(r => r.bytes > 0).sort((a, b) => b.bytes - a.bytes).map(row => (
+          <div key={row.key + tick} className="flex items-center gap-3">
+            <div className="w-28 text-xs text-surface-400 truncate flex-shrink-0">{row.label}</div>
+            <div className="flex-1 h-1.5 bg-surface-800 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-accent-500/60 rounded-full"
+                style={{ width: `${(row.bytes / maxBytes) * 100}%` }}
+              />
+            </div>
+            <div className="text-xs text-surface-500 w-14 text-right flex-shrink-0">{fmtBytes(row.bytes)}</div>
+            {row.clearable ? (
+              <button
+                onClick={() => clearStore(row.key)}
+                className="text-xs text-red-400/70 hover:text-red-400 transition-colors flex-shrink-0"
+                title={`Clear ${row.label}`}
+              >
+                <Trash2 size={12} />
+              </button>
+            ) : (
+              <div className="w-3 flex-shrink-0" />
+            )}
+          </div>
+        ))}
+        {rows.every(r => r.bytes === 0) && (
+          <p className="text-xs text-surface-600">No data stored yet.</p>
+        )}
+      </div>
     </div>
   );
 }
