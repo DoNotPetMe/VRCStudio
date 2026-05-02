@@ -43,25 +43,37 @@ export function useDiscordRPC() {
         ? `${user.displayName} · ${user.statusDescription || user.status || 'Online'}`
         : 'Playing VRChat';
 
-      // Second line: only shown when in a world — no "In menus" fallback
+      // Second line: world name + instance type, only when in a world.
+      // Show the raw worldId while the name is still loading (starts with wrld_).
       let state: string | undefined;
-      if (cfg.showWorld && current?.worldName && !current.worldName.startsWith('wrld_')) {
-        const type = current.instanceType !== 'public' ? ` (${current.instanceType})` : '';
-        state = `${current.worldName}${type}`;
+      let largeImageKey: string | undefined;
+      let largeImageText: string | undefined;
+
+      if (cfg.showWorld && current) {
+        const worldName = current.worldName && !current.worldName.startsWith('wrld_')
+          ? current.worldName
+          : undefined;
+        if (worldName) {
+          const type = current.instanceType && current.instanceType !== 'public'
+            ? ` (${current.instanceType})` : '';
+          state = `${worldName}${type}`;
+          largeImageText = worldName;
+        }
+        if (current.worldImage) {
+          largeImageKey = current.worldImage;
+        }
       }
 
-      // World thumbnail as large image; falls back to nothing (Discord shows generic game icon)
-      const worldImageUrl = current?.worldImage || undefined;
-
-      // startTimestamp drives the elapsed timer Discord shows.
-      // Use join time when in a world so it shows "time in this world".
-      const startTimestamp = current ? current.joinedAt : sessionStartTs.current;
+      // Discord expects Unix epoch in SECONDS, not milliseconds.
+      const startTimestamp = Math.floor(
+        (current ? current.joinedAt : sessionStartTs.current) / 1000
+      );
 
       window.electronAPI!.discordSetActivity({
         details,
         state,
-        largeImageKey: worldImageUrl,
-        largeImageText: current?.worldName,
+        largeImageKey,
+        largeImageText,
         startTimestamp,
         instance: !!current,
       });
