@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import {
   FolderHeart, Plus, X, Star, Globe, Edit3, Trash2,
-  ChevronRight, ArrowLeft, SortAsc, Tag, Search,
+  ChevronRight, ArrowLeft, ArrowUpDown, Tag, Search,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import EmptyState from '../components/common/EmptyState';

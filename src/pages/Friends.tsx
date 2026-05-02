@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import {
   Users, MapPin, StickyNote, UserMinus, Globe,
-  ChevronRight, RefreshCw, X,
+  ChevronRight, RotateCw, X,
 } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
 import { useFriendStore } from '../stores/friendStore';
@@ -152,7 +152,7 @@ export default function FriendsPage() {
           </p>
         </div>
         <button onClick={fetchAllFriends} disabled={isLoading} className="btn-secondary text-xs flex items-center gap-1.5">
-          <RefreshCw size={13} className={isLoading ? 'animate-spin' : ''} /> Refresh
+          <RotateCw size={13} className={isLoading ? 'animate-spin' : ''} /> Refresh
         </button>
       </div>
 

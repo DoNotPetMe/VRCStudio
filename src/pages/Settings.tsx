@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
 import {
-  Settings as SettingsIcon, Bell, Monitor, Clock, RotateCcw,
+  Settings as SettingsIcon, Bell, Monitor, Clock, RotateCcw, RotateCw,
   Palette, Download, Upload, UserCircle, Globe2, Zap, Shield,
-  Trash2, Smile, X,
+  Trash2, Smile, X, Volume2, Moon, Sun, ArrowUpDown, Lock,
+  Cpu, Database, Keyboard, Info,
 } from 'lucide-react';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useAuthStore } from '../stores/authStore';
@@ -15,23 +16,36 @@ import { getAvailableLanguages, setLanguage, getLanguage } from '../utils/i18n';
 type SettingsSection =
   | 'account' | 'accounts' | 'notifications' | 'polling'
   | 'display' | 'appearance' | 'discord' | 'general' | 'data'
-  | 'profile';
+  | 'profile' | 'privacy' | 'performance' | 'shortcuts' | 'about';
 
-const sections: Array<{ key: SettingsSection; label: string; icon: typeof SettingsIcon }> = [
-  { key: 'profile',       label: 'Personalization',       icon: Smile },
-  { key: 'account',       label: 'Account',               icon: UserCircle },
-  { key: 'accounts',      label: 'Multiple Accounts',     icon: Shield },
-  { key: 'notifications', label: 'Notifications',         icon: Bell },
-  { key: 'polling',       label: 'Update Intervals',      icon: Clock },
-  { key: 'display',       label: 'Display',               icon: Monitor },
-  { key: 'appearance',    label: 'Appearance',            icon: Palette },
-  { key: 'discord',       label: 'Discord Rich Presence', icon: Zap },
-  { key: 'general',       label: 'General',               icon: SettingsIcon },
-  { key: 'data',          label: 'Data & Backup',         icon: Download },
+const sections: Array<{ key: SettingsSection; label: string; icon: typeof SettingsIcon; group: string }> = [
+  { key: 'profile',       label: 'Personalization',       icon: Smile,         group: 'Profile' },
+  { key: 'account',       label: 'Account',               icon: UserCircle,    group: 'Profile' },
+  { key: 'accounts',      label: 'Multiple Accounts',     icon: Shield,        group: 'Profile' },
+  { key: 'notifications', label: 'Notifications',         icon: Bell,          group: 'App' },
+  { key: 'polling',       label: 'Update Intervals',      icon: Clock,         group: 'App' },
+  { key: 'display',       label: 'Display',               icon: Monitor,       group: 'App' },
+  { key: 'appearance',    label: 'Appearance',            icon: Palette,       group: 'App' },
+  { key: 'privacy',       label: 'Privacy',               icon: Lock,          group: 'App' },
+  { key: 'discord',       label: 'Discord Rich Presence', icon: Zap,           group: 'Integrations' },
+  { key: 'general',       label: 'General',               icon: SettingsIcon,  group: 'System' },
+  { key: 'performance',   label: 'Performance',           icon: Cpu,           group: 'System' },
+  { key: 'shortcuts',     label: 'Keyboard Shortcuts',    icon: Keyboard,      group: 'System' },
+  { key: 'data',          label: 'Data & Backup',         icon: Download,      group: 'System' },
+  { key: 'about',         label: 'About',                 icon: Info,          group: 'System' },
+];
+
+const SHORTCUT_LIST: Array<{ description: string; keys: string[] }> = [
+  { description: 'Go to Dashboard',  keys: ['Ctrl', '1'] },
+  { description: 'Go to Friends',    keys: ['Ctrl', '2'] },
+  { description: 'Go to Worlds',     keys: ['Ctrl', '3'] },
+  { description: 'Go to Avatars',    keys: ['Ctrl', '4'] },
+  { description: 'Focus Search',     keys: ['Ctrl', 'F'] },
+  { description: 'Open Settings',    keys: ['Ctrl', ','] },
 ];
 
 export default function SettingsPage() {
-  const { settings, updateGeneral, updateNotifications, updatePolling, updateDisplay, updateProfile, resetSettings } = useSettingsStore();
+  const { settings, updateGeneral, updateNotifications, updatePolling, updateDisplay, updatePrivacy, updatePerformance, updateProfile, resetSettings } = useSettingsStore();
   const { user } = useAuthStore();
   const { onlineFriends, offlineFriends } = useFriendStore();
   const {
@@ -453,7 +467,7 @@ export default function SettingsPage() {
                   checked={settings.display.showTrustBadges} onChange={v => updateDisplay({ showTrustBadges: v })} />
               </Section>
 
-              <Section title="Sorting & Format" icon={SortAsc}>
+              <Section title="Sorting & Format" icon={ArrowUpDown}>
                 <div>
                   <label className="block text-sm font-medium mb-1">Friends Sort Order</label>
                   <select
@@ -693,7 +707,7 @@ export default function SettingsPage() {
                 )}
               </Section>
 
-              <Section title="Updates" icon={RefreshCw}>
+              <Section title="Updates" icon={RotateCw}>
                 <Toggle
                   label="Check for Updates Automatically"
                   description="Notify you when a new version of VRC Studio is available"

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Bell, Mail, UserPlus, MessageSquare, Trash2, CheckCheck, RefreshCw } from 'lucide-react';
+import { Bell, Mail, UserPlus, MessageSquare, Trash2, CheckCheck, RotateCw } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import api from '../api/vrchat';
 import EmptyState from '../components/common/EmptyState';
@@ -57,7 +57,7 @@ export default function NotificationsPage() {
         <h1 className="text-2xl font-bold">Notifications</h1>
         <div className="flex gap-2">
           <button onClick={fetchNotifications} className="btn-ghost flex items-center gap-1 text-sm">
-            <RefreshCw size={14} /> Refresh
+            <RotateCw size={14} /> Refresh
           </button>
           {notifications.length > 0 && (
             <button onClick={clearAll} className="btn-danger flex items-center gap-1 text-sm">

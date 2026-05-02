@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { History, UserPlus, UserMinus, RefreshCw, Trash2, Filter } from 'lucide-react';
+import { History, UserPlus, UserMinus, RotateCw, Trash2, Filter } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
 import { useFriendLogStore, FriendLogEntry } from '../stores/friendLogStore';
 import SearchInput from '../components/common/SearchInput';
@@ -9,8 +9,8 @@ import EmptyState from '../components/common/EmptyState';
 const typeIcons: Record<FriendLogEntry['type'], typeof History> = {
   added: UserPlus,
   removed: UserMinus,
-  name_change: RefreshCw,
-  status_change: RefreshCw,
+  name_change: RotateCw,
+  status_change: RotateCw,
 };
 
 const typeColors: Record<FriendLogEntry['type'], string> = {
