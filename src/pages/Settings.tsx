@@ -3,8 +3,10 @@ import {
   Settings as SettingsIcon, Bell, Monitor, Clock, RotateCcw, RotateCw,
   Palette, Download, Upload, UserCircle, Globe2, Zap, Shield,
   Trash2, Smile, X, Volume2, Moon, Sun, ArrowUpDown, Lock,
-  Cpu, Database, Keyboard, Info,
+  Cpu, Database, Keyboard, Info, ExternalLink,
 } from 'lucide-react';
+import { VRCDB_PROVIDERS, getProviderId, setProviderId } from '../api/vrcdb';
+import type { ProviderId } from '../api/vrcdb';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useAuthStore } from '../stores/authStore';
 import { useFriendStore } from '../stores/friendStore';
@@ -15,7 +17,7 @@ import { getAvailableLanguages, setLanguage, getLanguage } from '../utils/i18n';
 
 type SettingsSection =
   | 'account' | 'accounts' | 'notifications' | 'polling'
-  | 'display' | 'appearance' | 'discord' | 'general' | 'data'
+  | 'display' | 'appearance' | 'discord' | 'vrcdb' | 'general' | 'data'
   | 'profile' | 'privacy' | 'performance' | 'shortcuts' | 'about';
 
 const sections: Array<{ key: SettingsSection; label: string; icon: typeof SettingsIcon; group: string }> = [
@@ -28,6 +30,7 @@ const sections: Array<{ key: SettingsSection; label: string; icon: typeof Settin
   { key: 'appearance',    label: 'Appearance',            icon: Palette,       group: 'App' },
   { key: 'privacy',       label: 'Privacy',               icon: Lock,          group: 'App' },
   { key: 'discord',       label: 'Discord Rich Presence', icon: Zap,           group: 'Integrations' },
+  { key: 'vrcdb',         label: 'Avatar Database',       icon: Database,      group: 'Integrations' },
   { key: 'general',       label: 'General',               icon: SettingsIcon,  group: 'System' },
   { key: 'performance',   label: 'Performance',           icon: Cpu,           group: 'System' },
   { key: 'shortcuts',     label: 'Keyboard Shortcuts',    icon: Keyboard,      group: 'System' },
@@ -55,6 +58,7 @@ export default function SettingsPage() {
   const { accounts, removeAccount } = useMultiAccountStore();
   const [active, setActive] = useState<SettingsSection>('account');
   const [importStatus, setImportStatus] = useState<string | null>(null);
+  const [vrcdbProvider, setVrcdbProviderState] = useState<ProviderId>(getProviderId());
   const [lang, setLang] = useState(getLanguage());
   const [autoLaunch, setAutoLaunch] = useState(false);
   const [nicknameInput, setNicknameInput] = useState(settings.profile.nickname);
@@ -681,6 +685,54 @@ export default function SettingsPage() {
                   />
                 </>
               )}
+            </Section>
+          )}
+
+          {/* ── Avatar Database (VRCDB) ── */}
+          {active === 'vrcdb' && (
+            <Section title="Avatar Database" icon={Database}>
+              <p className="text-xs text-surface-500">
+                The VRCDB search (Avatars page → VRCDB tab and Quick Switcher) uses community-run public avatar
+                indexes. These are independent third-party services — switch if one is unavailable.
+              </p>
+
+              <div>
+                <div className="text-sm font-medium mb-2">Search Provider</div>
+                <div className="space-y-2">
+                  {VRCDB_PROVIDERS.map(p => (
+                    <label key={p.id} className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="vrcdb_provider"
+                        checked={vrcdbProvider === p.id}
+                        onChange={() => {
+                          setProviderId(p.id as ProviderId);
+                          setVrcdbProviderState(p.id as ProviderId);
+                        }}
+                        className="accent-accent-500"
+                      />
+                      <div>
+                        <div className="text-sm font-medium">{p.label}</div>
+                        <div className="text-xs text-surface-500 font-mono">{p.url}</div>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-surface-800 text-xs text-surface-600 space-y-1">
+                <p>These providers index only <strong className="text-surface-400">public</strong> avatars shared by their creators.</p>
+                <p>You can wear an avatar from VRCDB only if it's already in your Uploads or Favorites — the VRChat API doesn't allow wearing arbitrary public avatars by ID.</p>
+                <p>
+                  To request removal of your avatar from an index, contact the provider directly.{' '}
+                  <button
+                    className="text-accent-400 hover:text-accent-300 underline"
+                    onClick={() => window.electronAPI?.openExternal('https://requi.dev')}
+                  >
+                    requi.dev
+                  </button>
+                </p>
+              </div>
             </Section>
           )}
 
