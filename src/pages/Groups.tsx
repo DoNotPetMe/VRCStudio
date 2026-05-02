@@ -38,8 +38,12 @@ export default function GroupsPage() {
 
   if (selectedGroup) {
     const handleVisitGroup = () => {
-      const groupUrl = `https://vrchat.com/groups/${selectedGroup.shortCode}.${selectedGroup.discriminator}`;
-      window.open(groupUrl, '_blank');
+      const url = `https://vrchat.com/home/group/${selectedGroup.id}`;
+      if (window.electronAPI?.openExternal) {
+        window.electronAPI.openExternal(url);
+      } else {
+        window.open(url, '_blank');
+      }
     };
 
     return (

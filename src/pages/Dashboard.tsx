@@ -96,6 +96,12 @@ export default function Dashboard() {
 
   const recentInstances = history.slice(0, 8);
 
+  // Build a map for O(1) friend avatar lookup in the activity feed
+  const friendAvatarMap = new Map<string, string>();
+  for (const f of [...onlineFriends, ...offlineFriends]) {
+    friendAvatarMap.set(f.id, getBestAvatarUrl(f));
+  }
+
   const statusGroups: Record<string, typeof onlineFriends> = {
     'join me': [],
     'active': [],
@@ -255,8 +261,8 @@ export default function Dashboard() {
                     <div className={`w-7 h-7 rounded-lg ${bgColor} flex items-center justify-center flex-shrink-0`}>
                       <Icon size={13} className={textColor} />
                     </div>
-                    {event.userAvatar && (
-                      <UserAvatar src={event.userAvatar} size="sm" />
+                    {(friendAvatarMap.get(event.userId) || event.userAvatar) && (
+                      <UserAvatar src={friendAvatarMap.get(event.userId) || event.userAvatar || ''} size="sm" />
                     )}
                     <div className="flex-1 min-w-0">
                       <span className="text-[13px]">

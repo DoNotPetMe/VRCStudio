@@ -39,12 +39,12 @@ export default function SettingsPage() {
     setSidebarWidth, setBorderRadius, setAnimationSpeed, setGlassEffect, resetTheme,
   } = useThemeStore();
   const { accounts, removeAccount } = useMultiAccountStore();
-
   const [active, setActive] = useState<SettingsSection>('account');
   const [importStatus, setImportStatus] = useState<string | null>(null);
   const [lang, setLang] = useState(getLanguage());
   const [autoLaunch, setAutoLaunch] = useState(false);
   const [nicknameInput, setNicknameInput] = useState(settings.profile.nickname);
+  const [resetConfirm, setResetConfirm] = useState(false);
   const importRef = useRef<HTMLInputElement>(null);
 
   const [discordEnabled, setDiscordEnabled] = useState(() =>
