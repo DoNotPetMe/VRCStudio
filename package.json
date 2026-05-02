@@ -15,14 +15,12 @@
     "electron:dev": "vite build && electron ."
   },
   "dependencies": {
-    "adm-zip": "^0.5.10",
     "clsx": "^2.1.1",
     "date-fns": "^3.6.0",
     "lucide-react": "^0.441.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.26.0",
-    "tar": "^6.2.1",
     "zustand": "^4.5.4"
   },
   "devDependencies": {

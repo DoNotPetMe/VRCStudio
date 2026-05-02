@@ -256,4 +256,9 @@ export interface AppSettings {
     greetingEnabled: boolean;
     showWeather: boolean;
   };
+  profile: {
+    nickname: string;
+    greetingEnabled: boolean;
+    showWeather: boolean;
+  };
 }

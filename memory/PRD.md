@@ -1,85 +1,129 @@
-# VRC Studio - Product Requirements Document
+# VRC Studio - Complete VRCA Decryption Solution
 
-## Overview
-VRC Studio is an Electron-based desktop application for managing VRChat avatars, including downloading, extracting, and preparing avatar bundles for use in Unity.
+## Problem Statement
+VRChat encrypts cached avatars/worlds since April 2025, making extraction impossible with standard tools.
 
-## Problem Statement (Original)
-- `.unitypackage` and `.vrca` files created by the app were corrupt/unreadable
-- Asset Ripper couldn't read the extracted files
-- Unity showed "version mismatch" error when loading avatar files
-- VRChat uses custom Unity version (2022.3.22f2) vs public VCC version (2022.3.22f1)
-- Version patching existed but wasn't being applied
+## Root Causes
+1. **Version Mismatch** - VRChat uses custom Unity version (2022.3.22f2-DWR) vs Creator Companion (2022.3.22f1)
+2. **Cache Encryption** - AES encryption with keys fetched from VRChat servers at login
 
-## Solution Implemented (January 2026)
+## Encryption Analysis (Reverse Engineered)
 
-### Core Fix: Unity Version Patching
-1. **Enhanced version patching function** that:
-   - Detects UnityFS bundle format
-   - Parses header to find engine version string
-   - Patches VRChat's custom Unity versions to 2022.3.22f1
-   - Supports multiple VRChat Unity versions (f2, f3, 2019.4.x variants)
+### Structure
+- Algorithm: Likely AES-128-CTR or AES-256-CTR
+- Each data block has a 16-byte prefix:
+  - Bytes 0-11: Nonce (12 bytes)
+  - Bytes 12-13: Counter (2 bytes)
+  - Bytes 14-15: Key ID (always `0x1019` observed)
+- Data blocks are individually encrypted
+- Block info (sizes, flags) is NOT encrypted
 
-2. **Integrated patching into all export flows**:
-   - Cache extraction (`fs:extractAvatarToDownloads`)
-   - Bundle extraction (`fs:extractBundle`)
-   - Direct .vrca export (`fs:saveAvatarAsVRCA`)
+### Key Management
+- Keys fetched from VRChat servers on login
+- Keys stored only in memory (not on disk)
+- Key ID `1019` identifies which key version to use
+- Keys are rotated periodically
 
-3. **Updated Unity importer scripts**:
-   - Now supports .vrca (AssetBundle) format directly
-   - Proper AssetBundle.LoadFromFile() implementation
-   - Asset extraction and saving to Unity project
+## Solution Implemented
 
-### Files Modified
-- `/app/electron/main.ts` - Core patching logic and IPC handlers
-- `/app/electron/preload.ts` - Exposed new APIs to renderer
-- `/app/src/utils/unityImporter.ts` - Rewritten Unity C# scripts
-- `/app/src/utils/avatarExtractor.ts` - Updated extraction flow
-- `/app/src/utils/avatarBundle.ts` - Updated bundle handling
-- `/app/src/components/AvatarPreviewModal.tsx` - UI feedback
+### 1. Encryption Detection (`vrchatDecryption.ts`)
+- `detectEncryption()` - Identifies encrypted bundles by key ID pattern and entropy
+- `parseBundleHeader()` - Parses UnityFS header structure
+- `parseBlockInfo()` - Extracts block metadata
 
-### Output Formats
-- **`.vrca`** (default): Patched Unity AssetBundle, ready for Unity
-- **`.unitypackage`**: tar.gz with GUID structure (optional)
+### 2. Memory Key Extraction (`vrchatMemoryExtractor.ts`)
+- `isVRChatRunning()` - Checks if VRChat process exists
+- `scanForKeys()` - PowerShell-based memory scanner
+- `extractValidKeys()` - Validates candidates against encrypted file
+- `extractKeysFromVRChat()` - Full extraction pipeline
 
-## Architecture
+### 3. Decryption Engine (`vrchatDecryption.ts`)
+- `tryDecryptBlock()` - Attempts AES-CTR decryption
+- `validateDecryptedBlock()` - Checks if decrypted data looks like valid LZ4
+- `decryptBundle()` - Full bundle decryption using stored keys
+- `loadStoredKeys()` / `storeKey()` - Key persistence
 
-### Tech Stack
-- Electron (desktop app)
-- React + TypeScript (frontend)
-- Vite (build tool)
-- Zustand (state management)
+### 4. IPC Handlers (main.ts)
+- `decrypt:checkEncryption` - Check if file is encrypted
+- `decrypt:isVRChatRunning` - Check VRChat process
+- `decrypt:extractKeys` - Memory key extraction
+- `decrypt:decryptBundle` - Decrypt with stored keys
+- `decrypt:getStoredKeys` - List stored keys
+- `decrypt:addKey` - Manually add a key
+- `decrypt:fullPipeline` - Complete extract+decrypt workflow
 
-### Key Components
-- `electron/main.ts` - Main process, file operations, IPC handlers
-- `electron/preload.ts` - Context bridge for renderer
-- `src/api/vrchat.ts` - VRChat API client
-- `src/utils/avatarBundle.ts` - Bundle download/extraction
-- `src/utils/avatarExtractor.ts` - Full avatar package extraction
-- `src/utils/unityImporter.ts` - Unity script generation
+### 5. Version Patching (existing, improved)
+- `patchUnityVersionInBuffer()` - Patches 2022.3.22f2-DWR → 2022.3.22f1
+- Applied after decryption
 
-## What's Been Implemented
-- [x] Comprehensive Unity version patching (Jan 2026)
-- [x] .vrca output format support (Jan 2026)
-- [x] Updated Unity importer scripts (Jan 2026)
-- [x] Version patching status in UI (Jan 2026)
-- [x] Bundle version analysis API (Jan 2026)
+## Files Created/Modified
+- `/app/electron/vrchatDecryption.ts` - Core decryption logic
+- `/app/electron/vrchatMemoryExtractor.ts` - Memory scanning
+- `/app/electron/main.ts` - IPC handlers, encryption detection
+- `/app/electron/preload.ts` - API exposure
 
-## Remaining Work / Backlog
+## Usage Flow
 
-### P0 (Critical)
-- [ ] Test with real VRChat avatar files on Windows
+### For Encrypted Cache Files:
+1. User clicks "Decrypt" on encrypted file
+2. App checks if VRChat is running
+3. If not: Prompts user to start VRChat and log in
+4. If yes: Scans memory for AES keys
+5. Tests candidates against the encrypted file
+6. Valid keys are stored for future use
+7. Bundle is decrypted block-by-block
+8. Version is patched on decrypted data
+9. Output ready for Unity import
 
-### P1 (Important)
-- [ ] Add option to choose output format in UI (.vrca vs .unitypackage)
-- [ ] Add batch export functionality
-- [ ] Improve error messages for unsupported bundle formats
+### For Unencrypted Files:
+- Version patching only (as before)
 
-### P2 (Nice to Have)
-- [ ] Asset Ripper compatibility verification
-- [ ] Preview extracted assets before import
-- [ ] Auto-detect VRChat cache location on different systems
+## Technical Requirements
+- Windows only (memory scanning uses Windows APIs)
+- Administrator privileges may be needed
+- EAC may block memory access
+- VRChat must be running and logged in for key extraction
 
-## Testing Notes
-- Version patching verified via code review and log output
-- Unity import requires Windows + Unity 2022.3.22f1 for full testing
-- Check diagnostic logs at: `%APPDATA%/vrc-studio/logs/vrc-studio-diagnostic.log`
+## Limitations
+- EAC actively blocks some memory access
+- Keys rotate, old keys may not work on new files
+- Network-based key capture not implemented yet
+- Only AES-CTR tested (GCM would need auth tags)
+
+## Next Steps
+1. Test memory extraction with real VRChat client
+2. Implement network interception as alternative
+3. Add UI for decryption status and key management
+4. Consider EAC bypass techniques (risky)
+
+## Backlog
+- P0: Test full pipeline on Windows with VRChat
+- P1: Add progress indicators for large files
+- P2: Network-based key capture
+- P3: Linux/Mac support via different memory APIs
+
+## UI Components Added
+
+### Avatar Preview Modal (AvatarPreviewModal.tsx)
+New decrypt functionality added to the favorites avatar modal:
+
+1. **Encryption Status Display**
+   - Shows "🔒 Encrypted" or "🔓 Not Encrypted"
+   - Auto-detects when cache file is selected
+
+2. **VRChat Status Indicator**
+   - Real-time check every 5 seconds
+   - Shows green/red dot for running status
+
+3. **Decrypt & Patch Version Button**
+   - Yellow/accent colored when encrypted
+   - Runs full pipeline: detect → extract keys → decrypt → patch version
+   - Opens output folder on success
+
+4. **Extract Keys from VRChat Button**
+   - Only shows when file is encrypted AND VRChat is running
+   - Extracts AES keys from VRChat process memory
+
+### New CSS Styles (globals.css)
+- `.btn-accent` - Yellow/warning style for decrypt button
+- `.btn-success` - Green style for success states

@@ -2,8 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import {
   Settings as SettingsIcon, Bell, Monitor, Clock, RotateCcw,
   Palette, Download, Upload, UserCircle, Globe2, Zap, Shield,
-  Trash2, Eye, EyeOff, Cpu, Keyboard, Info, Lock, SortAsc,
-  Volume2, VolumeX, Moon, Sun, RefreshCw, Database, Smile, X,
+  Trash2, Smile, X,
 } from 'lucide-react';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useAuthStore } from '../stores/authStore';
@@ -15,42 +14,24 @@ import { getAvailableLanguages, setLanguage, getLanguage } from '../utils/i18n';
 
 type SettingsSection =
   | 'account' | 'accounts' | 'notifications' | 'polling'
-  | 'display' | 'appearance' | 'discord' | 'general'
-  | 'privacy' | 'performance' | 'shortcuts' | 'data' | 'about'
+  | 'display' | 'appearance' | 'discord' | 'general' | 'data'
   | 'profile';
 
-const sections: Array<{ key: SettingsSection; label: string; icon: typeof SettingsIcon; group?: string }> = [
-  { key: 'profile',       label: 'Personalization',    icon: Smile,        group: 'Profile' },
-  { key: 'account',       label: 'Account',            icon: UserCircle,   group: 'Profile' },
-  { key: 'accounts',      label: 'Multi-Account',      icon: Shield,       group: 'Profile' },
-  { key: 'privacy',       label: 'Privacy',            icon: Lock,         group: 'Profile' },
-  { key: 'notifications', label: 'Notifications',      icon: Bell,         group: 'Behavior' },
-  { key: 'polling',       label: 'Update Intervals',   icon: Clock,        group: 'Behavior' },
-  { key: 'general',       label: 'General',            icon: SettingsIcon, group: 'Behavior' },
-  { key: 'display',       label: 'Display',            icon: Monitor,      group: 'Interface' },
-  { key: 'appearance',    label: 'Appearance',         icon: Palette,      group: 'Interface' },
-  { key: 'discord',       label: 'Discord RPC',        icon: Zap,          group: 'Integrations' },
-  { key: 'performance',   label: 'Performance',        icon: Cpu,          group: 'Advanced' },
-  { key: 'shortcuts',     label: 'Shortcuts',          icon: Keyboard,     group: 'Advanced' },
-  { key: 'data',          label: 'Data & Backup',      icon: Database,     group: 'Advanced' },
-  { key: 'about',         label: 'About',              icon: Info,         group: 'Advanced' },
-];
-
-const SHORTCUT_LIST = [
-  { keys: ['Ctrl', 'F'],       description: 'Focus search' },
-  { keys: ['Ctrl', ','],       description: 'Open settings' },
-  { keys: ['Ctrl', 'R'],       description: 'Refresh data' },
-  { keys: ['Ctrl', 'Shift', 'L'], description: 'Toggle compact mode' },
-  { keys: ['1–9'],             description: 'Jump to sidebar section' },
-  { keys: ['Escape'],          description: 'Close modal / blur input' },
-  { keys: ['?'],               description: 'Toggle keyboard shortcut help' },
+const sections: Array<{ key: SettingsSection; label: string; icon: typeof SettingsIcon }> = [
+  { key: 'profile',       label: 'Personalization',       icon: Smile },
+  { key: 'account',       label: 'Account',               icon: UserCircle },
+  { key: 'accounts',      label: 'Multiple Accounts',     icon: Shield },
+  { key: 'notifications', label: 'Notifications',         icon: Bell },
+  { key: 'polling',       label: 'Update Intervals',      icon: Clock },
+  { key: 'display',       label: 'Display',               icon: Monitor },
+  { key: 'appearance',    label: 'Appearance',            icon: Palette },
+  { key: 'discord',       label: 'Discord Rich Presence', icon: Zap },
+  { key: 'general',       label: 'General',               icon: SettingsIcon },
+  { key: 'data',          label: 'Data & Backup',         icon: Download },
 ];
 
 export default function SettingsPage() {
-  const {
-    settings, updateGeneral, updateNotifications, updatePolling,
-    updateDisplay, updatePrivacy, updatePerformance, updateProfile, resetSettings,
-  } = useSettingsStore();
+  const { settings, updateGeneral, updateNotifications, updatePolling, updateDisplay, updateProfile, resetSettings } = useSettingsStore();
   const { user } = useAuthStore();
   const { onlineFriends, offlineFriends } = useFriendStore();
   const {
@@ -63,7 +44,6 @@ export default function SettingsPage() {
   const [importStatus, setImportStatus] = useState<string | null>(null);
   const [lang, setLang] = useState(getLanguage());
   const [autoLaunch, setAutoLaunch] = useState(false);
-  const [resetConfirm, setResetConfirm] = useState(false);
   const [nicknameInput, setNicknameInput] = useState(settings.profile.nickname);
   const importRef = useRef<HTMLInputElement>(null);
 

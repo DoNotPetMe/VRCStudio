@@ -60,6 +60,11 @@ const defaultSettings: AppSettings = {
     greetingEnabled: true,
     showWeather: true,
   },
+  profile: {
+    nickname: '',
+    greetingEnabled: true,
+    showWeather: true,
+  },
 };
 
 function loadSettings(): AppSettings {
@@ -72,8 +77,6 @@ function loadSettings(): AppSettings {
       notifications: { ...defaultSettings.notifications, ...saved.notifications },
       polling: { ...defaultSettings.polling, ...saved.polling },
       display: { ...defaultSettings.display, ...saved.display },
-      privacy: { ...defaultSettings.privacy, ...saved.privacy },
-      performance: { ...defaultSettings.performance, ...saved.performance },
       profile: { ...defaultSettings.profile, ...saved.profile },
     };
   } catch {
@@ -91,8 +94,6 @@ interface SettingsState {
   updateNotifications: (updates: Partial<AppSettings['notifications']>) => void;
   updatePolling: (updates: Partial<AppSettings['polling']>) => void;
   updateDisplay: (updates: Partial<AppSettings['display']>) => void;
-  updatePrivacy: (updates: Partial<AppSettings['privacy']>) => void;
-  updatePerformance: (updates: Partial<AppSettings['performance']>) => void;
   updateProfile: (updates: Partial<AppSettings['profile']>) => void;
   resetSettings: () => void;
 }
@@ -132,6 +133,12 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   updatePerformance: (updates) => {
     const settings = { ...get().settings, performance: { ...get().settings.performance, ...updates } };
+    saveSettings(settings);
+    set({ settings });
+  },
+
+  updateProfile: (updates) => {
+    const settings = { ...get().settings, profile: { ...get().settings.profile, ...updates } };
     saveSettings(settings);
     set({ settings });
   },
