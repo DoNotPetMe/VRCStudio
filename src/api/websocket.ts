@@ -1,6 +1,7 @@
 import api from './vrchat';
 import { useFeedStore } from '../stores/feedStore';
 import { useFriendStore } from '../stores/friendStore';
+import { useAuthStore } from '../stores/authStore';
 import { logWorldVisit, logWorldExit } from '../utils/worldAnalytics';
 import { useReportStore } from '../stores/reportStore';
 
@@ -177,6 +178,17 @@ class VRChatWebSocket {
         });
         friendStore.fetchOnlineFriends();
         break;
+
+      case 'user-update': {
+        // Current user's data changed (status, location, avatar, etc.).
+        // Merge into authStore so location-tracking and Discord RPC react
+        // immediately instead of waiting for the next polling tick.
+        const auth = useAuthStore.getState();
+        if (auth.user && data) {
+          useAuthStore.setState({ user: { ...auth.user, ...data } });
+        }
+        break;
+      }
 
       case 'notification': {
         // Check for moderation action notifications and correlate with filed reports

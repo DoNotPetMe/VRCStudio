@@ -47,6 +47,8 @@ export function useDiscordRPC() {
       let state: string | undefined;
       let largeImageKey: string | undefined;
       let largeImageText: string | undefined;
+      let smallImageKey: string | undefined;
+      let smallImageText: string | undefined;
 
       if (cfg.showWorld && current) {
         const worldName = current.worldName && !current.worldName.startsWith('wrld_')
@@ -63,10 +65,25 @@ export function useDiscordRPC() {
         if (current.worldImage) {
           largeImageKey = current.worldImage;
         }
+        // When in a world, show user avatar as the small (corner) image.
+        if (cfg.showAvatar && user) {
+          const avatar = user.profilePicOverride || user.currentAvatarThumbnailImageUrl || user.userIcon;
+          if (avatar && avatar.startsWith('https://')) {
+            smallImageKey = avatar;
+            smallImageText = user.displayName;
+          }
+        }
       } else if (user) {
         // Not in a world — show online status so the card is never empty.
         const status = user.statusDescription || user.status || 'Online';
         state = status.length >= 2 ? status : 'Online';
+        // Use user's avatar/profile pic as the large image so we don't
+        // show a blank white ? placeholder.
+        const avatar = user.profilePicOverride || user.currentAvatarThumbnailImageUrl || user.userIcon;
+        if (avatar && avatar.startsWith('https://')) {
+          largeImageKey = avatar;
+          largeImageText = user.displayName;
+        }
       }
 
       // Discord requires details/state to be 2-128 chars. Sanitize.
@@ -78,13 +95,22 @@ export function useDiscordRPC() {
         (current ? current.joinedAt : sessionStartTs.current) / 1000
       );
 
-      console.log('[useDiscordRPC] pushActivity', { details: safeDetails, state: safeState, hasImage: !!largeImageKey, startTimestamp });
+      console.log('[useDiscordRPC] pushActivity', {
+        details: safeDetails,
+        state: safeState,
+        largeImageKey: largeImageKey ? `${largeImageKey.slice(0, 80)}…` : undefined,
+        smallImageKey: smallImageKey ? `${smallImageKey.slice(0, 80)}…` : undefined,
+        startTimestamp,
+        inWorld: !!current,
+      });
 
       window.electronAPI!.discordSetActivity({
         details: safeDetails,
         state: safeState,
         largeImageKey,
         largeImageText,
+        smallImageKey,
+        smallImageText,
         startTimestamp,
         instance: !!current,
       });

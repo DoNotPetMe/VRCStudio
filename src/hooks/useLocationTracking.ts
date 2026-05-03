@@ -138,6 +138,17 @@ export function useLocationTracking() {
 
     check();
     const id = setInterval(check, intervalMs);
-    return () => clearInterval(id);
+
+    // React to user-update WebSocket events: when authStore.user changes
+    // (location, status, etc.), re-evaluate immediately instead of waiting
+    // for the next poll tick.
+    const unsubAuth = useAuthStore.subscribe((s, prev) => {
+      if (s.user?.location !== prev.user?.location) check();
+    });
+
+    return () => {
+      clearInterval(id);
+      unsubAuth();
+    };
   }, [intervalMs]);
 }
