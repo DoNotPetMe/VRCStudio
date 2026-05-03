@@ -81,6 +81,19 @@ function createTray() {
 
 // ─── Discord RPC ─────────────────────────────────────────────────────────────
 
+type DiscordActivityPayload = {
+  details?: string;
+  state?: string;
+  largeImageKey?: string;
+  largeImageText?: string;
+  smallImageKey?: string;
+  smallImageText?: string;
+  startTimestamp?: number;
+  instance?: boolean;
+};
+
+let pendingActivity: DiscordActivityPayload | null = null;
+
 async function initDiscordRPC(clientId: string) {
   // Require a non-empty, plausible clientId (Discord app IDs are 17-19 digits)
   if (!clientId || clientId.length < 10) {
@@ -96,6 +109,12 @@ async function initDiscordRPC(clientId: string) {
     discordRPC.on('ready', () => {
       rpcConnected = true;
       console.log('[Discord RPC] Connected as', (discordRPC as any).user?.username);
+      // Flush any activity that was set while we were still connecting
+      if (pendingActivity) {
+        const a = pendingActivity;
+        pendingActivity = null;
+        applyActivity(a);
+      }
     });
 
     discordRPC.on('disconnected', () => {
@@ -104,6 +123,7 @@ async function initDiscordRPC(clientId: string) {
     });
 
     await discordRPC.login({ clientId });
+    console.log('[Discord RPC] login() resolved, awaiting ready event…');
   } catch (err: any) {
     console.warn('[Discord RPC] Failed to connect:', err?.message ?? err);
     discordRPC = null;
@@ -116,34 +136,43 @@ function disconnectDiscordRPC() {
     try { discordRPC.destroy(); } catch {}
     discordRPC = null;
     rpcConnected = false;
+    pendingActivity = null;
   }
 }
 
-function setDiscordActivity(activity: {
-  details?: string;
-  state?: string;
-  largeImageKey?: string;   // asset key OR https:// URL
-  largeImageText?: string;
-  smallImageKey?: string;   // asset key OR https:// URL
-  smallImageText?: string;
-  startTimestamp?: number;
-  instance?: boolean;
-}) {
-  if (!rpcConnected || !discordRPC) return;
-  try {
-    discordRPC.setActivity({
-      details: activity.details,
-      state: activity.state,
-      largeImageKey: activity.largeImageKey,
-      largeImageText: activity.largeImageText,
-      smallImageKey: activity.smallImageKey,
-      smallImageText: activity.smallImageText,
-      startTimestamp: activity.startTimestamp,
-      instance: activity.instance ?? false,
-    });
-  } catch (err) {
-    console.warn('[Discord RPC] setActivity failed:', err);
+function applyActivity(activity: DiscordActivityPayload) {
+  if (!discordRPC) return;
+  // discord-rpc setActivity returns a Promise — we MUST catch its rejection
+  // or failures are swallowed silently and the activity never appears.
+  const payload = {
+    details: activity.details,
+    state: activity.state,
+    largeImageKey: activity.largeImageKey,
+    largeImageText: activity.largeImageText,
+    smallImageKey: activity.smallImageKey,
+    smallImageText: activity.smallImageText,
+    startTimestamp: activity.startTimestamp,
+    instance: activity.instance ?? false,
+  };
+  console.log('[Discord RPC] setActivity', JSON.stringify({
+    details: payload.details,
+    state: payload.state,
+    largeImageKey: payload.largeImageKey ? `${payload.largeImageKey.slice(0, 60)}…` : undefined,
+    startTimestamp: payload.startTimestamp,
+  }));
+  Promise.resolve(discordRPC.setActivity(payload)).catch((err: any) => {
+    console.warn('[Discord RPC] setActivity rejected:', err?.message ?? err);
+  });
+}
+
+function setDiscordActivity(activity: DiscordActivityPayload) {
+  // If not yet connected, hold the most recent activity and push when ready.
+  if (!rpcConnected || !discordRPC) {
+    pendingActivity = activity;
+    console.log('[Discord RPC] Not connected yet — queuing activity for ready event');
+    return;
   }
+  applyActivity(activity);
 }
 
 // ─── IPC Handlers ────────────────────────────────────────────────────────────

@@ -38,13 +38,12 @@ export function useDiscordRPC() {
       const user = useAuthStore.getState().user;
       const current = useInstanceHistoryStore.getState().currentInstance;
 
-      // First line: who you are
+      // Details (line 1, bold). Always non-empty so Discord shows something.
       const details = user
-        ? `${user.displayName} · ${user.statusDescription || user.status || 'Online'}`
-        : 'Playing VRChat';
+        ? `${user.displayName}`
+        : 'VRChat Companion';
 
-      // Second line: world name + instance type, only when in a world.
-      // Show the raw worldId while the name is still loading (starts with wrld_).
+      // State (line 2). Either world name when in a world, or status when not.
       let state: string | undefined;
       let largeImageKey: string | undefined;
       let largeImageText: string | undefined;
@@ -55,23 +54,35 @@ export function useDiscordRPC() {
           : undefined;
         if (worldName) {
           const type = current.instanceType && current.instanceType !== 'public'
-            ? ` (${current.instanceType})` : '';
-          state = `${worldName}${type}`;
+            ? ` · ${current.instanceType}` : '';
+          state = `In ${worldName}${type}`;
           largeImageText = worldName;
+        } else {
+          state = 'Loading world…';
         }
         if (current.worldImage) {
           largeImageKey = current.worldImage;
         }
+      } else if (user) {
+        // Not in a world — show online status so the card is never empty.
+        const status = user.statusDescription || user.status || 'Online';
+        state = status.length >= 2 ? status : 'Online';
       }
+
+      // Discord requires details/state to be 2-128 chars. Sanitize.
+      const safeDetails = details.slice(0, 128);
+      const safeState = state && state.length >= 2 ? state.slice(0, 128) : undefined;
 
       // Discord expects Unix epoch in SECONDS, not milliseconds.
       const startTimestamp = Math.floor(
         (current ? current.joinedAt : sessionStartTs.current) / 1000
       );
 
+      console.log('[useDiscordRPC] pushActivity', { details: safeDetails, state: safeState, hasImage: !!largeImageKey, startTimestamp });
+
       window.electronAPI!.discordSetActivity({
-        details,
-        state,
+        details: safeDetails,
+        state: safeState,
         largeImageKey,
         largeImageText,
         startTimestamp,
@@ -89,7 +100,8 @@ export function useDiscordRPC() {
           initialized.current = true;
           lastClientId.current = cfg.clientId;
           sessionStartTs.current = Date.now();
-          setTimeout(pushActivity, 2000);
+          // Push immediately — main process queues until 'ready' event fires.
+          pushActivity();
         } else {
           pushActivity();
         }
