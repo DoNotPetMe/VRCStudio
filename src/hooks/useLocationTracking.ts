@@ -47,7 +47,14 @@ export function useLocationTracking() {
       const user = useAuthStore.getState().user;
       if (!user) return;
 
-      const newLocation = user.location || '';
+      // Use location field, or construct from worldId+instanceId if location is missing
+      let newLocation = user.location || '';
+      if (!newLocation.startsWith('wrld_') && user.worldId && user.worldId.startsWith('wrld_')) {
+        newLocation = user.instanceId
+          ? `${user.worldId}:${user.instanceId}`
+          : user.worldId;
+      }
+      console.log('[LocationTracking] location:', newLocation, '| raw location:', user.location, '| worldId:', user.worldId, '| instanceId:', user.instanceId);
       const prevLocation = prevLocationRef.current;
 
       if (prevLocation === null) {
