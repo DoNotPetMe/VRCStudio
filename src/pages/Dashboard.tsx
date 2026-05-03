@@ -84,17 +84,26 @@ export default function Dashboard() {
   const [rejoining, setRejoining] = useState<string | null>(null);
   const [rejoined, setRejoined] = useState<Set<string>>(new Set());
 
-  const handleRejoin = async (worldId: string, instanceId: string) => {
-    const key = `${worldId}:${instanceId}`;
-    setRejoining(key);
+  const handleRejoin = async (entryId: string, worldId: string, instanceId: string) => {
+    setRejoining(entryId);
     try {
       await api.selfInvite(worldId, instanceId);
-      setRejoined(prev => new Set(prev).add(key));
+      setRejoined(prev => new Set(prev).add(entryId));
     } catch {}
     setRejoining(null);
   };
 
-  const recentInstances = history.slice(0, 8);
+  // Deduplicate by worldId:instanceId — keep only the most recent visit to each instance
+  const recentInstances = (() => {
+    const seen = new Set<string>();
+    const deduped = [];
+    for (const inst of history) {
+      const key = `${inst.worldId}:${inst.instanceId}`;
+      if (!seen.has(key)) { seen.add(key); deduped.push(inst); }
+      if (deduped.length >= 8) break;
+    }
+    return deduped;
+  })();
 
   // Build a map for O(1) friend avatar lookup in the activity feed
   const friendAvatarMap = new Map<string, string>();
@@ -187,9 +196,8 @@ export default function Dashboard() {
           </div>
           <div className="divide-y divide-surface-800/30 max-h-64 overflow-y-auto">
             {recentInstances.map(inst => {
-              const key = `${inst.worldId}:${inst.instanceId}`;
-              const isRejoining = rejoining === key;
-              const hasRejoined = rejoined.has(key);
+              const isRejoining = rejoining === inst.id;
+              const hasRejoined = rejoined.has(inst.id);
               const isPrivate = inst.instanceType !== 'public';
               return (
                 <div key={inst.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-surface-800/30 transition-colors">
@@ -209,7 +217,7 @@ export default function Dashboard() {
                     </div>
                   </div>
                   <button
-                    onClick={() => handleRejoin(inst.worldId, inst.instanceId)}
+                    onClick={() => handleRejoin(inst.id, inst.worldId, inst.instanceId)}
                     disabled={isRejoining || hasRejoined}
                     className={`text-xs px-2.5 py-1 rounded-md flex items-center gap-1 flex-shrink-0 transition-colors ${
                       hasRejoined

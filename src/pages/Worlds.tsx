@@ -151,18 +151,33 @@ export default function WorldsPage() {
             {/* Instances */}
             {selectedWorld.instances && selectedWorld.instances.length > 0 && (
               <div className="mt-6">
-                <h3 className="text-sm font-semibold text-surface-300 mb-2">
-                  Active Instances ({selectedWorld.instances.length})
-                </h3>
-                <div className="grid grid-cols-2 gap-2">
-                  {selectedWorld.instances.map(([id, count]) => (
-                    <div key={id} className="glass-panel p-3 flex items-center gap-2 hover:border-accent-500/30 transition-colors">
+                {/* Group instances first */}
+                {(() => {
+                  const grouped = selectedWorld.instances.filter(([id]) => id.includes('group('));
+                  const other = selectedWorld.instances.filter(([id]) => !id.includes('group('));
+
+                  const getInstanceLabel = (id: string) => {
+                    if (id.includes('group(')) {
+                      if (id.includes('groupAccessType(plus)')) return 'Group+';
+                      if (id.includes('groupAccessType(members)')) return 'Group';
+                      return 'Group Public';
+                    }
+                    if (id.includes('friends(')) return 'Friends+';
+                    if (id.includes('hidden(')) return 'Friends';
+                    if (id.includes('private(')) return 'Invite';
+                    return 'Public';
+                  };
+
+                  const InstanceRow = ({ id, count }: { id: string; count: number }) => (
+                    <div key={id} className="glass-panel px-3 py-2.5 flex items-center gap-3 hover:border-accent-500/30 transition-colors">
                       <button
                         className="flex-1 flex items-center gap-2 min-w-0 text-left"
                         onClick={() => setInstanceModal({ worldId: selectedWorld.id, instanceId: id })}
                       >
-                        <span className="text-xs font-mono truncate">{id}</span>
-                        <span className="text-xs text-surface-400 flex items-center gap-1 flex-shrink-0">
+                        <span className="badge bg-surface-700 text-surface-300 text-[10px] flex-shrink-0">
+                          {getInstanceLabel(id)}
+                        </span>
+                        <span className="text-xs text-surface-400 flex items-center gap-1 flex-shrink-0 ml-auto">
                           <Users size={11} /> {count}
                         </span>
                       </button>
@@ -170,18 +185,45 @@ export default function WorldsPage() {
                         onClick={() => handleSelfInvite(selectedWorld.id, id)}
                         disabled={!!rejoiningInstance}
                         title="Invite yourself to this instance"
-                        className={`flex items-center gap-1 text-xs flex-shrink-0 px-1.5 py-0.5 rounded transition-colors ${
+                        className={`flex items-center gap-1 text-xs flex-shrink-0 px-2 py-1 rounded-md transition-colors ${
                           rejoiningInstance === id
-                            ? 'text-green-400'
-                            : 'text-accent-400 hover:text-accent-300'
+                            ? 'bg-green-500/15 text-green-400'
+                            : 'bg-accent-600/15 text-accent-400 hover:bg-accent-600/25'
                         }`}
                       >
                         <LogIn size={11} />
-                        <span className="text-[10px]">{rejoiningInstance === id ? 'Sent!' : 'Join'}</span>
+                        <span className="text-[10px]">{rejoiningInstance === id ? 'Sent!' : 'Invite me'}</span>
                       </button>
                     </div>
-                  ))}
-                </div>
+                  );
+
+                  return (
+                    <>
+                      {grouped.length > 0 && (
+                        <div className="mb-4">
+                          <h3 className="text-sm font-semibold text-surface-300 mb-2 flex items-center gap-1.5">
+                            <Users size={14} className="text-amber-400" />
+                            Group Instances ({grouped.length})
+                          </h3>
+                          <div className="space-y-1.5">
+                            {grouped.map(([id, count]) => <InstanceRow key={id} id={id} count={count} />)}
+                          </div>
+                        </div>
+                      )}
+                      {other.length > 0 && (
+                        <div>
+                          <h3 className="text-sm font-semibold text-surface-300 mb-2 flex items-center gap-1.5">
+                            <Globe size={14} />
+                            Other Instances ({other.length})
+                          </h3>
+                          <div className="space-y-1.5">
+                            {other.map(([id, count]) => <InstanceRow key={id} id={id} count={count} />)}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
             )}
 

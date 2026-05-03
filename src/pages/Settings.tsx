@@ -996,11 +996,15 @@ export default function SettingsPage() {
               <InfoRow label="Build" value="electron + vite + react" />
               <InfoRow label="Theme Engine" value="CSS custom properties" />
               <InfoRow label="Data Storage" value="localStorage (local only)" />
+              <AppStatsRow />
               <div className="pt-3 border-t border-surface-800 mt-2">
                 <p className="text-xs text-surface-500">
                   VRC Studio is an unofficial third-party application. It is not affiliated with or endorsed by VRChat Inc.
                   All VRChat data is fetched through the official VRChat API using your own credentials.
                 </p>
+              </div>
+              <div className="pt-2 text-center">
+                <p className="text-[11px] text-surface-600">Made by DoNotResurrect_</p>
               </div>
             </Section>
           )}
@@ -1012,6 +1016,33 @@ export default function SettingsPage() {
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
+
+function AppStatsRow() {
+  const [downloads, setDownloads] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!window.electronAPI) return;
+    window.electronAPI.httpGet(
+      'https://api.github.com/repos/crystaldusty/vrcstudio/releases',
+      { 'User-Agent': 'VRCStudio/1.0.0' },
+    ).then(res => {
+      if (!res.ok || !Array.isArray(res.data)) return;
+      const total = (res.data as any[]).reduce((sum: number, release: any) =>
+        sum + (release.assets as any[] || []).reduce((s: number, a: any) => s + (a.download_count || 0), 0), 0
+      );
+      setDownloads(total);
+    }).catch(() => {});
+  }, []);
+
+  if (downloads === null) return null;
+
+  return (
+    <div className="flex items-center justify-between py-1">
+      <span className="text-sm text-surface-400">Total Downloads</span>
+      <span className="text-sm font-semibold text-accent-400">{downloads.toLocaleString()}</span>
+    </div>
+  );
+}
 
 function Section({ title, icon: Icon, children }: {
   title: string; icon: typeof SettingsIcon; children: React.ReactNode;

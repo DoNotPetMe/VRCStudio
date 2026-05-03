@@ -25,142 +25,145 @@ function readConfig(): DiscordConfig {
 }
 
 export function useDiscordRPC() {
+  // React-based selectors — re-render (and re-run effects) whenever these change.
+  const user = useAuthStore(s => s.user);
+  const isLoggedIn = useAuthStore(s => s.isLoggedIn);
+  const currentInstance = useInstanceHistoryStore(s => s.currentInstance);
+
   const initialized = useRef(false);
   const sessionStartTs = useRef(Date.now());
   const lastClientId = useRef('');
 
-  useEffect(() => {
+  // Track previous config so we can detect enable/disable/clientId changes.
+  const cfgRef = useRef(readConfig());
+
+  // ------------------------------------------------------------------
+  // applyConfig: connect / disconnect discord RPC based on settings.
+  // Runs once on mount and then on every config poll tick.
+  // ------------------------------------------------------------------
+  const applyConfig = useRef<() => void>(null!);
+  applyConfig.current = () => {
     if (!window.electronAPI) return;
+    const cfg = readConfig();
+    cfgRef.current = cfg;
 
-    function pushActivity() {
-      if (!window.electronAPI || !initialized.current) return;
-      const cfg = readConfig();
-      const user = useAuthStore.getState().user;
-      const current = useInstanceHistoryStore.getState().currentInstance;
-
-      // Details (line 1, bold). Always non-empty so Discord shows something.
-      const details = user
-        ? `${user.displayName}`
-        : 'VRChat Companion';
-
-      // State (line 2). Either world name when in a world, or status when not.
-      let state: string | undefined;
-      let largeImageKey: string | undefined;
-      let largeImageText: string | undefined;
-      let smallImageKey: string | undefined;
-      let smallImageText: string | undefined;
-
-      if (cfg.showWorld && current) {
-        const worldName = current.worldName && !current.worldName.startsWith('wrld_')
-          ? current.worldName
-          : undefined;
-        if (worldName) {
-          const type = current.instanceType && current.instanceType !== 'public'
-            ? ` · ${current.instanceType}` : '';
-          state = `In ${worldName}${type}`;
-          largeImageText = worldName;
-        } else {
-          state = 'Loading world…';
-        }
-        if (current.worldImage) {
-          largeImageKey = current.worldImage;
-        }
-        // When in a world, show user avatar as the small (corner) image.
-        if (cfg.showAvatar && user) {
-          const avatar = user.profilePicOverride || user.currentAvatarThumbnailImageUrl || user.userIcon;
-          if (avatar && avatar.startsWith('https://')) {
-            smallImageKey = avatar;
-            smallImageText = user.displayName;
-          }
-        }
-      } else if (user) {
-        // Not in a world — show online status so the card is never empty.
-        const status = user.statusDescription || user.status || 'Online';
-        state = status.length >= 2 ? status : 'Online';
-        // Use user's avatar/profile pic as the large image so we don't
-        // show a blank white ? placeholder.
-        const avatar = user.profilePicOverride || user.currentAvatarThumbnailImageUrl || user.userIcon;
-        if (avatar && avatar.startsWith('https://')) {
-          largeImageKey = avatar;
-          largeImageText = user.displayName;
-        }
+    if (cfg.enabled && isLoggedIn && cfg.clientId) {
+      if (!initialized.current || lastClientId.current !== cfg.clientId) {
+        window.electronAPI.discordInit(cfg.clientId);
+        initialized.current = true;
+        lastClientId.current = cfg.clientId;
+        sessionStartTs.current = Date.now();
       }
-
-      // Discord requires details/state to be 2-128 chars. Sanitize.
-      const safeDetails = details.slice(0, 128);
-      const safeState = state && state.length >= 2 ? state.slice(0, 128) : undefined;
-
-      // Discord expects Unix epoch in SECONDS, not milliseconds.
-      const startTimestamp = Math.floor(
-        (current ? current.joinedAt : sessionStartTs.current) / 1000
-      );
-
-      console.log('[useDiscordRPC] pushActivity', {
-        details: safeDetails,
-        state: safeState,
-        largeImageKey: largeImageKey ? `${largeImageKey.slice(0, 80)}…` : undefined,
-        smallImageKey: smallImageKey ? `${smallImageKey.slice(0, 80)}…` : undefined,
-        startTimestamp,
-        inWorld: !!current,
-      });
-
-      window.electronAPI!.discordSetActivity({
-        details: safeDetails,
-        state: safeState,
-        largeImageKey,
-        largeImageText,
-        smallImageKey,
-        smallImageText,
-        startTimestamp,
-        instance: !!current,
-      });
-    }
-
-    function applyConfig() {
-      const cfg = readConfig();
-      const auth = useAuthStore.getState();
-
-      if (cfg.enabled && auth.isLoggedIn && cfg.clientId) {
-        if (!initialized.current || lastClientId.current !== cfg.clientId) {
-          window.electronAPI!.discordInit(cfg.clientId);
-          initialized.current = true;
-          lastClientId.current = cfg.clientId;
-          sessionStartTs.current = Date.now();
-          // Push immediately — main process queues until 'ready' event fires.
-          pushActivity();
-        } else {
-          pushActivity();
-        }
-      } else if ((!cfg.enabled || !cfg.clientId) && initialized.current) {
-        window.electronAPI!.discordDisconnect();
+    } else if (!cfg.enabled || !cfg.clientId) {
+      if (initialized.current) {
+        window.electronAPI.discordDisconnect();
         initialized.current = false;
         lastClientId.current = '';
       }
     }
+  };
 
-    applyConfig();
+  // ------------------------------------------------------------------
+  // pushActivity: build and send the current RPC payload.
+  // Reads directly from refs/args so it's always fresh.
+  // ------------------------------------------------------------------
+  function pushActivity() {
+    if (!window.electronAPI || !initialized.current) return;
+    const cfg = cfgRef.current;
 
-    // Poll every 5s to pick up settings changes (localStorage events don't fire
-    // for same-window writes in Electron's single-renderer setup)
-    const pollId = setInterval(applyConfig, 5000);
+    const details = user ? user.displayName : 'VRChat Companion';
+    let state: string | undefined;
+    let largeImageKey: string | undefined;
+    let largeImageText: string | undefined;
+    let smallImageKey: string | undefined;
+    let smallImageText: string | undefined;
 
-    // Push activity whenever auth (status, displayName) or instance (world join/leave) changes
-    const unsubAuth = useAuthStore.subscribe(() => {
-      if (initialized.current) pushActivity();
+    if (cfg.showWorld && currentInstance) {
+      const worldName = currentInstance.worldName && !currentInstance.worldName.startsWith('wrld_')
+        ? currentInstance.worldName
+        : undefined;
+
+      if (worldName) {
+        const type = currentInstance.instanceType && currentInstance.instanceType !== 'public'
+          ? ` · ${currentInstance.instanceType}` : '';
+        state = `In ${worldName}${type}`;
+        largeImageText = worldName;
+      } else {
+        state = 'Loading world…';
+      }
+
+      if (currentInstance.worldImage) {
+        largeImageKey = currentInstance.worldImage;
+      }
+
+      if (cfg.showAvatar && user) {
+        const avatar = user.profilePicOverride || user.currentAvatarThumbnailImageUrl || user.userIcon;
+        if (avatar?.startsWith('https://')) {
+          smallImageKey = avatar;
+          smallImageText = user.displayName;
+        }
+      }
+    } else if (user) {
+      const status = user.statusDescription || user.status || 'Online';
+      state = status.length >= 2 ? status : 'Online';
+      const avatar = user.profilePicOverride || user.currentAvatarThumbnailImageUrl || user.userIcon;
+      if (avatar?.startsWith('https://')) {
+        largeImageKey = avatar;
+        largeImageText = user.displayName;
+      }
+    }
+
+    const safeDetails = details.slice(0, 128);
+    const safeState = state && state.length >= 2 ? state.slice(0, 128) : undefined;
+    const startTimestamp = Math.floor(
+      (currentInstance ? currentInstance.joinedAt : sessionStartTs.current) / 1000
+    );
+
+    console.log('[useDiscordRPC] push', {
+      inWorld: !!currentInstance,
+      worldName: currentInstance?.worldName,
+      state: safeState,
+      startTimestamp,
     });
-    const unsubInstance = useInstanceHistoryStore.subscribe(() => {
-      if (initialized.current) pushActivity();
-    });
 
+    window.electronAPI.discordSetActivity({
+      details: safeDetails,
+      state: safeState,
+      largeImageKey,
+      largeImageText,
+      smallImageKey,
+      smallImageText,
+      startTimestamp,
+      instance: !!currentInstance,
+    });
+  }
+
+  // ------------------------------------------------------------------
+  // Effect 1: connect/disconnect when login state or clientId changes.
+  // Polls every 5 s to catch localStorage config changes.
+  // ------------------------------------------------------------------
+  useEffect(() => {
+    if (!window.electronAPI) return;
+    applyConfig.current();
+    const pollId = setInterval(() => applyConfig.current(), 5000);
     return () => {
       clearInterval(pollId);
-      unsubAuth();
-      unsubInstance();
       if (initialized.current) {
         window.electronAPI?.discordDisconnect();
         initialized.current = false;
         lastClientId.current = '';
       }
     };
-  }, []);
+  }, [isLoggedIn]);
+
+  // ------------------------------------------------------------------
+  // Effect 2: push activity whenever user data or instance changes.
+  // Because user/currentInstance come from React selectors, this effect
+  // re-runs on every store change — no manual subscription needed.
+  // ------------------------------------------------------------------
+  useEffect(() => {
+    if (!initialized.current) return;
+    pushActivity();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, currentInstance]);
 }
