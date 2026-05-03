@@ -5,6 +5,7 @@ import {
 import path from 'path';
 import fs from 'fs';
 import https from 'https';
+import { exec } from 'child_process';
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -12,6 +13,133 @@ let discordRPC: any = null;
 let rpcConnected = false;
 let minimizeToTray = true;
 let isQuitting = false;
+
+// ─── Launch-with-VRChat (OS task registration) ────────────────────────────────
+
+function runCmd(cmd: string): Promise<string> {
+  return new Promise((resolve, reject) =>
+    exec(cmd, (err, stdout, stderr) =>
+      err ? reject(new Error(stderr || err.message)) : resolve(stdout)
+    )
+  );
+}
+
+// Returns the path to this executable (works both in dev and packaged builds).
+function selfExePath(): string {
+  // In dev mode process.execPath is Electron itself; in packaged builds it's
+  // the app executable.  We always pass it so the watcher script can launch us.
+  return process.execPath;
+}
+
+// Write the watcher script to userData so the path is stable across updates.
+function writeWatcherScript(): string {
+  const dir = app.getPath('userData');
+
+  if (process.platform === 'win32') {
+    const ps1 = path.join(dir, 'vrcstudio_watcher.ps1');
+    const exe = selfExePath().replace(/'/g, "''"); // escape single-quotes
+    fs.writeFileSync(ps1, [
+      'while ($true) {',
+      '  if (Get-Process -Name VRChat -ErrorAction SilentlyContinue) {',
+      `    Start-Process '${exe}'`,
+      '    break',
+      '  }',
+      '  Start-Sleep -Seconds 5',
+      '}',
+    ].join('\r\n'));
+    return ps1;
+  } else {
+    const sh = path.join(dir, 'vrcstudio_watcher.sh');
+    const exe = selfExePath().replace(/'/g, "'\\''");
+    fs.writeFileSync(sh, [
+      '#!/bin/sh',
+      'while true; do',
+      '  if pgrep -x VRChat > /dev/null 2>&1 || pgrep -x VRChat.x86_64 > /dev/null 2>&1; then',
+      `    '${exe}' &`,
+      '    break',
+      '  fi',
+      '  sleep 5',
+      'done',
+    ].join('\n'));
+    fs.chmodSync(sh, 0o755);
+    return sh;
+  }
+}
+
+async function registerLaunchWithVRChat(): Promise<void> {
+  const scriptPath = writeWatcherScript();
+
+  if (process.platform === 'win32') {
+    // User-level scheduled task — no admin required.
+    // Runs the PowerShell watcher hidden at every logon; exits as soon as
+    // VRChat is found and VRCStudio is launched.
+    const xmlPath = path.join(app.getPath('temp'), 'vrcstudio_task.xml');
+    const xml = `<?xml version="1.0" encoding="UTF-16"?>
+<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo><Description>Launch VRC Studio when VRChat starts</Description></RegistrationInfo>
+  <Triggers><LogonTrigger><Enabled>true</Enabled></LogonTrigger></Triggers>
+  <Principals><Principal id="Author"><LogonType>InteractiveToken</LogonType><RunLevel>LeastPrivilege</RunLevel></Principal></Principals>
+  <Settings><MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy><DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries><StopIfGoingOnBatteries>false</StopIfGoingOnBatteries><ExecutionTimeLimit>PT0S</ExecutionTimeLimit><Hidden>true</Hidden></Settings>
+  <Actions><Exec><Command>powershell.exe</Command><Arguments>-NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "${scriptPath.replace(/\\/g, '\\\\')}"</Arguments></Exec></Actions>
+</Task>`;
+    fs.writeFileSync(xmlPath, xml, 'utf-8');
+    await runCmd(`schtasks /create /tn "VRCStudio_LaunchWithVRChat" /xml "${xmlPath}" /f`);
+  } else if (process.platform === 'darwin') {
+    const plistPath = path.join(app.getPath('home'), 'Library', 'LaunchAgents', 'com.vrcstudio.watchers.vrchat.plist');
+    const plist = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>com.vrcstudio.watchers.vrchat</string>
+  <key>ProgramArguments</key><array><string>${scriptPath}</string></array>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><false/>
+</dict></plist>`;
+    fs.writeFileSync(plistPath, plist);
+    await runCmd(`launchctl load "${plistPath}"`).catch(() => {});
+  } else {
+    // Linux: XDG autostart .desktop file
+    const desktopDir = path.join(app.getPath('home'), '.config', 'autostart');
+    fs.mkdirSync(desktopDir, { recursive: true });
+    const desktopPath = path.join(desktopDir, 'vrcstudio-watcher.desktop');
+    fs.writeFileSync(desktopPath, [
+      '[Desktop Entry]',
+      'Type=Application',
+      'Name=VRCStudio VRChat Watcher',
+      `Exec=${scriptPath}`,
+      'Hidden=false',
+      'NoDisplay=true',
+      'X-GNOME-Autostart-enabled=true',
+    ].join('\n'));
+  }
+}
+
+async function unregisterLaunchWithVRChat(): Promise<void> {
+  if (process.platform === 'win32') {
+    await runCmd('schtasks /delete /tn "VRCStudio_LaunchWithVRChat" /f').catch(() => {});
+  } else if (process.platform === 'darwin') {
+    const plistPath = path.join(app.getPath('home'), 'Library', 'LaunchAgents', 'com.vrcstudio.watchers.vrchat.plist');
+    await runCmd(`launchctl unload "${plistPath}"`).catch(() => {});
+    if (fs.existsSync(plistPath)) fs.unlinkSync(plistPath);
+  } else {
+    const desktopPath = path.join(app.getPath('home'), '.config', 'autostart', 'vrcstudio-watcher.desktop');
+    if (fs.existsSync(desktopPath)) fs.unlinkSync(desktopPath);
+  }
+}
+
+function isLaunchWithVRChatEnabled(): boolean {
+  if (process.platform === 'win32') {
+    try {
+      const out = require('child_process').execSync(
+        'schtasks /query /tn "VRCStudio_LaunchWithVRChat" /fo LIST 2>nul', { encoding: 'utf8' }
+      );
+      return out.includes('VRCStudio_LaunchWithVRChat');
+    } catch { return false; }
+  } else if (process.platform === 'darwin') {
+    return fs.existsSync(path.join(app.getPath('home'), 'Library', 'LaunchAgents', 'com.vrcstudio.watchers.vrchat.plist'));
+  } else {
+    return fs.existsSync(path.join(app.getPath('home'), '.config', 'autostart', 'vrcstudio-watcher.desktop'));
+  }
+}
 
 // ─── Window ──────────────────────────────────────────────────────────────────
 
@@ -325,6 +453,16 @@ ipcMain.handle('autoLaunch:get', () => app.getLoginItemSettings().openAtLogin);
 // App info
 ipcMain.handle('app:getVersion', () => app.getVersion());
 ipcMain.handle('app:getPlatform', () => process.platform);
+
+// Launch with VRChat
+ipcMain.handle('launchWithVRChat:set', async (_e, enabled: boolean) => {
+  if (enabled) {
+    await registerLaunchWithVRChat();
+  } else {
+    await unregisterLaunchWithVRChat();
+  }
+});
+ipcMain.handle('launchWithVRChat:get', () => isLaunchWithVRChatEnabled());
 
 // ─── VRChat API Proxy ────────────────────────────────────────────────────────
 
