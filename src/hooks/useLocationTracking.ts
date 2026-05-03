@@ -47,14 +47,29 @@ export function useLocationTracking() {
       const user = useAuthStore.getState().user;
       if (!user) return;
 
-      // Use location field, or construct from worldId+instanceId if location is missing
-      let newLocation = user.location || '';
-      if (!newLocation.startsWith('wrld_') && user.worldId && user.worldId.startsWith('wrld_')) {
-        newLocation = user.instanceId
-          ? `${user.worldId}:${user.instanceId}`
-          : user.worldId;
+      // /auth/user often omits location/worldId/instanceId. Fetch /users/{me}
+      // directly — that endpoint reliably exposes the current location.
+      let liveLocation = user.location || '';
+      let liveWorldId = user.worldId || '';
+      let liveInstanceId = user.instanceId || '';
+      if (user.id) {
+        try {
+          const self: any = await api.getUser(user.id);
+          if (self?.location) liveLocation = self.location;
+          if (self?.worldId) liveWorldId = self.worldId;
+          if (self?.instanceId) liveInstanceId = self.instanceId;
+          // Mirror back into authStore so other consumers see fresh data
+          useAuthStore.setState({
+            user: { ...user, location: liveLocation, worldId: liveWorldId, instanceId: liveInstanceId },
+          });
+        } catch {}
       }
-      console.log('[LocationTracking] location:', newLocation, '| raw location:', user.location, '| worldId:', user.worldId, '| instanceId:', user.instanceId);
+
+      let newLocation = liveLocation;
+      if (!newLocation.startsWith('wrld_') && liveWorldId.startsWith('wrld_')) {
+        newLocation = liveInstanceId ? `${liveWorldId}:${liveInstanceId}` : liveWorldId;
+      }
+      console.log('[LocationTracking] location:', newLocation, '| raw:', user.location, '| worldId:', liveWorldId, '| instanceId:', liveInstanceId);
       const prevLocation = prevLocationRef.current;
 
       if (prevLocation === null) {

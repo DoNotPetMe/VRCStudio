@@ -62,6 +62,8 @@ function DiscordDiagnostics() {
   }, []);
 
   const location = user?.location ?? '—';
+  const worldId = (user as any)?.worldId ?? '—';
+  const instanceId = (user as any)?.instanceId ?? '—';
   const avatarUrl = user?.profilePicOverride || user?.currentAvatarThumbnailImageUrl || user?.userIcon || '';
   const worldImg  = current?.worldImage ?? '';
 
@@ -70,7 +72,13 @@ function DiscordDiagnostics() {
       <p className="text-surface-300 font-semibold">Live status</p>
       <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-surface-400">
         <span className="text-surface-500">user.location</span>
-        <span className="font-mono text-surface-200 break-all">{location}</span>
+        <span className="font-mono text-surface-200 break-all">{location || '—'}</span>
+
+        <span className="text-surface-500">user.worldId</span>
+        <span className="font-mono text-surface-200 break-all">{worldId || '—'}</span>
+
+        <span className="text-surface-500">user.instanceId</span>
+        <span className="font-mono text-surface-200 break-all">{instanceId || '—'}</span>
 
         <span className="text-surface-500">World tracked</span>
         <span className={current ? 'text-green-400' : 'text-surface-500'}>
