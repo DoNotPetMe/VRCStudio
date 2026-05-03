@@ -9,6 +9,7 @@ import { VRCDB_PROVIDERS, getProviderId, setProviderId } from '../api/vrcdb';
 import type { ProviderId } from '../api/vrcdb';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useAuthStore } from '../stores/authStore';
+import { useInstanceHistoryStore } from '../stores/instanceHistoryStore';
 import { useFriendStore } from '../stores/friendStore';
 import { useThemeStore } from '../stores/themeStore';
 import { useMultiAccountStore } from '../stores/multiAccountStore';
@@ -46,6 +47,51 @@ const SHORTCUT_LIST: Array<{ description: string; keys: string[] }> = [
   { description: 'Focus Search',     keys: ['Ctrl', 'F'] },
   { description: 'Open Settings',    keys: ['Ctrl', ','] },
 ];
+
+// ── Discord live diagnostics ──────────────────────────────────────────────────
+
+function DiscordDiagnostics() {
+  const user = useAuthStore(s => s.user);
+  const current = useInstanceHistoryStore(s => s.currentInstance);
+  const [tick, setTick] = useState(0);
+
+  // Refresh every 5 s so values stay live
+  useEffect(() => {
+    const id = setInterval(() => setTick(t => t + 1), 5000);
+    return () => clearInterval(id);
+  }, []);
+
+  const location = user?.location ?? '—';
+  const avatarUrl = user?.profilePicOverride || user?.currentAvatarThumbnailImageUrl || user?.userIcon || '';
+  const worldImg  = current?.worldImage ?? '';
+
+  return (
+    <div className="rounded-lg border border-surface-700 bg-surface-900/60 p-3 space-y-2 text-xs">
+      <p className="text-surface-300 font-semibold">Live status</p>
+      <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-surface-400">
+        <span className="text-surface-500">user.location</span>
+        <span className="font-mono text-surface-200 break-all">{location}</span>
+
+        <span className="text-surface-500">World tracked</span>
+        <span className={current ? 'text-green-400' : 'text-surface-500'}>
+          {current ? `${current.worldName || current.worldId} (${current.instanceType})` : 'none'}
+        </span>
+
+        <span className="text-surface-500">World image</span>
+        <span className="font-mono break-all">{worldImg || '—'}</span>
+
+        <span className="text-surface-500">Avatar image</span>
+        <span className="font-mono break-all">{avatarUrl ? `${avatarUrl.slice(0, 60)}…` : '—'}</span>
+      </div>
+      {!current && location && location !== '—' && !location.startsWith('wrld_') && (
+        <p className="text-amber-400 text-xs mt-1">
+          ⚠ location is <code className="bg-surface-800 px-1 rounded">{location}</code> — not a world instance.
+          Join a world for tracking to begin.
+        </p>
+      )}
+    </div>
+  );
+}
 
 export default function SettingsPage() {
   const { settings, updateGeneral, updateNotifications, updatePolling, updateDisplay, updatePrivacy, updatePerformance, updateProfile, resetSettings } = useSettingsStore();
@@ -644,6 +690,8 @@ export default function SettingsPage() {
                 </ol>
                 <p className="text-surface-500 mt-1">The world thumbnail will be used automatically as your presence image — no assets upload needed.</p>
               </div>
+
+              <DiscordDiagnostics />
 
               <Toggle
                 label="Enable Discord Rich Presence"
