@@ -149,6 +149,8 @@ class VRChatWebSocket {
 
       case 'friend-update':
         if (data.user) {
+          const prevFriend = friendStore.getFriend(data.userId);
+
           feed.addEvent({
             type: 'friend_status',
             userId: data.userId,
@@ -157,6 +159,20 @@ class VRChatWebSocket {
             newValue: data.user.status,
             details: data.user.statusDescription,
           });
+
+          if (
+            prevFriend &&
+            data.user.currentAvatarThumbnailImageUrl &&
+            prevFriend.currentAvatarThumbnailImageUrl !== data.user.currentAvatarThumbnailImageUrl
+          ) {
+            feed.addEvent({
+              type: 'friend_avatar',
+              userId: data.userId,
+              userName: data.user.displayName,
+              userAvatar: data.user.currentAvatarThumbnailImageUrl,
+              details: 'Changed avatar',
+            });
+          }
         }
         break;
 
