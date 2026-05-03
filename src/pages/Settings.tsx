@@ -107,7 +107,6 @@ export default function SettingsPage() {
   const [vrcdbProvider, setVrcdbProviderState] = useState<ProviderId>(getProviderId());
   const [lang, setLang] = useState(getLanguage());
   const [autoLaunch, setAutoLaunch] = useState(false);
-  const [launchWithVRChat, setLaunchWithVRChat] = useState(false);
   const [nicknameInput, setNicknameInput] = useState(settings.profile.nickname);
   const [resetConfirm, setResetConfirm] = useState(false);
   const importRef = useRef<HTMLInputElement>(null);
@@ -136,7 +135,6 @@ export default function SettingsPage() {
 
   useEffect(() => {
     window.electronAPI?.getAutoLaunch().then(v => setAutoLaunch(v));
-    window.electronAPI?.getLaunchWithVRChat().then(v => setLaunchWithVRChat(v));
   }, []);
 
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -813,16 +811,6 @@ export default function SettingsPage() {
                   description="Start VRC Studio automatically when your computer boots"
                   checked={autoLaunch}
                   onChange={handleAutoLaunch}
-                  disabled={!window.electronAPI}
-                />
-                <Toggle
-                  label="Launch with VRChat"
-                  description="Automatically open VRC Studio whenever VRChat starts — works even if VRC Studio isn't already running"
-                  checked={launchWithVRChat}
-                  onChange={v => {
-                    setLaunchWithVRChat(v);
-                    window.electronAPI?.setLaunchWithVRChat(v);
-                  }}
                   disabled={!window.electronAPI}
                 />
                 {!window.electronAPI && (

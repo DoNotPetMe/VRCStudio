@@ -39,10 +39,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setAutoLaunch: (enabled: boolean) => ipcRenderer.invoke('autoLaunch:set', enabled),
   getAutoLaunch: () => ipcRenderer.invoke('autoLaunch:get'),
 
-  // Launch with VRChat
-  setLaunchWithVRChat: (enabled: boolean) => ipcRenderer.invoke('launchWithVRChat:set', enabled),
-  getLaunchWithVRChat: () => ipcRenderer.invoke('launchWithVRChat:get'),
-
   // App info
   getVersion: () => ipcRenderer.invoke('app:getVersion'),
   getPlatform: () => ipcRenderer.invoke('app:getPlatform'),

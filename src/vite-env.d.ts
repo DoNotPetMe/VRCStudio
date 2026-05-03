@@ -21,8 +21,6 @@ interface ElectronAPI {
   discordIsConnected: () => Promise<boolean>;
   setAutoLaunch: (enabled: boolean) => Promise<void>;
   getAutoLaunch: () => Promise<boolean>;
-  setLaunchWithVRChat: (enabled: boolean) => Promise<void>;
-  getLaunchWithVRChat: () => Promise<boolean>;
   getVersion: () => Promise<string>;
   getPlatform: () => Promise<string>;
   vrchatRequest: (opts: {
