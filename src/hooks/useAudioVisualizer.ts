@@ -16,7 +16,6 @@ export function useMediaDetection(): MediaInfo {
 
   useEffect(() => {
     if (!window.electronAPI?.detectMedia) {
-      // browser fallback — assume always-on so the visualizer is at least visible during dev
       setInfo({ active: true, source: null, title: null });
       return;
     }
@@ -38,8 +37,6 @@ export function useMediaDetection(): MediaInfo {
 
 /**
  * Captures system audio (when supported) and exposes a frequency-bin getter.
- * Resolves once a stream is established. Caller should poll `getFrequencyData`
- * inside requestAnimationFrame.
  */
 export function useSystemAudio(enabled: boolean) {
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -60,7 +57,6 @@ export function useSystemAudio(enabled: boolean) {
           ? await window.electronAPI.getDesktopSources()
           : [];
 
-        // Prefer Spotify-named source, fall back to first screen source.
         const spotify = sources.find(s => /spotify/i.test(s.name));
         const screen  = sources.find(s => /entire screen|screen/i.test(s.name));
         const chosen  = spotify || screen || sources[0];
@@ -86,7 +82,6 @@ export function useSystemAudio(enabled: boolean) {
         const stream = await navigator.mediaDevices.getUserMedia(constraints);
         if (cancelled) { stream.getTracks().forEach(t => t.stop()); return; }
 
-        // Throw away the dummy video track if we asked for one.
         stream.getVideoTracks().forEach(t => t.stop());
 
         const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -95,7 +90,6 @@ export function useSystemAudio(enabled: boolean) {
         analyser.fftSize = 1024;
         analyser.smoothingTimeConstant = smoothing;
         src.connect(analyser);
-        // Don't connect to ctx.destination — we don't want to re-play the audio.
 
         ctxRef.current = ctx;
         analyserRef.current = analyser;

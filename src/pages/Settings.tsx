@@ -107,8 +107,8 @@ export default function SettingsPage() {
   const { onlineFriends, offlineFriends } = useFriendStore();
   const {
     theme, setMode, setAccentColor, setCustomCSS, setFontSize,
-    setSidebarWidth, setBorderRadius, setAnimationSpeed, setGlassEffect, resetTheme,
-    setPremiumTheme, setVisualizer,
+    setSidebarWidth, setBorderRadius, setAnimationSpeed, setGlassEffect,
+    setPremiumTheme, setVisualizer, resetTheme,
   } = useThemeStore();
   const { accounts, removeAccount } = useMultiAccountStore();
   const [active, setActive] = useState<SettingsSection>('account');
@@ -693,11 +693,11 @@ export default function SettingsPage() {
 
               <Section title="Audio Visualizer" icon={Volume2}>
                 <p className="text-xs text-surface-500">
-                  Old-school equaliser background. Captures system audio (when permitted) and reacts to whatever's playing.
+                  Animated background reacting to system audio. Captures audio when permitted; falls back to procedural animation otherwise.
                 </p>
                 <Toggle
                   label="Enable visualizer"
-                  description="Renders bobbing white blocks behind the app"
+                  description="Renders an animated equaliser behind the app"
                   checked={theme.visualizer.enabled}
                   onChange={v => setVisualizer({ enabled: v })}
                 />
@@ -710,7 +710,15 @@ export default function SettingsPage() {
                 />
 
                 <div className={theme.visualizer.enabled ? '' : 'opacity-50 pointer-events-none'}>
-                  <label className="block text-sm font-medium mb-2">Frequency Focus</label>
+                  <label className="block text-sm font-medium mb-2">Style</label>
+                  <OptionRow
+                    options={['bars', 'blocks', 'wave', 'radial', 'dots']}
+                    labels={{ bars: 'Bars', blocks: 'Blocks', wave: 'Wave', radial: 'Radial', dots: 'Dots' }}
+                    value={theme.visualizer.style ?? 'bars'}
+                    onChange={v => setVisualizer({ style: v as 'bars' | 'blocks' | 'wave' | 'radial' | 'dots' })}
+                  />
+
+                  <label className="block text-sm font-medium mt-4 mb-2">Frequency Focus</label>
                   <OptionRow
                     options={['all', 'bass', 'mids', 'treble']}
                     value={theme.visualizer.focus}
@@ -1209,8 +1217,8 @@ function SliderRow({ label, value, min, max, step, unit, onChange }: {
   );
 }
 
-function OptionRow({ options, value, onChange }: {
-  options: string[]; value: string; onChange: (v: string) => void;
+function OptionRow({ options, labels, value, onChange }: {
+  options: string[]; labels?: Record<string, string>; value: string; onChange: (v: string) => void;
 }) {
   return (
     <div className="flex gap-2 flex-wrap">
@@ -1224,7 +1232,7 @@ function OptionRow({ options, value, onChange }: {
               : 'border-surface-700 bg-surface-800 text-surface-400 hover:border-surface-600'
           }`}
         >
-          {opt}
+          {labels?.[opt] ?? opt}
         </button>
       ))}
     </div>

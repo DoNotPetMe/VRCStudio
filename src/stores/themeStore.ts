@@ -2,12 +2,13 @@ import { create } from 'zustand';
 
 export interface VisualizerConfig {
   enabled: boolean;
+  style: 'bars' | 'blocks' | 'wave' | 'radial' | 'dots';
   sensitivity: number;          // 0.5 – 3
   barCount: number;             // 16 – 128
   focus: 'all' | 'bass' | 'mids' | 'treble';
   color: 'white' | 'accent' | 'rainbow';
   smoothing: number;            // 0 – 0.95
-  onlyWithMedia: boolean;       // only show when Spotify/YouTube detected
+  onlyWithMedia: boolean;
 }
 
 export interface ThemeConfig {
@@ -27,6 +28,7 @@ const THEME_KEY = 'vrcstudio_theme';
 
 const defaultVisualizer: VisualizerConfig = {
   enabled: false,
+  style: 'bars',
   sensitivity: 1.4,
   barCount: 64,
   focus: 'all',
@@ -51,7 +53,13 @@ const defaultTheme: ThemeConfig = {
 function loadTheme(): ThemeConfig {
   try {
     const raw = localStorage.getItem(THEME_KEY);
-    return raw ? { ...defaultTheme, ...JSON.parse(raw) } : defaultTheme;
+    if (!raw) return defaultTheme;
+    const saved = JSON.parse(raw);
+    return {
+      ...defaultTheme,
+      ...saved,
+      visualizer: { ...defaultVisualizer, ...(saved.visualizer ?? {}) },
+    };
   } catch {
     return defaultTheme;
   }

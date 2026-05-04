@@ -2,10 +2,12 @@ import { Outlet } from 'react-router-dom';
 import TitleBar from './TitleBar';
 import Sidebar from './Sidebar';
 import AudioVisualizer from '../AudioVisualizer';
+import PremiumThemeOverlay from '../PremiumThemeOverlay';
 
 export default function AppLayout() {
   return (
     <div className="h-screen flex flex-col overflow-hidden bg-surface-950 text-surface-200 relative">
+      <PremiumThemeOverlay />
       <AudioVisualizer />
       <TitleBar />
       <div className="flex flex-1 overflow-hidden">

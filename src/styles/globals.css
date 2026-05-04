@@ -175,37 +175,34 @@
 }
 
 /* ───────────────────────────────────────────────────────────────────────
-   Premium themes — animated background overlay + tinted glass panels.
-   The overlay is a fixed pseudo-element on <html> sitting behind the
-   app shell, so all existing surface colors stay legible.
+   Premium themes — rendered as a real DOM element (.premium-overlay)
+   with mix-blend-mode: screen, same technique as the audio visualiser.
+   On the near-black surface-950 background, screen mode adds colour
+   without obscuring UI text.
    ─────────────────────────────────────────────────────────────────── */
 
-html.premium-iridescent::before,
-html.premium-holographic::before,
-html.premium-aurora::before,
-html.premium-cosmic::before {
-  content: '';
+.premium-overlay {
   position: fixed;
   inset: 0;
-  z-index: -1;
+  z-index: 0;
   pointer-events: none;
+  mix-blend-mode: screen;
 }
 
-/* iridescent — slow rainbow gradient sweep */
-html.premium-iridescent::before {
-  background:
-    linear-gradient(135deg,
-      #ff006e22 0%, #fb5607 12%, #ffbe0b22 25%, #8338ec22 40%,
-      #3a86ff22 55%, #06ffa522 70%, #ff006e22 85%, #fb560722 100%);
+/* iridescent — slow shifting rainbow sweep */
+.premium-overlay-iridescent {
+  background: linear-gradient(135deg,
+    rgba(255,0,110,0.55)   0%,
+    rgba(251,86,7,0.55)   12%,
+    rgba(255,190,11,0.5)  25%,
+    rgba(131,56,236,0.55) 40%,
+    rgba(58,134,255,0.55) 55%,
+    rgba(6,255,165,0.5)   70%,
+    rgba(255,0,110,0.55)  85%,
+    rgba(251,86,7,0.55)  100%);
   background-size: 400% 400%;
   animation: iridescent-shift 18s ease-in-out infinite;
-  filter: blur(40px) saturate(1.2);
-  opacity: 0.55;
-}
-html.premium-iridescent .glass-panel,
-html.premium-iridescent .glass-panel-solid {
-  border-color: rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(14px) saturate(1.1);
+  filter: blur(38px) saturate(1.3);
 }
 
 @keyframes iridescent-shift {
@@ -213,40 +210,28 @@ html.premium-iridescent .glass-panel-solid {
   50%      { background-position: 100% 50%; }
 }
 
-/* holographic — rotating conic gradient with shimmer */
-html.premium-holographic::before {
+/* holographic — spinning conic gradient */
+.premium-overlay-holographic {
   background: conic-gradient(from 0deg at 50% 50%,
-    #ff00ff22, #00ffff22, #ffff0022, #ff00ff22, #00ffff22, #ff00ff22);
-  filter: blur(60px) saturate(1.3);
-  opacity: 0.45;
+    rgba(255,0,255,0.6),
+    rgba(0,255,255,0.6),
+    rgba(255,255,0,0.5),
+    rgba(255,0,255,0.6),
+    rgba(0,255,255,0.6),
+    rgba(255,0,255,0.6));
+  filter: blur(55px) saturate(1.4);
   animation: holographic-spin 30s linear infinite;
 }
-html.premium-holographic::after {
-  content: '';
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  background: linear-gradient(115deg,
-    transparent 30%, rgba(255, 255, 255, 0.08) 50%, transparent 70%);
-  background-size: 200% 200%;
-  animation: holographic-shimmer 8s ease-in-out infinite;
-}
 
-@keyframes holographic-spin   { to { transform: rotate(360deg); } }
-@keyframes holographic-shimmer {
-  0%, 100% { background-position: -50% -50%; }
-  50%      { background-position:  50%  50%; }
-}
+@keyframes holographic-spin { to { transform: rotate(360deg); } }
 
-/* aurora — northern-lights vertical waves */
-html.premium-aurora::before {
+/* aurora — northern-lights ripple */
+.premium-overlay-aurora {
   background:
-    radial-gradient(ellipse 80% 60% at 30% 20%, #00ff8855 0%, transparent 50%),
-    radial-gradient(ellipse 60% 50% at 70% 80%, #4488ff44 0%, transparent 60%),
-    radial-gradient(ellipse 50% 50% at 50% 50%, #aa44ff33 0%, transparent 70%);
-  filter: blur(30px);
-  opacity: 0.7;
+    radial-gradient(ellipse 80% 60% at 30% 20%, rgba(0,255,136,0.65) 0%, transparent 55%),
+    radial-gradient(ellipse 60% 50% at 70% 80%, rgba(68,136,255,0.6)  0%, transparent 60%),
+    radial-gradient(ellipse 50% 50% at 50% 50%, rgba(170,68,255,0.5)  0%, transparent 65%);
+  filter: blur(28px);
   animation: aurora-drift 25s ease-in-out infinite;
 }
 
@@ -256,24 +241,26 @@ html.premium-aurora::before {
   66%      { transform: translate(3%, -2%) scale(0.95); }
 }
 
-/* cosmic — deep starfield with subtle nebula */
-html.premium-cosmic::before {
+/* cosmic — nebula glow + star dots */
+.premium-overlay-cosmic {
   background:
-    radial-gradient(ellipse 70% 50% at 50% 50%, #4c1d9533 0%, transparent 70%),
-    radial-gradient(circle at 20% 30%, rgba(255,255,255,0.6) 0.5px, transparent 1px),
-    radial-gradient(circle at 80% 20%, rgba(255,255,255,0.5) 0.5px, transparent 1px),
-    radial-gradient(circle at 60% 70%, rgba(255,255,255,0.5) 0.5px, transparent 1px),
-    radial-gradient(circle at 40% 90%, rgba(255,255,255,0.4) 0.5px, transparent 1px),
-    radial-gradient(circle at 90% 60%, rgba(255,255,255,0.5) 0.5px, transparent 1px),
-    radial-gradient(circle at 10% 80%, rgba(255,255,255,0.4) 0.5px, transparent 1px);
-  background-size: 100% 100%, 200px 200px, 250px 250px, 180px 180px, 220px 220px, 270px 270px, 200px 200px;
-  opacity: 0.75;
+    radial-gradient(ellipse 70% 50% at 50% 50%, rgba(124,58,237,0.65) 0%, transparent 65%),
+    radial-gradient(circle at 20% 30%, rgba(255,255,255,0.85) 0.5px, transparent 1px),
+    radial-gradient(circle at 80% 20%, rgba(255,255,255,0.75) 0.5px, transparent 1px),
+    radial-gradient(circle at 60% 70%, rgba(255,255,255,0.75) 0.5px, transparent 1px),
+    radial-gradient(circle at 40% 90%, rgba(255,255,255,0.65) 0.5px, transparent 1px),
+    radial-gradient(circle at 90% 60%, rgba(255,255,255,0.75) 0.5px, transparent 1px),
+    radial-gradient(circle at 10% 80%, rgba(255,255,255,0.65) 0.5px, transparent 1px),
+    radial-gradient(circle at 55% 35%, rgba(255,255,255,0.7)  0.5px, transparent 1px),
+    radial-gradient(circle at 75% 55%, rgba(255,255,255,0.6)  0.5px, transparent 1px);
+  background-size: 100% 100%, 200px 200px, 250px 250px, 180px 180px,
+                   220px 220px, 270px 270px, 200px 200px, 160px 160px, 230px 230px;
   animation: cosmic-twinkle 8s ease-in-out infinite;
 }
 
 @keyframes cosmic-twinkle {
-  0%, 100% { opacity: 0.55; }
-  50%      { opacity: 0.85; }
+  0%, 100% { opacity: 0.65; }
+  50%      { opacity: 1; }
 }
 
 /* ───────────────────────────────────────────────────────────────────────
