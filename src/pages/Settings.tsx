@@ -3,10 +3,13 @@ import {
   Settings as SettingsIcon, Bell, Monitor, Clock, RotateCcw, RotateCw,
   Palette, Download, Upload, UserCircle, Globe2, Zap, Shield,
   Trash2, Smile, X, Volume2, Moon, Sun, ArrowUpDown, Lock,
-  Cpu, Database, Keyboard, Info,
+  Cpu, Database, Keyboard, Info, ExternalLink,
 } from 'lucide-react';
+import { VRCDB_PROVIDERS, getProviderId, setProviderId } from '../api/vrcdb';
+import type { ProviderId } from '../api/vrcdb';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useAuthStore } from '../stores/authStore';
+import { useInstanceHistoryStore } from '../stores/instanceHistoryStore';
 import { useFriendStore } from '../stores/friendStore';
 import { useThemeStore } from '../stores/themeStore';
 import { useMultiAccountStore } from '../stores/multiAccountStore';
@@ -15,7 +18,7 @@ import { getAvailableLanguages, setLanguage, getLanguage } from '../utils/i18n';
 
 type SettingsSection =
   | 'account' | 'accounts' | 'notifications' | 'polling'
-  | 'display' | 'appearance' | 'discord' | 'general' | 'data'
+  | 'display' | 'appearance' | 'discord' | 'vrcdb' | 'general' | 'data'
   | 'profile' | 'privacy' | 'performance' | 'shortcuts' | 'about';
 
 const sections: Array<{ key: SettingsSection; label: string; icon: typeof SettingsIcon; group: string }> = [
@@ -28,6 +31,7 @@ const sections: Array<{ key: SettingsSection; label: string; icon: typeof Settin
   { key: 'appearance',    label: 'Appearance',            icon: Palette,       group: 'App' },
   { key: 'privacy',       label: 'Privacy',               icon: Lock,          group: 'App' },
   { key: 'discord',       label: 'Discord Rich Presence', icon: Zap,           group: 'Integrations' },
+  { key: 'vrcdb',         label: 'Avatar Database',       icon: Database,      group: 'Integrations' },
   { key: 'general',       label: 'General',               icon: SettingsIcon,  group: 'System' },
   { key: 'performance',   label: 'Performance',           icon: Cpu,           group: 'System' },
   { key: 'shortcuts',     label: 'Keyboard Shortcuts',    icon: Keyboard,      group: 'System' },
@@ -44,6 +48,59 @@ const SHORTCUT_LIST: Array<{ description: string; keys: string[] }> = [
   { description: 'Open Settings',    keys: ['Ctrl', ','] },
 ];
 
+// ── Discord live diagnostics ──────────────────────────────────────────────────
+
+function DiscordDiagnostics() {
+  const user = useAuthStore(s => s.user);
+  const current = useInstanceHistoryStore(s => s.currentInstance);
+  const [tick, setTick] = useState(0);
+
+  // Refresh every 5 s so values stay live
+  useEffect(() => {
+    const id = setInterval(() => setTick(t => t + 1), 5000);
+    return () => clearInterval(id);
+  }, []);
+
+  const location = user?.location ?? '—';
+  const worldId = (user as any)?.worldId ?? '—';
+  const instanceId = (user as any)?.instanceId ?? '—';
+  const avatarUrl = user?.profilePicOverride || user?.currentAvatarThumbnailImageUrl || user?.userIcon || '';
+  const worldImg  = current?.worldImage ?? '';
+
+  return (
+    <div className="rounded-lg border border-surface-700 bg-surface-900/60 p-3 space-y-2 text-xs">
+      <p className="text-surface-300 font-semibold">Live status</p>
+      <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-surface-400">
+        <span className="text-surface-500">user.location</span>
+        <span className="font-mono text-surface-200 break-all">{location || '—'}</span>
+
+        <span className="text-surface-500">user.worldId</span>
+        <span className="font-mono text-surface-200 break-all">{worldId || '—'}</span>
+
+        <span className="text-surface-500">user.instanceId</span>
+        <span className="font-mono text-surface-200 break-all">{instanceId || '—'}</span>
+
+        <span className="text-surface-500">World tracked</span>
+        <span className={current ? 'text-green-400' : 'text-surface-500'}>
+          {current ? `${current.worldName || current.worldId} (${current.instanceType})` : 'none'}
+        </span>
+
+        <span className="text-surface-500">World image</span>
+        <span className="font-mono break-all">{worldImg || '—'}</span>
+
+        <span className="text-surface-500">Avatar image</span>
+        <span className="font-mono break-all">{avatarUrl ? `${avatarUrl.slice(0, 60)}…` : '—'}</span>
+      </div>
+      {!current && location && location !== '—' && !location.startsWith('wrld_') && (
+        <p className="text-amber-400 text-xs mt-1">
+          ⚠ location is <code className="bg-surface-800 px-1 rounded">{location}</code> — not a world instance.
+          Join a world for tracking to begin.
+        </p>
+      )}
+    </div>
+  );
+}
+
 export default function SettingsPage() {
   const { settings, updateGeneral, updateNotifications, updatePolling, updateDisplay, updatePrivacy, updatePerformance, updateProfile, resetSettings } = useSettingsStore();
   const { user } = useAuthStore();
@@ -56,6 +113,7 @@ export default function SettingsPage() {
   const { accounts, removeAccount } = useMultiAccountStore();
   const [active, setActive] = useState<SettingsSection>('account');
   const [importStatus, setImportStatus] = useState<string | null>(null);
+  const [vrcdbProvider, setVrcdbProviderState] = useState<ProviderId>(getProviderId());
   const [lang, setLang] = useState(getLanguage());
   const [autoLaunch, setAutoLaunch] = useState(false);
   const [nicknameInput, setNicknameInput] = useState(settings.profile.nickname);
@@ -743,6 +801,8 @@ export default function SettingsPage() {
                 <p className="text-surface-500 mt-1">The world thumbnail will be used automatically as your presence image — no assets upload needed.</p>
               </div>
 
+              <DiscordDiagnostics />
+
               <Toggle
                 label="Enable Discord Rich Presence"
                 description="Show your current VRChat world and playtime on Discord"
@@ -783,6 +843,54 @@ export default function SettingsPage() {
                   />
                 </>
               )}
+            </Section>
+          )}
+
+          {/* ── Avatar Database (VRCDB) ── */}
+          {active === 'vrcdb' && (
+            <Section title="Avatar Database" icon={Database}>
+              <p className="text-xs text-surface-500">
+                The VRCDB search (Avatars page → VRCDB tab and Quick Switcher) uses community-run public avatar
+                indexes. These are independent third-party services — switch if one is unavailable.
+              </p>
+
+              <div>
+                <div className="text-sm font-medium mb-2">Search Provider</div>
+                <div className="space-y-2">
+                  {VRCDB_PROVIDERS.map(p => (
+                    <label key={p.id} className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="vrcdb_provider"
+                        checked={vrcdbProvider === p.id}
+                        onChange={() => {
+                          setProviderId(p.id as ProviderId);
+                          setVrcdbProviderState(p.id as ProviderId);
+                        }}
+                        className="accent-accent-500"
+                      />
+                      <div>
+                        <div className="text-sm font-medium">{p.label}</div>
+                        <div className="text-xs text-surface-500 font-mono">{p.searchUrl('…')}</div>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-surface-800 text-xs text-surface-600 space-y-1">
+                <p>These providers index only <strong className="text-surface-400">public</strong> avatars shared by their creators.</p>
+                <p>Any public avatar can be worn directly via the Wear button — same as clicking an avatar on the VRChat website.</p>
+                <p>
+                  To request removal of your avatar from an index, contact the provider directly.{' '}
+                  <button
+                    className="text-accent-400 hover:text-accent-300 underline"
+                    onClick={() => window.electronAPI?.openExternal('https://avtrdb.com/faq')}
+                  >
+                    avtrdb.com/faq
+                  </button>
+                </p>
+              </div>
             </Section>
           )}
 
@@ -950,6 +1058,8 @@ export default function SettingsPage() {
                 </div>
               )}
 
+              <StorageUsage />
+
               <div className="pt-4 border-t border-surface-800">
                 <div className="flex items-center justify-between">
                   <div>
@@ -988,11 +1098,15 @@ export default function SettingsPage() {
               <InfoRow label="Build" value="electron + vite + react" />
               <InfoRow label="Theme Engine" value="CSS custom properties" />
               <InfoRow label="Data Storage" value="localStorage (local only)" />
+              <AppStatsRow />
               <div className="pt-3 border-t border-surface-800 mt-2">
                 <p className="text-xs text-surface-500">
                   VRC Studio is an unofficial third-party application. It is not affiliated with or endorsed by VRChat Inc.
                   All VRChat data is fetched through the official VRChat API using your own credentials.
                 </p>
+              </div>
+              <div className="pt-2 text-center">
+                <p className="text-[11px] text-surface-600">Made by DoNotResurrect_</p>
               </div>
             </Section>
           )}
@@ -1004,6 +1118,33 @@ export default function SettingsPage() {
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
+
+function AppStatsRow() {
+  const [downloads, setDownloads] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!window.electronAPI) return;
+    window.electronAPI.httpGet(
+      'https://api.github.com/repos/crystaldusty/vrcstudio/releases',
+      { 'User-Agent': 'VRCStudio/1.0.0' },
+    ).then(res => {
+      if (!res.ok || !Array.isArray(res.data)) return;
+      const total = (res.data as any[]).reduce((sum: number, release: any) =>
+        sum + (release.assets as any[] || []).reduce((s: number, a: any) => s + (a.download_count || 0), 0), 0
+      );
+      setDownloads(total);
+    }).catch(() => {});
+  }, []);
+
+  if (downloads === null) return null;
+
+  return (
+    <div className="flex items-center justify-between py-1">
+      <span className="text-sm text-surface-400">Total Downloads</span>
+      <span className="text-sm font-semibold text-accent-400">{downloads.toLocaleString()}</span>
+    </div>
+  );
+}
 
 function Section({ title, icon: Icon, children }: {
   title: string; icon: typeof SettingsIcon; children: React.ReactNode;
@@ -1094,6 +1235,88 @@ function OptionRow({ options, labels, value, onChange }: {
           {labels?.[opt] ?? opt}
         </button>
       ))}
+    </div>
+  );
+}
+
+const STORAGE_STORES: Array<{ key: string; label: string; clearable: boolean }> = [
+  { key: 'vrcstudio_instance_history', label: 'Visit history',       clearable: true  },
+  { key: 'vrcstudio_reports',          label: 'Filed reports',       clearable: false },
+  { key: 'vrcstudio_world_analytics',  label: 'World analytics',     clearable: true  },
+  { key: 'vrcstudio_settings',         label: 'App settings',        clearable: false },
+  { key: 'vrcstudio_theme',            label: 'Theme preferences',   clearable: false },
+  { key: 'vrcstudio_discord',          label: 'Discord RPC config',  clearable: false },
+  { key: 'vrcstudio_starred_friends',  label: 'Starred friends',     clearable: false },
+  { key: 'vrcstudio_multi_accounts',   label: 'Saved accounts',      clearable: false },
+];
+
+function fmtBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+function StorageUsage() {
+  const [tick, setTick] = useState(0);
+
+  const rows = STORAGE_STORES.map(store => {
+    const raw = localStorage.getItem(store.key) ?? '';
+    const bytes = new Blob([raw]).size;
+    return { ...store, bytes };
+  });
+
+  // Also capture any other vrcstudio_ keys not in the list
+  const knownKeys = new Set(STORAGE_STORES.map(s => s.key));
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i) ?? '';
+    if (k.startsWith('vrcstudio_') && !knownKeys.has(k)) {
+      const raw = localStorage.getItem(k) ?? '';
+      rows.push({ key: k, label: k.replace('vrcstudio_', ''), bytes: new Blob([raw]).size, clearable: true });
+    }
+  }
+
+  const total = rows.reduce((s, r) => s + r.bytes, 0);
+  const maxBytes = Math.max(...rows.map(r => r.bytes), 1);
+
+  function clearStore(key: string) {
+    localStorage.removeItem(key);
+    setTick(t => t + 1);
+  }
+
+  return (
+    <div className="pt-4 border-t border-surface-800 space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="text-sm font-medium">Storage Usage</div>
+        <div className="text-xs text-surface-500">{fmtBytes(total)} total</div>
+      </div>
+      <div className="space-y-2">
+        {rows.filter(r => r.bytes > 0).sort((a, b) => b.bytes - a.bytes).map(row => (
+          <div key={row.key + tick} className="flex items-center gap-3">
+            <div className="w-28 text-xs text-surface-400 truncate flex-shrink-0">{row.label}</div>
+            <div className="flex-1 h-1.5 bg-surface-800 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-accent-500/60 rounded-full"
+                style={{ width: `${(row.bytes / maxBytes) * 100}%` }}
+              />
+            </div>
+            <div className="text-xs text-surface-500 w-14 text-right flex-shrink-0">{fmtBytes(row.bytes)}</div>
+            {row.clearable ? (
+              <button
+                onClick={() => clearStore(row.key)}
+                className="text-xs text-red-400/70 hover:text-red-400 transition-colors flex-shrink-0"
+                title={`Clear ${row.label}`}
+              >
+                <Trash2 size={12} />
+              </button>
+            ) : (
+              <div className="w-3 flex-shrink-0" />
+            )}
+          </div>
+        ))}
+        {rows.every(r => r.bytes === 0) && (
+          <p className="text-xs text-surface-600">No data stored yet.</p>
+        )}
+      </div>
     </div>
   );
 }

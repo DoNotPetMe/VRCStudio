@@ -8,6 +8,7 @@ import { useState } from 'react';
 import { useAuthStore } from '../../stores/authStore';
 import { useFriendStore } from '../../stores/friendStore';
 import { useThemeStore } from '../../stores/themeStore';
+import { useAvatarSwitcherStore } from '../../stores/avatarSwitcherStore';
 import StatusPresetPanel from '../StatusPresetPanel';
 import api from '../../api/vrchat';
 import { getBestAvatarUrl } from '../../utils/avatar';
@@ -59,6 +60,7 @@ export default function Sidebar() {
   const { user, logout, refreshUser } = useAuthStore();
   const { onlineFriends } = useFriendStore();
   const { theme } = useThemeStore();
+  const { toggle: toggleSwitcher, isOpen: switcherOpen } = useAvatarSwitcherStore();
   const [showPresets, setShowPresets] = useState(false);
 
   const avatarUrl = user ? getBestAvatarUrl(user) : '';
@@ -137,6 +139,23 @@ export default function Sidebar() {
           <StatusPresetPanel onApply={handleApplyPreset} />
         </div>
       )}
+
+      {/* Quick Avatar Switch */}
+      <div className="px-3 pb-2">
+        <button
+          onClick={toggleSwitcher}
+          className={`w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+            switcherOpen
+              ? 'bg-accent-600/25 text-accent-300 border border-accent-500/30'
+              : 'bg-surface-800/40 text-surface-400 hover:bg-surface-800/70 hover:text-surface-200'
+          }`}
+          title="Quick Avatar Switch (Ctrl+Shift+A)"
+        >
+          <Shirt size={13} />
+          <span>Quick Switch Avatar</span>
+          <span className="ml-auto text-[9px] text-surface-600 font-mono hidden group-hover:block">⌃⇧A</span>
+        </button>
+      </div>
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto px-2 py-2 space-y-4">

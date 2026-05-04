@@ -248,6 +248,12 @@ export const useThemeStore = create<ThemeState>((set, get) => ({
     const glassMap: Record<string, string> = { none: '1', light: '0.85', medium: '0.7' };
     root.style.setProperty('--glass-opacity', glassMap[theme.glassEffect ?? 'medium']);
 
+    // Premium theme — applied as a class on <html> so CSS in globals.css can pick it up
+    root.classList.remove('premium-iridescent', 'premium-holographic', 'premium-aurora', 'premium-cosmic');
+    if (theme.premiumTheme && theme.premiumTheme !== 'none') {
+      root.classList.add(`premium-${theme.premiumTheme}`);
+    }
+
     // Light mode: adjust body text color
     if (theme.mode === 'light') {
       document.body.style.color = '#1e293b';
