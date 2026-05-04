@@ -1,6 +1,6 @@
 import {
   app, BrowserWindow, ipcMain, shell, Tray, Menu,
-  nativeImage, Notification, nativeTheme,
+  nativeImage, Notification, nativeTheme, desktopCapturer,
 } from 'electron';
 import path from 'path';
 import fs from 'fs';
@@ -81,6 +81,19 @@ function createTray() {
 
 // ─── Discord RPC ─────────────────────────────────────────────────────────────
 
+type DiscordActivityPayload = {
+  details?: string;
+  state?: string;
+  largeImageKey?: string;
+  largeImageText?: string;
+  smallImageKey?: string;
+  smallImageText?: string;
+  startTimestamp?: number;
+  instance?: boolean;
+};
+
+let pendingActivity: DiscordActivityPayload | null = null;
+
 async function initDiscordRPC(clientId: string) {
   // Require a non-empty, plausible clientId (Discord app IDs are 17-19 digits)
   if (!clientId || clientId.length < 10) {
@@ -96,6 +109,12 @@ async function initDiscordRPC(clientId: string) {
     discordRPC.on('ready', () => {
       rpcConnected = true;
       console.log('[Discord RPC] Connected as', (discordRPC as any).user?.username);
+      // Flush any activity that was set while we were still connecting
+      if (pendingActivity) {
+        const a = pendingActivity;
+        pendingActivity = null;
+        applyActivity(a);
+      }
     });
 
     discordRPC.on('disconnected', () => {
@@ -104,6 +123,7 @@ async function initDiscordRPC(clientId: string) {
     });
 
     await discordRPC.login({ clientId });
+    console.log('[Discord RPC] login() resolved, awaiting ready event…');
   } catch (err: any) {
     console.warn('[Discord RPC] Failed to connect:', err?.message ?? err);
     discordRPC = null;
@@ -116,34 +136,43 @@ function disconnectDiscordRPC() {
     try { discordRPC.destroy(); } catch {}
     discordRPC = null;
     rpcConnected = false;
+    pendingActivity = null;
   }
 }
 
-function setDiscordActivity(activity: {
-  details?: string;
-  state?: string;
-  largeImageKey?: string;   // asset key OR https:// URL
-  largeImageText?: string;
-  smallImageKey?: string;   // asset key OR https:// URL
-  smallImageText?: string;
-  startTimestamp?: number;
-  instance?: boolean;
-}) {
-  if (!rpcConnected || !discordRPC) return;
-  try {
-    discordRPC.setActivity({
-      details: activity.details,
-      state: activity.state,
-      largeImageKey: activity.largeImageKey,
-      largeImageText: activity.largeImageText,
-      smallImageKey: activity.smallImageKey,
-      smallImageText: activity.smallImageText,
-      startTimestamp: activity.startTimestamp,
-      instance: activity.instance ?? false,
-    });
-  } catch (err) {
-    console.warn('[Discord RPC] setActivity failed:', err);
+function applyActivity(activity: DiscordActivityPayload) {
+  if (!discordRPC) return;
+  // discord-rpc setActivity returns a Promise — we MUST catch its rejection
+  // or failures are swallowed silently and the activity never appears.
+  const payload = {
+    details: activity.details,
+    state: activity.state,
+    largeImageKey: activity.largeImageKey,
+    largeImageText: activity.largeImageText,
+    smallImageKey: activity.smallImageKey,
+    smallImageText: activity.smallImageText,
+    startTimestamp: activity.startTimestamp,
+    instance: activity.instance ?? false,
+  };
+  console.log('[Discord RPC] setActivity', JSON.stringify({
+    details: payload.details,
+    state: payload.state,
+    largeImageKey: payload.largeImageKey ? `${payload.largeImageKey.slice(0, 60)}…` : undefined,
+    startTimestamp: payload.startTimestamp,
+  }));
+  Promise.resolve(discordRPC.setActivity(payload)).catch((err: any) => {
+    console.warn('[Discord RPC] setActivity rejected:', err?.message ?? err);
+  });
+}
+
+function setDiscordActivity(activity: DiscordActivityPayload) {
+  // If not yet connected, hold the most recent activity and push when ready.
+  if (!rpcConnected || !discordRPC) {
+    pendingActivity = activity;
+    console.log('[Discord RPC] Not connected yet — queuing activity for ready event');
+    return;
   }
+  applyActivity(activity);
 }
 
 // ─── IPC Handlers ────────────────────────────────────────────────────────────
@@ -297,6 +326,58 @@ ipcMain.handle('autoLaunch:get', () => app.getLoginItemSettings().openAtLogin);
 ipcMain.handle('app:getVersion', () => app.getVersion());
 ipcMain.handle('app:getPlatform', () => process.platform);
 
+// Audio visualizer / media detection
+// Returns desktop sources (windows + screens) so the renderer can request
+// system-audio capture via getUserMedia({ chromeMediaSource: 'desktop' }).
+ipcMain.handle('audio:getDesktopSources', async () => {
+  try {
+    const sources = await desktopCapturer.getSources({
+      types: ['window', 'screen'],
+      thumbnailSize: { width: 0, height: 0 },
+    });
+    return sources.map(s => ({ id: s.id, name: s.name }));
+  } catch (err) {
+    return [];
+  }
+});
+
+// Detects whether Spotify or YouTube is currently playing by scanning
+// window titles. Returns a small object the renderer can react to.
+ipcMain.handle('audio:detectMedia', async () => {
+  try {
+    const sources = await desktopCapturer.getSources({
+      types: ['window'],
+      thumbnailSize: { width: 0, height: 0 },
+    });
+    const titles = sources.map(s => s.name);
+
+    // Spotify: title becomes "Track - Artist" while playing, "Spotify Free"/"Spotify Premium" when idle
+    const spotifyTitle = titles.find(t =>
+      /^Spotify(?:\s|$)/i.test(t) === false &&
+      titles.some(x => /Spotify/i.test(x)) &&
+      / - /.test(t) &&
+      !/^Spotify (Free|Premium)$/i.test(t)
+    );
+    // Heuristic: any window owned by Spotify with a "X - Y" track title
+    const spotifyPlaying = titles.find(t => / - /.test(t) && /Spotify/i.test(t));
+
+    // YouTube: browser tab title pattern "Video Title - YouTube — Browser"
+    const youtubePlaying = titles.find(t => /\sYouTube\b/i.test(t) || /\)\s*-\s*YouTube/i.test(t));
+
+    if (spotifyPlaying || spotifyTitle) {
+      const t = spotifyPlaying || spotifyTitle!;
+      return { active: true, source: 'spotify' as const, title: t.replace(/\s*[—-]\s*Spotify.*$/i, '').trim() };
+    }
+    if (youtubePlaying) {
+      return { active: true, source: 'youtube' as const, title: youtubePlaying.replace(/\s*-\s*YouTube.*$/i, '').trim() };
+    }
+    return { active: false, source: null, title: null };
+  } catch {
+    return { active: false, source: null, title: null };
+  }
+});
+
+
 // ─── VRChat API Proxy ────────────────────────────────────────────────────────
 
 ipcMain.handle('vrchat:request', async (_e, opts: {
@@ -377,6 +458,65 @@ ipcMain.handle('vrchat:request', async (_e, opts: {
     }
     req.end();
   });
+});
+
+// Generic outbound GET — used for third-party APIs (VRCDB, etc.)
+// Runs in main process so we can set any User-Agent header.
+// Follows up to 3 redirects.
+ipcMain.handle('http:get', async (_e, url: string, headers?: Record<string, string>) => {
+  const doRequest = (targetUrl: string, hops = 0): Promise<any> => new Promise((resolve) => {
+    let parsed: URL;
+    try { parsed = new URL(targetUrl); } catch {
+      return resolve({ ok: false, status: 0, data: null, raw: 'Invalid URL', url: targetUrl });
+    }
+
+    const finalHeaders: Record<string, string> = {
+      'User-Agent': 'VRCX',
+      'Accept': 'application/json, text/plain, */*',
+      ...headers,
+    };
+
+    const req = https.request(
+      {
+        hostname: parsed.hostname,
+        port: parsed.port ? Number(parsed.port) : 443,
+        path: parsed.pathname + parsed.search,
+        method: 'GET',
+        headers: finalHeaders,
+      },
+      (res) => {
+        // Follow redirects
+        if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location && hops < 3) {
+          const next = new URL(res.headers.location, parsed).toString();
+          res.resume();
+          return resolve(doRequest(next, hops + 1));
+        }
+
+        const chunks: Buffer[] = [];
+        res.on('data', (chunk: Buffer) => chunks.push(chunk));
+        res.on('end', () => {
+          const raw = Buffer.concat(chunks).toString('utf-8');
+          let data: any = null;
+          try { data = JSON.parse(raw); } catch {}
+          const ok = res.statusCode! >= 200 && res.statusCode! < 300;
+          if (!ok) {
+            console.warn(`[http:get] ${targetUrl} → ${res.statusCode}: ${raw.slice(0, 200)}`);
+          }
+          resolve({ ok, status: res.statusCode, data, raw, url: targetUrl, headers: res.headers });
+        });
+      }
+    );
+    req.on('error', (err) => {
+      console.warn(`[http:get] ${targetUrl} failed:`, err.message);
+      resolve({ ok: false, status: 0, data: null, raw: err.message, url: targetUrl });
+    });
+    req.setTimeout(15000, () => {
+      req.destroy(new Error('Request timeout'));
+    });
+    req.end();
+  });
+
+  return doRequest(url);
 });
 
 // ─── App lifecycle ────────────────────────────────────────────────────────────

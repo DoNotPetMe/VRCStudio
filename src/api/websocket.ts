@@ -1,6 +1,7 @@
 import api from './vrchat';
 import { useFeedStore } from '../stores/feedStore';
 import { useFriendStore } from '../stores/friendStore';
+import { useAuthStore } from '../stores/authStore';
 import { logWorldVisit, logWorldExit } from '../utils/worldAnalytics';
 import { useReportStore } from '../stores/reportStore';
 
@@ -148,6 +149,8 @@ class VRChatWebSocket {
 
       case 'friend-update':
         if (data.user) {
+          const prevFriend = friendStore.getFriend(data.userId);
+
           feed.addEvent({
             type: 'friend_status',
             userId: data.userId,
@@ -156,6 +159,20 @@ class VRChatWebSocket {
             newValue: data.user.status,
             details: data.user.statusDescription,
           });
+
+          if (
+            prevFriend &&
+            data.user.currentAvatarThumbnailImageUrl &&
+            prevFriend.currentAvatarThumbnailImageUrl !== data.user.currentAvatarThumbnailImageUrl
+          ) {
+            feed.addEvent({
+              type: 'friend_avatar',
+              userId: data.userId,
+              userName: data.user.displayName,
+              userAvatar: data.user.currentAvatarThumbnailImageUrl,
+              details: 'Changed avatar',
+            });
+          }
         }
         break;
 
@@ -177,6 +194,17 @@ class VRChatWebSocket {
         });
         friendStore.fetchOnlineFriends();
         break;
+
+      case 'user-update': {
+        // Current user's data changed (status, location, avatar, etc.).
+        // Merge into authStore so location-tracking and Discord RPC react
+        // immediately instead of waiting for the next polling tick.
+        const auth = useAuthStore.getState();
+        if (auth.user && data) {
+          useAuthStore.setState({ user: { ...auth.user, ...data } });
+        }
+        break;
+      }
 
       case 'notification': {
         // Check for moderation action notifications and correlate with filed reports

@@ -3,8 +3,9 @@ import {
   Flag, MapPin, ClipboardList, ChevronRight, ChevronLeft,
   Check, AlertTriangle, Clock, Copy, ExternalLink, Trash2,
   Download, CheckCircle, XCircle, HelpCircle, FileText,
-  ChevronDown, ChevronUp, Edit3, Globe, Users,
+  ChevronDown, ChevronUp, Edit3, Globe, Users, LogIn,
 } from 'lucide-react';
+import api from '../api/vrchat';
 import { format, formatDistanceToNow, isToday, isYesterday } from 'date-fns';
 import { useInstanceHistoryStore } from '../stores/instanceHistoryStore';
 import { useReportStore } from '../stores/reportStore';
@@ -104,6 +105,19 @@ function MyVisitsTab({ onReportFromInstance }: {
 }) {
   const { history, currentInstance } = useInstanceHistoryStore();
   const [typeFilter, setTypeFilter] = useState<string>('all');
+  const [rejoining, setRejoining] = useState<string | null>(null);
+
+  async function handleRejoin(worldId: string, instanceId: string, entryId: string) {
+    if (!instanceId || rejoining) return;
+    setRejoining(entryId);
+    try {
+      await api.selfInvite(worldId, instanceId);
+    } catch {
+      // Invite request still fires even if we can't confirm delivery
+    } finally {
+      setTimeout(() => setRejoining(null), 3000);
+    }
+  }
 
   const filtered = useMemo(() => {
     if (typeFilter === 'all') return history;
@@ -176,16 +190,27 @@ function MyVisitsTab({ onReportFromInstance }: {
               {instanceTypeBadge(currentInstance.instanceType)} · In for {formatDuration(Date.now() - currentInstance.joinedAt)}
             </div>
           </div>
-          <button
-            className="btn-secondary text-xs flex items-center gap-1 flex-shrink-0"
-            onClick={() => onReportFromInstance(
-              currentInstance.worldId,
-              currentInstance.worldName || currentInstance.worldId,
-              currentInstance.instanceId,
-            )}
-          >
-            <Flag size={12} /> Report
-          </button>
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <button
+              className="btn-secondary text-xs flex items-center gap-1"
+              onClick={() => onReportFromInstance(
+                currentInstance.worldId,
+                currentInstance.worldName || currentInstance.worldId,
+                currentInstance.instanceId,
+              )}
+            >
+              <Flag size={12} /> Report
+            </button>
+            <button
+              className="btn-primary text-xs flex items-center gap-1"
+              onClick={() => handleRejoin(currentInstance.worldId, currentInstance.instanceId, 'current')}
+              disabled={rejoining === 'current'}
+              title="Send yourself a VRChat invite to this instance"
+            >
+              <LogIn size={12} />
+              {rejoining === 'current' ? 'Sent!' : 'Rejoin'}
+            </button>
+          </div>
         </div>
       )}
 
@@ -240,17 +265,34 @@ function MyVisitsTab({ onReportFromInstance }: {
                           )}
                         </div>
                       </div>
-                      <button
-                        className="btn-ghost text-xs flex items-center gap-1 flex-shrink-0 text-surface-500 hover:text-surface-200"
-                        onClick={() => onReportFromInstance(
-                          entry.worldId,
-                          entry.worldName || entry.worldId,
-                          entry.instanceId,
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        {entry.instanceId && (
+                          <button
+                            className={`btn-ghost text-xs flex items-center gap-1 transition-colors ${
+                              rejoining === entry.id
+                                ? 'text-green-400'
+                                : 'text-surface-500 hover:text-accent-300'
+                            }`}
+                            onClick={() => handleRejoin(entry.worldId, entry.instanceId, entry.id)}
+                            disabled={!!rejoining}
+                            title="Invite yourself back to this instance"
+                          >
+                            <LogIn size={12} />
+                            <span className="text-[10px]">{rejoining === entry.id ? 'Sent!' : 'Rejoin'}</span>
+                          </button>
                         )}
-                        title="Report something that happened in this session"
-                      >
-                        <Flag size={12} />
-                      </button>
+                        <button
+                          className="btn-ghost text-xs flex items-center gap-1 text-surface-500 hover:text-surface-200"
+                          onClick={() => onReportFromInstance(
+                            entry.worldId,
+                            entry.worldName || entry.worldId,
+                            entry.instanceId,
+                          )}
+                          title="Report something that happened in this session"
+                        >
+                          <Flag size={12} />
+                        </button>
+                      </div>
                     </div>
                   );
                 })}

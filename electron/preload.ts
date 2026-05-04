@@ -43,6 +43,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getVersion: () => ipcRenderer.invoke('app:getVersion'),
   getPlatform: () => ipcRenderer.invoke('app:getPlatform'),
 
+  // Audio visualizer / media detection
+  getDesktopSources: () => ipcRenderer.invoke('audio:getDesktopSources'),
+  detectMedia: () => ipcRenderer.invoke('audio:detectMedia'),
+
   // VRChat API proxy
   vrchatRequest: (opts: {
     method: string;
@@ -51,4 +55,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     body?: string;
     cookies?: Record<string, string>;
   }) => ipcRenderer.invoke('vrchat:request', opts),
+
+  // Generic outbound GET (routes through main process, sends User-Agent: VRCX)
+  httpGet: (url: string, headers?: Record<string, string>) =>
+    ipcRenderer.invoke('http:get', url, headers),
 });

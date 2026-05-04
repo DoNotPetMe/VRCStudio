@@ -47,7 +47,29 @@ export function useLocationTracking() {
       const user = useAuthStore.getState().user;
       if (!user) return;
 
-      const newLocation = user.location || '';
+      // /auth/user often omits location/worldId/instanceId. Fetch /users/{me}
+      // directly — that endpoint reliably exposes the current location.
+      let liveLocation = user.location || '';
+      let liveWorldId = user.worldId || '';
+      let liveInstanceId = user.instanceId || '';
+      if (user.id) {
+        try {
+          const self: any = await api.getUser(user.id);
+          if (self?.location) liveLocation = self.location;
+          if (self?.worldId) liveWorldId = self.worldId;
+          if (self?.instanceId) liveInstanceId = self.instanceId;
+          // Mirror back into authStore so other consumers see fresh data
+          useAuthStore.setState({
+            user: { ...user, location: liveLocation, worldId: liveWorldId, instanceId: liveInstanceId },
+          });
+        } catch {}
+      }
+
+      let newLocation = liveLocation;
+      if (!newLocation.startsWith('wrld_') && liveWorldId.startsWith('wrld_')) {
+        newLocation = liveInstanceId ? `${liveWorldId}:${liveInstanceId}` : liveWorldId;
+      }
+      console.log('[LocationTracking] location:', newLocation, '| raw:', user.location, '| worldId:', liveWorldId, '| instanceId:', liveInstanceId);
       const prevLocation = prevLocationRef.current;
 
       if (prevLocation === null) {
@@ -138,6 +160,17 @@ export function useLocationTracking() {
 
     check();
     const id = setInterval(check, intervalMs);
-    return () => clearInterval(id);
+
+    // React to user-update WebSocket events: when authStore.user changes
+    // (location, status, etc.), re-evaluate immediately instead of waiting
+    // for the next poll tick.
+    const unsubAuth = useAuthStore.subscribe((s, prev) => {
+      if (s.user?.location !== prev.user?.location) check();
+    });
+
+    return () => {
+      clearInterval(id);
+      unsubAuth();
+    };
   }, [intervalMs]);
 }

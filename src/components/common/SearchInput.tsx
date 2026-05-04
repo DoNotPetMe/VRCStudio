@@ -4,12 +4,13 @@ import { useRef } from 'react';
 interface Props {
   value: string;
   onChange: (value: string) => void;
+  onEnter?: () => void;
   placeholder?: string;
   className?: string;
   autoFocus?: boolean;
 }
 
-export default function SearchInput({ value, onChange, placeholder = 'Search...', className = '', autoFocus }: Props) {
+export default function SearchInput({ value, onChange, onEnter, placeholder = 'Search...', className = '', autoFocus }: Props) {
   const ref = useRef<HTMLInputElement>(null);
 
   return (
@@ -20,6 +21,7 @@ export default function SearchInput({ value, onChange, placeholder = 'Search...'
         type="text"
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        onKeyDown={e => e.key === 'Enter' && onEnter?.()}
         placeholder={placeholder}
         autoFocus={autoFocus}
         className="input-field pl-9 pr-8"

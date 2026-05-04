@@ -1,12 +1,13 @@
 import { useState, useMemo, useEffect } from 'react';
 import {
   Users, MapPin, StickyNote, UserMinus, Globe,
-  ChevronRight, RotateCw, X, Star,
+  ChevronRight, RotateCw, X, Star, ExternalLink, LogIn,
 } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
 import { useFriendStore } from '../stores/friendStore';
 import { useWorldStore } from '../stores/worldStore';
 import { useStarredFriendsStore } from '../stores/starredFriendsStore';
+import { useInstanceHistoryStore } from '../stores/instanceHistoryStore';
 import SearchInput from '../components/common/SearchInput';
 import UserAvatar from '../components/common/UserAvatar';
 import EmptyState from '../components/common/EmptyState';
@@ -15,6 +16,7 @@ import InstanceModal from '../components/InstanceModal';
 import type { VRCUser, UserStatus, VRCWorld } from '../types/vrchat';
 import api from '../api/vrchat';
 import { getBestAvatarUrl } from '../utils/avatar';
+import { getTrustRank, RANK_COLORS } from '../utils/trustRank';
 
 type FriendTab = 'online' | 'offline' | 'all' | 'starred' | 'gps';
 type SortBy = 'name' | 'status';
@@ -72,6 +74,8 @@ export default function FriendsPage() {
   const [noteTagInput, setNoteTagInput] = useState('');
   const [noteTags, setNoteTags] = useState<string[]>([]);
   const [instanceModal, setInstanceModal] = useState<{ worldId: string; instanceId: string } | null>(null);
+  const [inviteSent, setInviteSent] = useState<string | null>(null);
+  const currentInstance = useInstanceHistoryStore(s => s.currentInstance);
 
   // GPS: group online friends by world
   const worldGroups = useMemo(() => {
@@ -372,7 +376,17 @@ export default function FriendsPage() {
                 <div className={`absolute bottom-0 right-0 w-4 h-4 rounded-full ring-2 ring-surface-900 ${statusDotColors[detail.user.status]}`} />
               </div>
               <h3 className="text-lg font-bold mt-3">{detail.user.displayName}</h3>
-              <p className="text-sm text-surface-400">{detail.user.statusDescription || detail.user.status}</p>
+              {(() => {
+                const tags = (detail.fullUser || detail.user).tags;
+                if (!tags?.length) return null;
+                const rank = getTrustRank(tags);
+                return (
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium mt-1 inline-block ${RANK_COLORS[rank]}`}>
+                    {rank}
+                  </span>
+                );
+              })()}
+              <p className="text-sm text-surface-400 mt-1">{detail.user.statusDescription || detail.user.status}</p>
               {detail.loadingDetail && <LoadingSpinner size="sm" className="mt-2" />}
             </div>
 
@@ -383,6 +397,24 @@ export default function FriendsPage() {
                   <div className="text-xs text-surface-500 mb-1">Bio</div>
                   <div className="text-surface-300 text-xs whitespace-pre-wrap leading-relaxed">
                     {(detail.fullUser || detail.user).bio}
+                  </div>
+                </div>
+              )}
+
+              {(detail.fullUser || detail.user).bioLinks?.filter(Boolean).length > 0 && (
+                <div className="glass-panel p-3">
+                  <div className="text-xs text-surface-500 mb-2">Links</div>
+                  <div className="space-y-1">
+                    {(detail.fullUser || detail.user).bioLinks.filter(Boolean).map((link, i) => (
+                      <button
+                        key={i}
+                        onClick={() => window.electronAPI?.openExternal(link)}
+                        className="flex items-center gap-1.5 text-xs text-accent-400 hover:underline truncate w-full text-left"
+                      >
+                        <ExternalLink size={11} className="flex-shrink-0" />
+                        <span className="truncate">{link.replace(/^https?:\/\//, '')}</span>
+                      </button>
+                    ))}
                   </div>
                 </div>
               )}
@@ -501,6 +533,30 @@ export default function FriendsPage() {
                     {notes[detail.user.id]?.note ? 'Edit Note' : 'Add Note'}
                   </button>
                 </>
+              )}
+
+              {/* Invite to current world */}
+              {currentInstance && detail.user && (
+                <button
+                  onClick={async () => {
+                    try {
+                      await api.inviteUser(
+                        detail.user!.id,
+                        currentInstance.worldId,
+                        currentInstance.instanceId,
+                      );
+                      setInviteSent(detail.user!.id);
+                      setTimeout(() => setInviteSent(null), 3000);
+                    } catch {}
+                  }}
+                  disabled={inviteSent === detail.user.id}
+                  className="btn-primary text-xs w-full flex items-center justify-center gap-1.5"
+                >
+                  <LogIn size={13} />
+                  {inviteSent === detail.user.id
+                    ? 'Invite sent!'
+                    : `Invite to ${currentInstance.worldName && !currentInstance.worldName.startsWith('wrld_') ? currentInstance.worldName : 'my world'}`}
+                </button>
               )}
             </div>
           </div>

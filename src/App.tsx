@@ -29,6 +29,8 @@ import AvatarEditor from './pages/AvatarEditor';
 import Reports from './pages/Reports';
 import LoadingSpinner from './components/common/LoadingSpinner';
 import { useLocationTracking } from './hooks/useLocationTracking';
+import AvatarSwitcher from './components/AvatarSwitcher';
+import { useAvatarSwitcherStore } from './stores/avatarSwitcherStore';
 
 // Error boundary to catch React rendering errors and show them instead of a blank screen
 class ErrorBoundary extends Component<
@@ -96,6 +98,7 @@ class ErrorBoundary extends Component<
 
 function AppShell() {
   const navigate = useNavigate();
+  const { isOpen: switcherOpen, close: closeSwitcher, toggle: toggleSwitcher } = useAvatarSwitcherStore();
   useDiscordRPC();
   useLocationTracking();
 
@@ -107,11 +110,14 @@ function AppShell() {
       { key: '4', ctrl: true, shift: false, alt: false, description: 'Go to Avatars', handler: () => navigate('/avatars') },
       { key: 'f', ctrl: true, shift: false, alt: false, description: 'Focus Search', handler: () => navigate('/search') },
       { key: ',', ctrl: true, shift: false, alt: false, description: 'Open Settings', handler: () => navigate('/settings') },
+      { key: 'a', ctrl: true, shift: true, alt: false, description: 'Quick Avatar Switch', handler: toggleSwitcher },
     ]);
     return unregister;
-  }, [navigate]);
+  }, [navigate, toggleSwitcher]);
 
   return (
+    <>
+    <AvatarSwitcher open={switcherOpen} onClose={closeSwitcher} />
     <Routes>
       <Route element={<AppLayout />}>
         <Route path="/" element={<Dashboard />} />
@@ -135,6 +141,7 @@ function AppShell() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
+    </>
   );
 }
 

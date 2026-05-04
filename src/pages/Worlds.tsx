@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Globe, TrendingUp, Clock, Star, Search, Users, Heart, ArrowLeft } from 'lucide-react';
+import { Globe, TrendingUp, Clock, Star, Search, Users, Heart, ArrowLeft, LogIn, X } from 'lucide-react';
 import { useWorldStore } from '../stores/worldStore';
 import { useFriendStore } from '../stores/friendStore';
 import SearchInput from '../components/common/SearchInput';
@@ -9,8 +9,29 @@ import LoadingSpinner from '../components/common/LoadingSpinner';
 import InstanceModal from '../components/InstanceModal';
 import type { VRCWorld } from '../types/vrchat';
 import { getBestAvatarUrl } from '../utils/avatar';
+import api from '../api/vrchat';
 
 type WorldTab = 'search' | 'active' | 'recent' | 'favorites';
+
+interface InstancePicker {
+  worldId: string;
+  worldName: string;
+  worldImage: string;
+  instances: [string, number][];
+  loading: boolean;
+}
+
+function instanceLabel(id: string): string {
+  if (id.includes('group(')) {
+    if (id.includes('groupAccessType(plus)')) return 'Group+';
+    if (id.includes('groupAccessType(members)')) return 'Group';
+    return 'Group Public';
+  }
+  if (id.includes('friends(')) return 'Friends+';
+  if (id.includes('hidden('))  return 'Friends';
+  if (id.includes('private(')) return 'Invite';
+  return 'Public';
+}
 
 export default function WorldsPage() {
   const {
@@ -24,6 +45,31 @@ export default function WorldsPage() {
   const [selectedWorld, setSelectedWorld] = useState<VRCWorld | null>(null);
   const [searchInput, setSearchInput] = useState('');
   const [instanceModal, setInstanceModal] = useState<{ worldId: string; instanceId: string } | null>(null);
+  const [rejoiningInstance, setRejoiningInstance] = useState<string | null>(null);
+  const [instancePicker, setInstancePicker] = useState<InstancePicker | null>(null);
+
+  async function openInstancePicker(world: VRCWorld) {
+    setInstancePicker({
+      worldId: world.id, worldName: world.name,
+      worldImage: world.thumbnailImageUrl || world.imageUrl || '',
+      instances: [], loading: true,
+    });
+    try {
+      const full = await getWorld(world.id);
+      setInstancePicker(p => p ? { ...p, instances: full.instances ?? [], loading: false } : null);
+    } catch {
+      setInstancePicker(p => p ? { ...p, loading: false } : null);
+    }
+  }
+
+  async function handleSelfInvite(worldId: string, instanceId: string) {
+    if (rejoiningInstance) return;
+    setRejoiningInstance(instanceId);
+    try {
+      await api.selfInvite(worldId, instanceId);
+    } catch {}
+    setTimeout(() => setRejoiningInstance(null), 3000);
+  }
 
   useEffect(() => {
     fetchActiveWorlds();
@@ -140,23 +186,61 @@ export default function WorldsPage() {
             {/* Instances */}
             {selectedWorld.instances && selectedWorld.instances.length > 0 && (
               <div className="mt-6">
-                <h3 className="text-sm font-semibold text-surface-300 mb-2">
-                  Active Instances ({selectedWorld.instances.length})
-                </h3>
-                <div className="grid grid-cols-2 gap-2">
-                  {selectedWorld.instances.map(([id, count]) => (
-                    <button
-                      key={id}
-                      onClick={() => setInstanceModal({ worldId: selectedWorld.id, instanceId: id })}
-                      className="glass-panel p-3 flex items-center justify-between hover:border-accent-500/30 transition-colors"
-                    >
-                      <span className="text-xs font-mono truncate">{id}</span>
-                      <span className="text-xs text-surface-400 flex items-center gap-1 flex-shrink-0 ml-2">
-                        <Users size={11} /> {count}
-                      </span>
-                    </button>
-                  ))}
-                </div>
+                {(() => {
+                  const grouped = selectedWorld.instances.filter(([id]) => id.includes('group('));
+                  const other = selectedWorld.instances.filter(([id]) => !id.includes('group('));
+                  const Row = ({ id, count }: { id: string; count: number }) => (
+                    <div className="glass-panel px-3 py-2.5 flex items-center gap-3 hover:border-accent-500/30 transition-colors">
+                      <button
+                        className="flex-1 flex items-center gap-2 min-w-0 text-left"
+                        onClick={() => setInstanceModal({ worldId: selectedWorld.id, instanceId: id })}
+                      >
+                        <span className="badge bg-surface-700 text-surface-300 text-[10px] flex-shrink-0">
+                          {instanceLabel(id)}
+                        </span>
+                        <span className="text-xs text-surface-400 flex items-center gap-1 flex-shrink-0 ml-auto">
+                          <Users size={11} /> {count}
+                        </span>
+                      </button>
+                      <button
+                        onClick={() => handleSelfInvite(selectedWorld.id, id)}
+                        disabled={!!rejoiningInstance}
+                        className={`flex items-center gap-1 text-xs flex-shrink-0 px-2 py-1 rounded-md transition-colors ${
+                          rejoiningInstance === id
+                            ? 'bg-green-500/15 text-green-400'
+                            : 'bg-accent-600/15 text-accent-400 hover:bg-accent-600/25'
+                        }`}
+                      >
+                        <LogIn size={11} />
+                        <span className="text-[10px]">{rejoiningInstance === id ? 'Sent!' : 'Invite me'}</span>
+                      </button>
+                    </div>
+                  );
+                  return (
+                    <>
+                      {grouped.length > 0 && (
+                        <div className="mb-4">
+                          <h3 className="text-sm font-semibold text-surface-300 mb-2 flex items-center gap-1.5">
+                            <Users size={14} className="text-amber-400" /> Group Instances ({grouped.length})
+                          </h3>
+                          <div className="space-y-1.5">
+                            {grouped.map(([id, count]) => <Row key={id} id={id} count={count} />)}
+                          </div>
+                        </div>
+                      )}
+                      {other.length > 0 && (
+                        <div>
+                          <h3 className="text-sm font-semibold text-surface-300 mb-2 flex items-center gap-1.5">
+                            <Globe size={14} /> Other Instances ({other.length})
+                          </h3>
+                          <div className="space-y-1.5">
+                            {other.map(([id, count]) => <Row key={id} id={id} count={count} />)}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
             )}
 
@@ -222,17 +306,81 @@ export default function WorldsPage() {
           {worldList.map(world => {
             const friendCount = friendsInWorld(world.id).length;
             return (
-              <div key={world.id} className="relative h-full">
+              <div key={world.id} className="group relative h-full">
                 <WorldCard world={world} onClick={() => openWorldDetail(world)} />
                 {friendCount > 0 && (
                   <div className="absolute top-2 left-2 bg-green-500/90 text-white text-xs px-1.5 py-0.5 rounded-full
-                                  flex items-center gap-1 backdrop-blur-sm font-medium">
+                                  flex items-center gap-1 backdrop-blur-sm font-medium pointer-events-none">
                     <Users size={10} /> {friendCount} friend{friendCount !== 1 ? 's' : ''}
                   </div>
                 )}
+                <button
+                  onClick={e => { e.stopPropagation(); openInstancePicker(world); }}
+                  className="absolute bottom-[56px] right-2 bg-black/75 backdrop-blur-sm text-white
+                             text-[10px] px-2 py-1 rounded-md flex items-center gap-1
+                             opacity-0 group-hover:opacity-100 transition-opacity duration-150"
+                >
+                  <LogIn size={10} /> Join
+                </button>
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Instance picker modal */}
+      {instancePicker && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          onClick={() => setInstancePicker(null)}
+        >
+          <div
+            className="bg-surface-900 border border-surface-700 rounded-xl shadow-2xl w-96 max-h-[70vh] flex flex-col"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3 p-4 border-b border-surface-800 flex-shrink-0">
+              {instancePicker.worldImage && (
+                <img src={instancePicker.worldImage} className="w-14 h-10 rounded object-cover flex-shrink-0" alt="" />
+              )}
+              <div className="flex-1 min-w-0">
+                <h2 className="text-sm font-semibold truncate">{instancePicker.worldName}</h2>
+                <p className="text-xs text-surface-500">Active instances</p>
+              </div>
+              <button onClick={() => setInstancePicker(null)} className="btn-ghost p-1 flex-shrink-0">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="overflow-y-auto p-3 space-y-1.5">
+              {instancePicker.loading ? (
+                <LoadingSpinner className="py-8" />
+              ) : instancePicker.instances.length === 0 ? (
+                <p className="text-xs text-surface-500 text-center py-6">No active instances found</p>
+              ) : (
+                instancePicker.instances.map(([id, count]) => (
+                  <div key={id} className="glass-panel px-3 py-2.5 flex items-center gap-3">
+                    <span className="badge bg-surface-700 text-surface-300 text-[10px] flex-shrink-0">
+                      {instanceLabel(id)}
+                    </span>
+                    <span className="text-xs text-surface-400 flex items-center gap-1 ml-auto flex-shrink-0">
+                      <Users size={11} /> {count}
+                    </span>
+                    <button
+                      onClick={() => handleSelfInvite(instancePicker.worldId, id)}
+                      disabled={!!rejoiningInstance}
+                      className={`flex items-center gap-1 text-xs px-2 py-1 rounded-md flex-shrink-0 transition-colors ${
+                        rejoiningInstance === id
+                          ? 'bg-green-500/15 text-green-400'
+                          : 'bg-accent-600/15 text-accent-400 hover:bg-accent-600/25'
+                      }`}
+                    >
+                      <LogIn size={11} />
+                      {rejoiningInstance === id ? 'Sent!' : 'Invite me'}
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>
