@@ -173,3 +173,119 @@
     animation: fadeIn 0.2s ease-out, slideUp 0.25s ease-out;
   }
 }
+
+/* ───────────────────────────────────────────────────────────────────────
+   Premium themes — animated background overlay + tinted glass panels.
+   The overlay is a fixed pseudo-element on <html> sitting behind the
+   app shell, so all existing surface colors stay legible.
+   ─────────────────────────────────────────────────────────────────── */
+
+html.premium-iridescent::before,
+html.premium-holographic::before,
+html.premium-aurora::before,
+html.premium-cosmic::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+
+/* iridescent — slow rainbow gradient sweep */
+html.premium-iridescent::before {
+  background:
+    linear-gradient(135deg,
+      #ff006e22 0%, #fb5607 12%, #ffbe0b22 25%, #8338ec22 40%,
+      #3a86ff22 55%, #06ffa522 70%, #ff006e22 85%, #fb560722 100%);
+  background-size: 400% 400%;
+  animation: iridescent-shift 18s ease-in-out infinite;
+  filter: blur(40px) saturate(1.2);
+  opacity: 0.55;
+}
+html.premium-iridescent .glass-panel,
+html.premium-iridescent .glass-panel-solid {
+  border-color: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(14px) saturate(1.1);
+}
+
+@keyframes iridescent-shift {
+  0%, 100% { background-position: 0% 50%; }
+  50%      { background-position: 100% 50%; }
+}
+
+/* holographic — rotating conic gradient with shimmer */
+html.premium-holographic::before {
+  background: conic-gradient(from 0deg at 50% 50%,
+    #ff00ff22, #00ffff22, #ffff0022, #ff00ff22, #00ffff22, #ff00ff22);
+  filter: blur(60px) saturate(1.3);
+  opacity: 0.45;
+  animation: holographic-spin 30s linear infinite;
+}
+html.premium-holographic::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(115deg,
+    transparent 30%, rgba(255, 255, 255, 0.08) 50%, transparent 70%);
+  background-size: 200% 200%;
+  animation: holographic-shimmer 8s ease-in-out infinite;
+}
+
+@keyframes holographic-spin   { to { transform: rotate(360deg); } }
+@keyframes holographic-shimmer {
+  0%, 100% { background-position: -50% -50%; }
+  50%      { background-position:  50%  50%; }
+}
+
+/* aurora — northern-lights vertical waves */
+html.premium-aurora::before {
+  background:
+    radial-gradient(ellipse 80% 60% at 30% 20%, #00ff8855 0%, transparent 50%),
+    radial-gradient(ellipse 60% 50% at 70% 80%, #4488ff44 0%, transparent 60%),
+    radial-gradient(ellipse 50% 50% at 50% 50%, #aa44ff33 0%, transparent 70%);
+  filter: blur(30px);
+  opacity: 0.7;
+  animation: aurora-drift 25s ease-in-out infinite;
+}
+
+@keyframes aurora-drift {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33%      { transform: translate(-3%, 2%) scale(1.08); }
+  66%      { transform: translate(3%, -2%) scale(0.95); }
+}
+
+/* cosmic — deep starfield with subtle nebula */
+html.premium-cosmic::before {
+  background:
+    radial-gradient(ellipse 70% 50% at 50% 50%, #4c1d9533 0%, transparent 70%),
+    radial-gradient(circle at 20% 30%, rgba(255,255,255,0.6) 0.5px, transparent 1px),
+    radial-gradient(circle at 80% 20%, rgba(255,255,255,0.5) 0.5px, transparent 1px),
+    radial-gradient(circle at 60% 70%, rgba(255,255,255,0.5) 0.5px, transparent 1px),
+    radial-gradient(circle at 40% 90%, rgba(255,255,255,0.4) 0.5px, transparent 1px),
+    radial-gradient(circle at 90% 60%, rgba(255,255,255,0.5) 0.5px, transparent 1px),
+    radial-gradient(circle at 10% 80%, rgba(255,255,255,0.4) 0.5px, transparent 1px);
+  background-size: 100% 100%, 200px 200px, 250px 250px, 180px 180px, 220px 220px, 270px 270px, 200px 200px;
+  opacity: 0.75;
+  animation: cosmic-twinkle 8s ease-in-out infinite;
+}
+
+@keyframes cosmic-twinkle {
+  0%, 100% { opacity: 0.55; }
+  50%      { opacity: 0.85; }
+}
+
+/* ───────────────────────────────────────────────────────────────────────
+   Audio visualizer — fixed full-screen canvas behind the app shell.
+   ─────────────────────────────────────────────────────────────────── */
+.audio-visualizer-canvas {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.45;
+  mix-blend-mode: screen;
+}

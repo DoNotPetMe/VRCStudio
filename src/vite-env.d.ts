@@ -23,6 +23,12 @@ interface ElectronAPI {
   getAutoLaunch: () => Promise<boolean>;
   getVersion: () => Promise<string>;
   getPlatform: () => Promise<string>;
+  getDesktopSources: () => Promise<Array<{ id: string; name: string }>>;
+  detectMedia: () => Promise<{
+    active: boolean;
+    source: 'spotify' | 'youtube' | null;
+    title: string | null;
+  }>;
   vrchatRequest: (opts: {
     method: string;
     path: string;

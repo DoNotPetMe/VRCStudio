@@ -1,6 +1,6 @@
 import {
   app, BrowserWindow, ipcMain, shell, Tray, Menu,
-  nativeImage, Notification, nativeTheme,
+  nativeImage, Notification, nativeTheme, desktopCapturer,
 } from 'electron';
 import path from 'path';
 import fs from 'fs';
@@ -325,6 +325,57 @@ ipcMain.handle('autoLaunch:get', () => app.getLoginItemSettings().openAtLogin);
 // App info
 ipcMain.handle('app:getVersion', () => app.getVersion());
 ipcMain.handle('app:getPlatform', () => process.platform);
+
+// Audio visualizer / media detection
+// Returns desktop sources (windows + screens) so the renderer can request
+// system-audio capture via getUserMedia({ chromeMediaSource: 'desktop' }).
+ipcMain.handle('audio:getDesktopSources', async () => {
+  try {
+    const sources = await desktopCapturer.getSources({
+      types: ['window', 'screen'],
+      thumbnailSize: { width: 0, height: 0 },
+    });
+    return sources.map(s => ({ id: s.id, name: s.name }));
+  } catch (err) {
+    return [];
+  }
+});
+
+// Detects whether Spotify or YouTube is currently playing by scanning
+// window titles. Returns a small object the renderer can react to.
+ipcMain.handle('audio:detectMedia', async () => {
+  try {
+    const sources = await desktopCapturer.getSources({
+      types: ['window'],
+      thumbnailSize: { width: 0, height: 0 },
+    });
+    const titles = sources.map(s => s.name);
+
+    // Spotify: title becomes "Track - Artist" while playing, "Spotify Free"/"Spotify Premium" when idle
+    const spotifyTitle = titles.find(t =>
+      /^Spotify(?:\s|$)/i.test(t) === false &&
+      titles.some(x => /Spotify/i.test(x)) &&
+      / - /.test(t) &&
+      !/^Spotify (Free|Premium)$/i.test(t)
+    );
+    // Heuristic: any window owned by Spotify with a "X - Y" track title
+    const spotifyPlaying = titles.find(t => / - /.test(t) && /Spotify/i.test(t));
+
+    // YouTube: browser tab title pattern "Video Title - YouTube — Browser"
+    const youtubePlaying = titles.find(t => /\sYouTube\b/i.test(t) || /\)\s*-\s*YouTube/i.test(t));
+
+    if (spotifyPlaying || spotifyTitle) {
+      const t = spotifyPlaying || spotifyTitle!;
+      return { active: true, source: 'spotify' as const, title: t.replace(/\s*[—-]\s*Spotify.*$/i, '').trim() };
+    }
+    if (youtubePlaying) {
+      return { active: true, source: 'youtube' as const, title: youtubePlaying.replace(/\s*-\s*YouTube.*$/i, '').trim() };
+    }
+    return { active: false, source: null, title: null };
+  } catch {
+    return { active: false, source: null, title: null };
+  }
+});
 
 
 // ─── VRChat API Proxy ────────────────────────────────────────────────────────

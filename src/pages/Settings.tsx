@@ -108,6 +108,7 @@ export default function SettingsPage() {
   const {
     theme, setMode, setAccentColor, setCustomCSS, setFontSize,
     setSidebarWidth, setBorderRadius, setAnimationSpeed, setGlassEffect, resetTheme,
+    setPremiumTheme, setVisualizer,
   } = useThemeStore();
   const { accounts, removeAccount } = useMultiAccountStore();
   const [active, setActive] = useState<SettingsSection>('account');
@@ -658,6 +659,99 @@ export default function SettingsPage() {
                     options={['none', 'subtle', 'normal']}
                     value={theme.animationSpeed}
                     onChange={v => setAnimationSpeed(v as 'none' | 'subtle' | 'normal')}
+                  />
+                </div>
+              </Section>
+
+              <Section title="Premium Themes" icon={Palette}>
+                <p className="text-xs text-surface-500 mb-2">
+                  Animated background overlays — sit behind everything, no impact on text legibility.
+                </p>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+                  {([
+                    { key: 'none',         label: 'Off',          preview: 'bg-surface-800' },
+                    { key: 'iridescent',   label: 'Iridescent',   preview: 'bg-gradient-to-br from-pink-500 via-purple-500 to-cyan-500' },
+                    { key: 'holographic',  label: 'Holographic',  preview: 'bg-[conic-gradient(from_0deg,_#f0f,_#0ff,_#ff0,_#f0f)]' },
+                    { key: 'aurora',      label: 'Aurora',       preview: 'bg-gradient-to-br from-emerald-500 via-blue-500 to-purple-500' },
+                    { key: 'cosmic',      label: 'Cosmic',       preview: 'bg-gradient-to-br from-indigo-900 via-purple-900 to-black' },
+                  ] as const).map(({ key, label, preview }) => (
+                    <button
+                      key={key}
+                      onClick={() => setPremiumTheme(key)}
+                      className={`p-2 rounded-lg border transition-all ${
+                        theme.premiumTheme === key
+                          ? 'border-accent-500 bg-accent-500/10'
+                          : 'border-surface-700 hover:border-surface-600'
+                      }`}
+                    >
+                      <div className={`w-full h-12 rounded mb-1.5 ${preview}`} />
+                      <div className="text-xs font-medium">{label}</div>
+                    </button>
+                  ))}
+                </div>
+              </Section>
+
+              <Section title="Audio Visualizer" icon={Volume2}>
+                <p className="text-xs text-surface-500">
+                  Old-school equaliser background. Captures system audio (when permitted) and reacts to whatever's playing.
+                </p>
+                <Toggle
+                  label="Enable visualizer"
+                  description="Renders bobbing white blocks behind the app"
+                  checked={theme.visualizer.enabled}
+                  onChange={v => setVisualizer({ enabled: v })}
+                />
+                <Toggle
+                  label="Only when Spotify or YouTube is detected"
+                  description="Keeps the visualizer hidden when nothing is actively playing"
+                  checked={theme.visualizer.onlyWithMedia}
+                  onChange={v => setVisualizer({ onlyWithMedia: v })}
+                  disabled={!theme.visualizer.enabled}
+                />
+
+                <div className={theme.visualizer.enabled ? '' : 'opacity-50 pointer-events-none'}>
+                  <label className="block text-sm font-medium mb-2">Frequency Focus</label>
+                  <OptionRow
+                    options={['all', 'bass', 'mids', 'treble']}
+                    value={theme.visualizer.focus}
+                    onChange={v => setVisualizer({ focus: v as 'all' | 'bass' | 'mids' | 'treble' })}
+                  />
+
+                  <label className="block text-sm font-medium mt-4 mb-2">Bar Color</label>
+                  <OptionRow
+                    options={['white', 'accent', 'rainbow']}
+                    value={theme.visualizer.color}
+                    onChange={v => setVisualizer({ color: v as 'white' | 'accent' | 'rainbow' })}
+                  />
+
+                  <label className="block text-sm font-medium mt-4 mb-1">
+                    Bar Count: <span className="text-accent-400">{theme.visualizer.barCount}</span>
+                  </label>
+                  <input
+                    type="range" min={16} max={128} step={4}
+                    value={theme.visualizer.barCount}
+                    onChange={e => setVisualizer({ barCount: parseInt(e.target.value) })}
+                    className="w-full"
+                  />
+
+                  <label className="block text-sm font-medium mt-3 mb-1">
+                    Sensitivity: <span className="text-accent-400">{theme.visualizer.sensitivity.toFixed(1)}×</span>
+                  </label>
+                  <input
+                    type="range" min={0.5} max={3} step={0.1}
+                    value={theme.visualizer.sensitivity}
+                    onChange={e => setVisualizer({ sensitivity: parseFloat(e.target.value) })}
+                    className="w-full"
+                  />
+
+                  <label className="block text-sm font-medium mt-3 mb-1">
+                    Smoothing: <span className="text-accent-400">{(theme.visualizer.smoothing * 100).toFixed(0)}%</span>
+                  </label>
+                  <input
+                    type="range" min={0} max={0.95} step={0.05}
+                    value={theme.visualizer.smoothing}
+                    onChange={e => setVisualizer({ smoothing: parseFloat(e.target.value) })}
+                    className="w-full"
                   />
                 </div>
               </Section>

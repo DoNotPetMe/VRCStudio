@@ -43,6 +43,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getVersion: () => ipcRenderer.invoke('app:getVersion'),
   getPlatform: () => ipcRenderer.invoke('app:getPlatform'),
 
+  // Audio visualizer / media detection
+  getDesktopSources: () => ipcRenderer.invoke('audio:getDesktopSources'),
+  detectMedia: () => ipcRenderer.invoke('audio:detectMedia'),
+
   // VRChat API proxy
   vrchatRequest: (opts: {
     method: string;

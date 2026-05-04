@@ -1,27 +1,51 @@
 import { create } from 'zustand';
 
+export interface VisualizerConfig {
+  enabled: boolean;
+  sensitivity: number;          // 0.5 – 3
+  barCount: number;             // 16 – 128
+  focus: 'all' | 'bass' | 'mids' | 'treble';
+  color: 'white' | 'accent' | 'rainbow';
+  smoothing: number;            // 0 – 0.95
+  onlyWithMedia: boolean;       // only show when Spotify/YouTube detected
+}
+
 export interface ThemeConfig {
   mode: 'dark' | 'light' | 'midnight' | 'oled';
   accentColor: 'blue' | 'purple' | 'green' | 'rose' | 'amber' | 'cyan';
+  premiumTheme: 'none' | 'iridescent' | 'holographic' | 'aurora' | 'cosmic';
   customCSS: string;
   fontSize: 'small' | 'medium' | 'large';
   sidebarWidth: 'compact' | 'normal' | 'wide';
   borderRadius: 'sharp' | 'rounded' | 'pill';
   animationSpeed: 'none' | 'subtle' | 'normal';
   glassEffect: 'none' | 'light' | 'medium';
+  visualizer: VisualizerConfig;
 }
 
 const THEME_KEY = 'vrcstudio_theme';
 
+const defaultVisualizer: VisualizerConfig = {
+  enabled: false,
+  sensitivity: 1.4,
+  barCount: 64,
+  focus: 'all',
+  color: 'white',
+  smoothing: 0.7,
+  onlyWithMedia: true,
+};
+
 const defaultTheme: ThemeConfig = {
   mode: 'dark',
   accentColor: 'blue',
+  premiumTheme: 'none',
   customCSS: '',
   fontSize: 'medium',
   sidebarWidth: 'normal',
   borderRadius: 'rounded',
   animationSpeed: 'normal',
   glassEffect: 'medium',
+  visualizer: defaultVisualizer,
 };
 
 function loadTheme(): ThemeConfig {
@@ -105,6 +129,8 @@ interface ThemeState {
   setBorderRadius: (radius: ThemeConfig['borderRadius']) => void;
   setAnimationSpeed: (speed: ThemeConfig['animationSpeed']) => void;
   setGlassEffect: (effect: ThemeConfig['glassEffect']) => void;
+  setPremiumTheme: (theme: ThemeConfig['premiumTheme']) => void;
+  setVisualizer: (patch: Partial<VisualizerConfig>) => void;
   applyTheme: () => void;
   resetTheme: () => void;
 }
@@ -168,6 +194,19 @@ export const useThemeStore = create<ThemeState>((set, get) => ({
     get().applyTheme();
   },
 
+  setPremiumTheme: (premiumTheme) => {
+    const theme = { ...get().theme, premiumTheme };
+    saveTheme(theme);
+    set({ theme });
+    get().applyTheme();
+  },
+
+  setVisualizer: (patch) => {
+    const theme = { ...get().theme, visualizer: { ...get().theme.visualizer, ...patch } };
+    saveTheme(theme);
+    set({ theme });
+  },
+
   applyTheme: () => {
     const { theme } = get();
     const root = document.documentElement;
@@ -200,6 +239,12 @@ export const useThemeStore = create<ThemeState>((set, get) => ({
     // Glass effect opacity
     const glassMap: Record<string, string> = { none: '1', light: '0.85', medium: '0.7' };
     root.style.setProperty('--glass-opacity', glassMap[theme.glassEffect ?? 'medium']);
+
+    // Premium theme — applied as a class on <html> so CSS in globals.css can pick it up
+    root.classList.remove('premium-iridescent', 'premium-holographic', 'premium-aurora', 'premium-cosmic');
+    if (theme.premiumTheme && theme.premiumTheme !== 'none') {
+      root.classList.add(`premium-${theme.premiumTheme}`);
+    }
 
     // Light mode: adjust body text color
     if (theme.mode === 'light') {
