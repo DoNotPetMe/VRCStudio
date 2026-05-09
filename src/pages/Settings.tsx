@@ -3,9 +3,10 @@ import {
   Settings as SettingsIcon, Bell, Monitor, Clock, RotateCcw, RotateCw,
   Palette, Download, Upload, UserCircle, Globe2, Zap, Shield,
   Trash2, Smile, X, Volume2, Moon, Sun, ArrowUpDown, Lock,
-  Cpu, Database, Keyboard, Info, ExternalLink,
+  Cpu, Database, Keyboard, Info, ExternalLink, Gamepad2,
 } from 'lucide-react';
 import { VRCDB_PROVIDERS, getProviderId, setProviderId } from '../api/vrcdb';
+import { useAsteroidsGameStore } from '../stores/asteroidsGameStore';
 import type { ProviderId } from '../api/vrcdb';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useAuthStore } from '../stores/authStore';
@@ -102,6 +103,7 @@ export default function SettingsPage() {
     setPremiumTheme, setVisualizer, resetTheme,
   } = useThemeStore();
   const { accounts, removeAccount } = useMultiAccountStore();
+  const openAsteroidsGame = useAsteroidsGameStore(s => s.open);
   const [active, setActive] = useState<SettingsSection>('account');
   const [importStatus, setImportStatus] = useState<string | null>(null);
   const [vrcdbProvider, setVrcdbProviderState] = useState<ProviderId>(getProviderId());
@@ -451,6 +453,15 @@ export default function SettingsPage() {
                   <input type="range" min={0.5} max={3} step={0.1} value={theme.visualizer.sensitivity} onChange={e => setVisualizer({ sensitivity: parseFloat(e.target.value) })} className="w-full" />
                   <label className="block text-sm font-medium mt-3 mb-1">Smoothing: <span className="text-accent-400">{(theme.visualizer.smoothing * 100).toFixed(0)}%</span></label>
                   <input type="range" min={0} max={0.95} step={0.05} value={theme.visualizer.smoothing} onChange={e => setVisualizer({ smoothing: parseFloat(e.target.value) })} className="w-full" />
+                </div>
+                <div className="mt-4 pt-3 border-t border-surface-800/40">
+                  <p className="text-xs text-surface-500 mb-2">Play Asteroids as a real game. The ship fires to the music beat, or press Space yourself.</p>
+                  <button
+                    onClick={openAsteroidsGame}
+                    className="btn-primary text-sm flex items-center gap-2"
+                  >
+                    <Gamepad2 size={14} /> Take the Wheel
+                  </button>
                 </div>
               </Section>
 

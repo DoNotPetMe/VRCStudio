@@ -3,8 +3,11 @@ import TitleBar from './TitleBar';
 import Sidebar from './Sidebar';
 import AudioVisualizer from '../AudioVisualizer';
 import PremiumThemeOverlay from '../PremiumThemeOverlay';
+import AsteroidsGame from '../AsteroidsGame';
+import { useAsteroidsGameStore } from '../../stores/asteroidsGameStore';
 
 export default function AppLayout() {
+  const gameOpen = useAsteroidsGameStore(s => s.isOpen);
   return (
     <div className="h-screen flex flex-col overflow-hidden bg-surface-950 text-surface-200 relative">
       <PremiumThemeOverlay />
@@ -18,6 +21,7 @@ export default function AppLayout() {
           </div>
         </main>
       </div>
+      {gameOpen && <AsteroidsGame />}
     </div>
   );
 }

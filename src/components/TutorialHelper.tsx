@@ -1,44 +1,38 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { X } from 'lucide-react';
+import { useTourStore } from '../stores/tourStore';
 
 const HELPER_KEY = 'vrcstudio_helper_dismissed';
 
 const TAB_DESCRIPTIONS = [
-  { label: 'Dashboard', desc: 'Overview of your VRChat status, recent activity, and quick links.' },
-  { label: 'Friends', desc: 'See which friends are online, in worlds, or offline.' },
-  { label: 'Worlds', desc: 'Browse and search VRChat worlds. Click one to open it in VRChat.' },
-  { label: 'Avatars', desc: 'Manage your uploaded avatars, favorites, and search the VRCDB.' },
-  { label: 'Groups', desc: 'View your VRChat groups and open them in the browser.' },
-  { label: 'Feed / Log', desc: 'See friend activity, join/leave events, and your game history.' },
-  { label: 'Settings', desc: 'Customize themes, visualizer, privacy, and more.' },
+  { label: 'Dashboard',  route: '/',            desc: 'Overview of your VRChat status, recent activity, and quick links.' },
+  { label: 'Friends',    route: '/friends',      desc: 'See which friends are online, in worlds, or offline. Click any friend for details.' },
+  { label: 'Worlds',     route: '/worlds',       desc: 'Browse and search VRChat worlds. Click one to open it in VRChat.' },
+  { label: 'Avatars',    route: '/avatars',      desc: 'Manage your uploaded avatars, favorites, and search the VRCDB.' },
+  { label: 'Groups',     route: '/groups',       desc: 'View your VRChat groups and open them in the browser.' },
+  { label: 'Friend Log', route: '/friend-log',   desc: 'See friend join/leave events, world changes, and your game history.' },
+  { label: 'Settings',   route: '/settings',     desc: 'Customize themes, visualizer, Discord presence, privacy, and more.' },
 ];
 
 export default function TutorialHelper() {
   const [dismissed, setDismissed] = useState(() => !!localStorage.getItem(HELPER_KEY));
   const [open, setOpen] = useState(false);
-  const [tourStep, setTourStep] = useState<number | null>(null);
+  const [tourStep, setTourStepState] = useState<number | null>(null);
   const [tourDone, setTourDone] = useState(false);
-
-  useEffect(() => {
-    if (tourStep === null) return;
-    const t = setTimeout(() => {
-      if (tourStep < TAB_DESCRIPTIONS.length - 1) {
-        setTourStep(s => (s ?? 0) + 1);
-      } else {
-        setTourStep(null);
-        setTourDone(true);
-        setTimeout(() => setTourDone(false), 2500);
-      }
-    }, 2200);
-    return () => clearTimeout(t);
-  }, [tourStep]);
+  const setActiveRoute = useTourStore(s => s.set);
 
   if (dismissed) return null;
+
+  const setTourStep = (step: number | null) => {
+    setTourStepState(step);
+    setActiveRoute(step !== null ? (TAB_DESCRIPTIONS[step]?.route ?? null) : null);
+  };
 
   const dismiss = () => {
     localStorage.setItem(HELPER_KEY, '1');
     setDismissed(true);
     setOpen(false);
+    setActiveRoute(null);
   };
 
   const startTour = () => {
@@ -49,6 +43,17 @@ export default function TutorialHelper() {
   const stopTour = () => {
     setTourStep(null);
     setTourDone(false);
+  };
+
+  const advance = () => {
+    if (tourStep === null) return;
+    if (tourStep < TAB_DESCRIPTIONS.length - 1) {
+      setTourStep(tourStep + 1);
+    } else {
+      setTourStep(null);
+      setTourDone(true);
+      setTimeout(() => setTourDone(false), 2500);
+    }
   };
 
   return (
@@ -92,22 +97,25 @@ export default function TutorialHelper() {
       )}
 
       {tourStep !== null && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-surface-800 border border-surface-700 rounded-xl shadow-2xl px-5 py-3 w-80 animate-fade-in">
-          <div className="flex items-center justify-between mb-1.5">
-            <span className="text-[10px] text-surface-500 tabular-nums">Step {tourStep + 1} / {TAB_DESCRIPTIONS.length}</span>
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-surface-800 border border-surface-700 rounded-xl shadow-2xl px-5 py-4 w-80 animate-fade-in">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[10px] text-surface-500 tabular-nums">
+              Step {tourStep + 1} / {TAB_DESCRIPTIONS.length}
+            </span>
             <button onClick={stopTour} className="text-[10px] text-surface-500 hover:text-surface-300 flex items-center gap-1">
               <X size={10} /> Stop
             </button>
           </div>
-          <div className="text-sm font-semibold text-surface-100 mb-1">{TAB_DESCRIPTIONS[tourStep].label}</div>
-          <div className="text-xs text-surface-400">{TAB_DESCRIPTIONS[tourStep].desc}</div>
-          <div className="mt-2 flex justify-end">
+          <div className="text-sm font-semibold text-surface-100 mb-1.5">
+            {TAB_DESCRIPTIONS[tourStep].label}
+          </div>
+          <div className="text-xs text-surface-400 leading-relaxed">
+            {TAB_DESCRIPTIONS[tourStep].desc}
+          </div>
+          <div className="mt-3 flex justify-end">
             <button
-              onClick={() => {
-                if (tourStep < TAB_DESCRIPTIONS.length - 1) setTourStep(s => (s ?? 0) + 1);
-                else { setTourStep(null); setTourDone(true); setTimeout(() => setTourDone(false), 2500); }
-              }}
-              className="text-xs text-accent-400 hover:text-accent-300"
+              onClick={advance}
+              className="text-xs px-3 py-1.5 rounded bg-accent-600/20 text-accent-400 hover:bg-accent-600/30 font-medium transition-colors"
             >
               {tourStep < TAB_DESCRIPTIONS.length - 1 ? 'Next →' : 'Finish'}
             </button>

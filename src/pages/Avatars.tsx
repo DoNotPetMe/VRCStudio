@@ -68,6 +68,8 @@ export default function AvatarsPage() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [providerId, setProviderIdState] = useState<ProviderId>(getProviderId());
   const [surpriseMeLoading, setSurpriseMeLoading] = useState(false);
+  const [vrcSearchOffset, setVrcSearchOffset] = useState(0);
+  const [vrcSearchHasMore, setVrcSearchHasMore] = useState(false);
 
   useEffect(() => {
     loadFavoriteAvatars();
@@ -105,9 +107,12 @@ export default function AvatarsPage() {
     } else {
       setTab('vrc_search');
       setVrcSearchLoading(true);
+      setVrcSearchOffset(0);
       try {
         const apiTag = t ? `author_tag_${t}` : undefined;
-        setVrcSearchResults(await api.searchAvatars({ query: q || undefined, tag: apiTag, count: 30 }));
+        const results = await api.searchAvatars({ query: q || undefined, tag: apiTag, count: 100 });
+        setVrcSearchResults(results);
+        setVrcSearchHasMore(results.length === 100);
       } catch {}
       setVrcSearchLoading(false);
     }
@@ -160,9 +165,27 @@ export default function AvatarsPage() {
     setSelected(null);
     setTab('vrc_search');
     setVrcSearchLoading(true);
+    setVrcSearchOffset(0);
     setSearchInput(avatar.authorName);
     try {
-      setVrcSearchResults(await api.searchAvatars({ query: avatar.authorName, count: 30 }));
+      const results = await api.searchAvatars({ query: avatar.authorName, count: 100 });
+      setVrcSearchResults(results);
+      setVrcSearchHasMore(results.length === 100);
+    } catch {}
+    setVrcSearchLoading(false);
+  };
+
+  const handleLoadMoreVrc = async () => {
+    setVrcSearchLoading(true);
+    try {
+      const q = searchInput.trim();
+      const t = tagInput.trim();
+      const apiTag = t ? `author_tag_${t}` : undefined;
+      const newOffset = vrcSearchOffset + 100;
+      const more = await api.searchAvatars({ query: q || undefined, tag: apiTag, count: 100, offset: newOffset });
+      setVrcSearchResults(prev => [...prev, ...more]);
+      setVrcSearchOffset(newOffset);
+      setVrcSearchHasMore(more.length === 100);
     } catch {}
     setVrcSearchLoading(false);
   };
@@ -346,6 +369,7 @@ export default function AvatarsPage() {
             description={tab === 'vrc_search' ? 'Try different search terms' : tab === 'favorites' ? 'Avatars you favorite in VRChat will appear here' : "Avatars you've uploaded to VRChat will appear here"}
           />
         ) : (
+          <>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {vrcAvatars.map(avatar => {
               const pinned = isPinned(avatar.id);
@@ -383,6 +407,18 @@ export default function AvatarsPage() {
               );
             })}
           </div>
+          {tab === 'vrc_search' && vrcSearchHasMore && (
+            <div className="flex justify-center pt-4">
+              <button
+                onClick={handleLoadMoreVrc}
+                disabled={vrcSearchLoading}
+                className="btn-secondary text-sm"
+              >
+                {vrcSearchLoading ? 'Loading...' : `Load more (${vrcSearchResults.length} shown)`}
+              </button>
+            </div>
+          )}
+          </>
         )
       )}
     </div>

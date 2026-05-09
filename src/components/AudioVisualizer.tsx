@@ -1,6 +1,12 @@
 import { useEffect, useRef } from 'react';
 import { useThemeStore } from '../stores/themeStore';
 import { useSystemAudio } from '../hooks/useAudioVisualizer';
+import { drawBlockShip } from '../utils/drawBlockShip';
+
+type AutoTier = 'large' | 'medium' | 'small';
+interface AutoAsteroid { x: number; y: number; vx: number; vy: number; r: number; rot: number; rotV: number; sides: number; tier: AutoTier; }
+interface AutoParticle { x: number; y: number; vx: number; vy: number; life: number; maxLife: number; size: number; }
+interface AutoBullet { x: number; y: number; vx: number; vy: number; life: number; }
 
 export default function AudioVisualizer() {
   const cfg = useThemeStore(s => s.theme.visualizer);
@@ -17,10 +23,12 @@ export default function AudioVisualizer() {
 
   const asteroidsRef = useRef<{
     ship: { x: number; y: number; angle: number; t: number };
-    asteroids: Array<{ x: number; y: number; vx: number; vy: number; r: number; rot: number; rotV: number; sides: number }>;
-    bullets: Array<{ x: number; y: number; vx: number; vy: number; life: number }>;
+    asteroids: AutoAsteroid[];
+    bullets: AutoBullet[];
+    particles: AutoParticle[];
     beatCooldown: number;
-    prevEnergy: number;
+    fastEnergy: number;
+    slowEnergy: number;
   } | null>(null);
 
   useEffect(() => {
@@ -194,96 +202,144 @@ export default function AudioVisualizer() {
         if (!asteroidsRef.current) {
           asteroidsRef.current = {
             ship: { x: W / 2, y: H / 2, angle: 0, t: 0 },
-            asteroids: [], bullets: [], beatCooldown: 0, prevEnergy: 0,
+            asteroids: [], bullets: [], particles: [],
+            beatCooldown: 0, fastEnergy: 0, slowEnergy: 0,
           };
         }
         const st = asteroidsRef.current;
 
-        const bassSlice = data ? data.slice(0, Math.floor(data.length * 0.12)) : new Uint8Array(8).fill(50);
-        const bassEnergy = Array.from(bassSlice).reduce((s, v) => s + v / 255, 0) / bassSlice.length * cfg.sensitivity;
-        st.prevEnergy = st.prevEnergy * 0.88 + bassEnergy * 0.12;
+        // Bass energy with fast+slow EMAs for beat detection
+        const bassN = data ? Math.max(1, Math.floor(data.length * 0.12)) : 8;
+        const rawBass = data
+          ? Array.from(data.slice(0, bassN)).reduce((s, v) => s + v / 255, 0) / bassN * cfg.sensitivity
+          : 0.3;
+        st.fastEnergy = st.fastEnergy * 0.55 + rawBass * 0.45;
+        st.slowEnergy = st.slowEnergy * 0.92 + rawBass * 0.08;
+        const isBeat = data !== null && st.fastEnergy > st.slowEnergy * 1.5 + 0.08 && st.beatCooldown === 0;
 
-        st.ship.t += 0.008;
+        // Ship Lissajous orbit
+        st.ship.t += 0.007;
         const prevX = st.ship.x, prevY = st.ship.y;
-        st.ship.x = W / 2 + Math.sin(st.ship.t * 1.3) * W * 0.28;
-        st.ship.y = H / 2 + Math.sin(st.ship.t * 0.9) * H * 0.22;
+        st.ship.x = W / 2 + Math.sin(st.ship.t * 1.3) * W * 0.26;
+        st.ship.y = H / 2 + Math.sin(st.ship.t * 0.9) * H * 0.20;
         st.ship.angle = Math.atan2(st.ship.y - prevY, st.ship.x - prevX);
 
-        const maxAst = Math.floor(3 + st.prevEnergy * 8);
-        if (st.asteroids.length < maxAst && Math.random() < 0.04) {
+        // Spawn large asteroids
+        const maxAst = Math.floor(4 + st.slowEnergy * 6);
+        if (st.asteroids.length < maxAst && Math.random() < 0.035) {
           const edge = Math.floor(Math.random() * 4);
-          const ax = edge === 0 ? 0 : edge === 1 ? W : Math.random() * W;
-          const ay = edge === 2 ? 0 : edge === 3 ? H : Math.random() * H;
-          const spd = 0.5 + st.prevEnergy * 1.5;
+          const ax = edge === 0 ? -20 : edge === 1 ? W + 20 : Math.random() * W;
+          const ay = edge === 2 ? -20 : edge === 3 ? H + 20 : Math.random() * H;
+          const spd = 0.4 + st.slowEnergy * 1.2;
           st.asteroids.push({
             x: ax, y: ay,
-            vx: (W / 2 - ax) / W * spd + (Math.random() - 0.5) * spd,
-            vy: (H / 2 - ay) / H * spd + (Math.random() - 0.5) * spd,
-            r: 12 + Math.random() * 20, rot: Math.random() * Math.PI * 2,
+            vx: (W / 2 - ax) / W * spd + (Math.random() - 0.5) * spd * 0.6,
+            vy: (H / 2 - ay) / H * spd + (Math.random() - 0.5) * spd * 0.6,
+            r: 18 + Math.random() * 18, rot: Math.random() * Math.PI * 2,
             rotV: (Math.random() - 0.5) * 0.04, sides: 6 + Math.floor(Math.random() * 4),
+            tier: 'large',
           });
         }
 
+        // Beat → fire bullet
         st.beatCooldown = Math.max(0, st.beatCooldown - 1);
-        if (bassEnergy > st.prevEnergy * 1.35 + 0.12 && st.beatCooldown === 0) {
-          st.bullets.push({
-            x: st.ship.x, y: st.ship.y,
-            vx: Math.cos(st.ship.angle) * (9 + st.prevEnergy * 4),
-            vy: Math.sin(st.ship.angle) * (9 + st.prevEnergy * 4),
-            life: 55,
-          });
-          st.beatCooldown = 8;
+        if (isBeat) {
+          const spd = 7 + st.fastEnergy * 5;
+          st.bullets.push({ x: st.ship.x, y: st.ship.y, vx: Math.cos(st.ship.angle) * spd, vy: Math.sin(st.ship.angle) * spd, life: 52 });
+          st.beatCooldown = 7;
         }
 
+        // Move asteroids
         for (const a of st.asteroids) {
           a.x = (a.x + a.vx + W) % W;
           a.y = (a.y + a.vy + H) % H;
           a.rot += a.rotV;
         }
 
+        // Bullets vs asteroids (with splitting)
         st.bullets = st.bullets.filter(b => {
           b.x += b.vx; b.y += b.vy; b.life--;
-          if (b.life <= 0 || b.x < 0 || b.x > W || b.y < 0 || b.y > H) return false;
-          st.asteroids = st.asteroids.filter(a => {
+          if (b.life <= 0 || b.x < -20 || b.x > W + 20 || b.y < -20 || b.y > H + 20) return false;
+          let hit = false;
+          const kept: AutoAsteroid[] = [];
+          for (const a of st.asteroids) {
             const dx = b.x - a.x, dy = b.y - a.y;
-            return dx * dx + dy * dy > a.r * a.r;
-          });
-          return true;
+            if (!hit && dx * dx + dy * dy <= a.r * a.r) {
+              hit = true;
+              // Spawn particles
+              const pCount = 6 + Math.floor(a.r / 4);
+              for (let pi = 0; pi < pCount; pi++) {
+                const ang = Math.random() * Math.PI * 2;
+                const spd2 = 0.5 + Math.random() * 2 * (a.r / 20);
+                const life = 30 + Math.floor(Math.random() * 35);
+                st.particles.push({ x: a.x, y: a.y, vx: Math.cos(ang) * spd2, vy: Math.sin(ang) * spd2, life, maxLife: life, size: 1 + Math.random() * 2 });
+              }
+              // Split
+              if (a.tier === 'large') {
+                for (let i = 0; i < 2; i++) {
+                  const ang = Math.random() * Math.PI * 2;
+                  const spd2 = 0.7 + Math.random() * 0.7;
+                  kept.push({ x: a.x, y: a.y, vx: a.vx + Math.cos(ang) * spd2, vy: a.vy + Math.sin(ang) * spd2, r: a.r * 0.52, rot: Math.random() * Math.PI * 2, rotV: (Math.random() - 0.5) * 0.07, sides: 5 + Math.floor(Math.random() * 3), tier: 'medium' });
+                }
+              } else if (a.tier === 'medium') {
+                for (let i = 0; i < 2 + Math.floor(Math.random() * 2); i++) {
+                  const ang = Math.random() * Math.PI * 2;
+                  const spd2 = 1.2 + Math.random() * 1.2;
+                  kept.push({ x: a.x, y: a.y, vx: a.vx + Math.cos(ang) * spd2, vy: a.vy + Math.sin(ang) * spd2, r: a.r * 0.50, rot: Math.random() * Math.PI * 2, rotV: (Math.random() - 0.5) * 0.10, sides: 4 + Math.floor(Math.random() * 3), tier: 'small' });
+                }
+              }
+            } else {
+              kept.push(a);
+            }
+          }
+          st.asteroids = kept;
+          return !hit;
         });
+
+        // Particles
+        st.particles = st.particles.filter(p => { p.x += p.vx; p.y += p.vy; p.life--; p.vx *= 0.97; p.vy *= 0.97; return p.life > 0; });
 
         const color = getColor(0, bars);
 
-        ctx.fillStyle = 'rgba(255,255,255,0.2)';
-        for (let s = 0; s < Math.floor(W * H / 50000); s++) {
+        // Starfield
+        ctx.fillStyle = 'rgba(255,255,255,0.18)';
+        for (let s = 0; s < Math.floor(W * H / 55000); s++) {
           ctx.fillRect((s * 7919 + 3) % W, (s * 6271 + 11) % H, 1, 1);
         }
 
+        // Particles
+        for (const p of st.particles) {
+          const alpha = p.life / p.maxLife;
+          ctx.fillStyle = `rgba(255,${120 + Math.floor(alpha * 120)},40,${alpha.toFixed(2)})`;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size * alpha + 0.5, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        // Asteroids
         for (const a of st.asteroids) {
           ctx.beginPath();
           for (let s = 0; s < a.sides; s++) {
             const ang = a.rot + (s / a.sides) * Math.PI * 2;
-            const r = a.r * (0.75 + 0.25 * Math.sin(s * 3));
+            const r = a.r * (0.75 + 0.25 * Math.sin(s * 2.5));
             s === 0 ? ctx.moveTo(a.x + Math.cos(ang) * r, a.y + Math.sin(ang) * r)
                      : ctx.lineTo(a.x + Math.cos(ang) * r, a.y + Math.sin(ang) * r);
           }
           ctx.closePath();
-          ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.globalAlpha = 0.7; ctx.stroke(); ctx.globalAlpha = 1;
+          ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.globalAlpha = 0.75; ctx.stroke(); ctx.globalAlpha = 1;
         }
 
+        // Bullets
         ctx.fillStyle = color;
         for (const b of st.bullets) {
-          ctx.beginPath(); ctx.arc(b.x, b.y, 2, 0, Math.PI * 2); ctx.fill();
+          ctx.beginPath(); ctx.arc(b.x, b.y, 2.5, 0, Math.PI * 2); ctx.fill();
         }
 
-        const ss = 10;
+        // Block ship
         ctx.save();
         ctx.translate(st.ship.x, st.ship.y);
         ctx.rotate(st.ship.angle);
-        ctx.beginPath();
-        ctx.moveTo(ss, 0); ctx.lineTo(-ss * 0.7, -ss * 0.5);
-        ctx.lineTo(-ss * 0.5, 0); ctx.lineTo(-ss * 0.7, ss * 0.5);
-        ctx.closePath();
-        ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.stroke();
+        drawBlockShip(ctx, color);
         ctx.restore();
 
       } else if (cfg.style === 'dots') {

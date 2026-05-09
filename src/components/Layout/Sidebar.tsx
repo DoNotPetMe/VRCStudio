@@ -9,6 +9,7 @@ import { useAuthStore } from '../../stores/authStore';
 import { useFriendStore } from '../../stores/friendStore';
 import { useThemeStore } from '../../stores/themeStore';
 import { useAvatarSwitcherStore } from '../../stores/avatarSwitcherStore';
+import { useTourStore } from '../../stores/tourStore';
 import StatusPresetPanel from '../StatusPresetPanel';
 import TutorialHelper from '../TutorialHelper';
 import api from '../../api/vrchat';
@@ -61,6 +62,7 @@ export default function Sidebar() {
   const { onlineFriends } = useFriendStore();
   const { theme } = useThemeStore();
   const { toggle: toggleSwitcher, isOpen: switcherOpen } = useAvatarSwitcherStore();
+  const tourActiveRoute = useTourStore(s => s.activeRoute);
   const [showPresets, setShowPresets] = useState(false);
 
   const avatarUrl = user ? getBestAvatarUrl(user) : '';
@@ -77,24 +79,32 @@ export default function Sidebar() {
 
   const renderNavItem = ({ to, icon: Icon, label, badge }: {
     to: string; icon: typeof LayoutDashboard; label: string; badge?: 'friends';
-  }) => (
-    <NavLink
-      key={to}
-      to={to}
-      end={to === '/'}
-      className={({ isActive }) =>
-        `sidebar-link group ${isActive ? 'active' : ''}`
-      }
-    >
-      <Icon size={16} strokeWidth={1.8} />
-      <span className="truncate flex-1">{label}</span>
-      {badge === 'friends' && onlineFriends.length > 0 && (
-        <span className="text-[10px] bg-green-500/15 text-green-400 px-1.5 py-0.5 rounded-full font-semibold flex-shrink-0 tabular-nums">
-          {onlineFriends.length}
-        </span>
-      )}
-    </NavLink>
-  );
+  }) => {
+    const isTourActive = tourActiveRoute === to;
+    return (
+      <NavLink
+        key={to}
+        to={to}
+        end={to === '/'}
+        className={({ isActive }) =>
+          `sidebar-link group ${isActive ? 'active' : ''} ${isTourActive ? 'ring-2 ring-accent-400/70 ring-inset bg-accent-500/15' : ''}`
+        }
+      >
+        <Icon size={16} strokeWidth={1.8} />
+        <span className="truncate flex-1">{label}</span>
+        {isTourActive && (
+          <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-accent-500/30 text-accent-300 font-semibold flex-shrink-0">
+            ←
+          </span>
+        )}
+        {badge === 'friends' && onlineFriends.length > 0 && (
+          <span className="text-[10px] bg-green-500/15 text-green-400 px-1.5 py-0.5 rounded-full font-semibold flex-shrink-0 tabular-nums">
+            {onlineFriends.length}
+          </span>
+        )}
+      </NavLink>
+    );
+  };
 
   return (
     <aside className={`${sidebarW} bg-surface-900/60 border-r border-surface-800/40 flex flex-col h-full transition-all`}>
