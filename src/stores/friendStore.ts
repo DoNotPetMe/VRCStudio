@@ -1,7 +1,6 @@
 import { create } from 'zustand';
 import api from '../api/vrchat';
 import { savePersistentData, loadPersistentData } from '../utils/persistentStorage';
-import { logWorldVisit, logWorldExit } from '../utils/worldAnalytics';
 import type { VRCUser, FriendNote } from '../types/vrchat';
 import { useFeedStore } from './feedStore';
 
@@ -90,13 +89,6 @@ export const useFriendStore = create<FriendState>((set, get) => ({
             newValue: friend.location,
           });
 
-          // Track world change (non-blocking)
-          if (oldWorldId && oldWorldId !== newWorldId) {
-            logWorldExit(oldWorldId)
-              .catch(e => console.warn('[Analytics] Failed to track world exit:', e));
-          }
-          logWorldVisit(newWorldId, newWorldId, Date.now())
-            .catch(e => console.warn('[Analytics] Failed to track world visit:', e));
         }
 
         if (!isFirstFetch && old && old.status !== friend.status) {

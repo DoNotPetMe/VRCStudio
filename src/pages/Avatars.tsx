@@ -122,7 +122,7 @@ export default function AvatarsPage() {
     setVrcdbLoading(true);
     setVrcdbError(null);
     try {
-      const results = await vrcdb.search(q, 40);
+      const results = await vrcdb.search(q);
       setVrcdbResults(results);
       if (results.length === 0) setVrcdbError(null);
     } catch (err) {
@@ -191,7 +191,7 @@ export default function AvatarsPage() {
   };
 
   const searchPlaceholder = tab === 'vrcdb'
-    ? 'Search VRCDB — name, author, or avtr_ ID...'
+    ? 'Search Database — name, author, or avtr_ ID...'
     : 'Search avatars...';
 
   const vrcAvatars = tab === 'own' ? ownAvatars : tab === 'favorites' ? favoriteAvatars : vrcSearchResults;
@@ -314,7 +314,7 @@ export default function AvatarsPage() {
           { key: 'own'        as AvatarTab, icon: Shirt,    label: `My Uploads${ownAvatars.length ? ` (${ownAvatars.length})` : ''}` },
           { key: 'favorites'  as AvatarTab, icon: Heart,    label: `Favorites${favoriteAvatars.length ? ` (${favoriteAvatars.length})` : ''}` },
           ...(vrcSearchResults.length > 0 ? [{ key: 'vrc_search' as AvatarTab, icon: Search, label: `VRChat (${vrcSearchResults.length})` }] : []),
-          { key: 'vrcdb'      as AvatarTab, icon: Database, label: `VRCDB${vrcdbResults.length ? ` (${vrcdbResults.length})` : ''}` },
+          { key: 'vrcdb'      as AvatarTab, icon: Database, label: `Database${vrcdbResults.length ? ` (${vrcdbResults.length})` : ''}` },
         ] as const).map(({ key, icon: Icon, label }) => (
           <button key={key} onClick={() => setTab(key)}
             className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
@@ -427,7 +427,7 @@ export default function AvatarsPage() {
 
 const VRCDB_PAGE_SIZE = 20;
 
-function VrcdbPanel({
+export function VrcdbPanel({
   results, loading, error, copiedId, providerId,
   onCopy, onWear, onChangeProvider, onSearch, hasQuery, onFindByAuthor,
 }: {
@@ -486,7 +486,7 @@ function VrcdbPanel({
       ) : results.length === 0 ? (
         <div className="text-center py-16 text-surface-500">
           <Database size={40} className="mx-auto mb-3 opacity-30" />
-          <p className="font-semibold">{hasQuery ? 'No avatars found' : 'Search the VRCDB'}</p>
+          <p className="font-semibold">{hasQuery ? 'No avatars found' : 'Search the Database'}</p>
           <p className="text-xs mt-1 text-surface-600">{hasQuery ? 'Try a different name, author, or paste an avtr_ ID' : 'Type a name or author in the search bar above and press Search'}</p>
         </div>
       ) : (
@@ -584,7 +584,7 @@ function VrcdbPanel({
         </>
       )}
       <div className="px-3 py-2 border-t border-surface-800/40 text-[10px] text-surface-600 leading-relaxed">
-        Avatar data is provided by third-party databases (avtrdb.com, worldbalancer.com, avtr.zip).
+        Avatar data is provided by third-party databases (avtrdb.com).
         Database holder wanting your data removed?{' '}
         <a href="mailto:vrcstudio@proton.me" className="text-accent-400 hover:underline">vrcstudio@proton.me</a>
       </div>
