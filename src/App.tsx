@@ -157,6 +157,11 @@ export default function App() {
     window.electronAPI?.setAlwaysOnTop(settings.general.alwaysOnTop);
   }, []);
 
+  // Re-apply theme after login so CSS custom properties are always in sync
+  useEffect(() => {
+    if (isLoggedIn) applyTheme();
+  }, [isLoggedIn]);
+
   usePolling();
 
   if (isLoading && !isLoggedIn) {

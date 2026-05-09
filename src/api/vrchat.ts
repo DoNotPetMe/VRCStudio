@@ -73,7 +73,10 @@ class VRChatAPI {
 
     if (!res.ok) {
       const msg = res.data?.error?.message || `API request failed: ${res.status}`;
-      if (res.status === 401) this.onSessionExpired?.();
+      const isAuthError = res.status === 401 && (
+        !msg || msg.toLowerCase().includes('credentials') || msg.toLowerCase().includes('auth') || msg.toLowerCase().includes('login')
+      );
+      if (isAuthError) this.onSessionExpired?.();
       throw new APIError(msg, res.status, res.data);
     }
 
@@ -90,7 +93,11 @@ class VRChatAPI {
 
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
-      if (res.status === 401) this.onSessionExpired?.();
+      const msg401 = body?.error?.message || '';
+      const isAuthError = res.status === 401 && (
+        !msg401 || msg401.toLowerCase().includes('credentials') || msg401.toLowerCase().includes('auth') || msg401.toLowerCase().includes('login')
+      );
+      if (isAuthError) this.onSessionExpired?.();
       throw new APIError(
         body?.error?.message || `API request failed: ${res.status}`,
         res.status,

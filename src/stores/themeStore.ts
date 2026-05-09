@@ -244,7 +244,9 @@ export const useThemeStore = create<ThemeState>((set, get) => ({
 
     // Glass effect opacity
     const glassMap: Record<string, string> = { none: '1', light: '0.85', medium: '0.7' };
+    const glassSolidMap: Record<string, string> = { none: '1', light: '0.93', medium: '0.85' };
     root.style.setProperty('--glass-opacity', glassMap[theme.glassEffect ?? 'medium']);
+    root.style.setProperty('--glass-opacity-solid', glassSolidMap[theme.glassEffect ?? 'medium']);
 
     // Premium theme — applied as a class on <html> so CSS in globals.css can pick it up
     root.classList.remove('premium-iridescent', 'premium-holographic', 'premium-aurora', 'premium-cosmic');

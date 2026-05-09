@@ -70,11 +70,13 @@
 
 @layer components {
   .glass-panel {
-    @apply bg-surface-900/70 backdrop-blur-xl border border-surface-800/40 rounded-xl;
+    background-color: rgb(var(--surface-900) / var(--glass-opacity, 0.7));
+    @apply backdrop-blur-xl border border-surface-800/40 rounded-xl;
   }
 
   .glass-panel-solid {
-    @apply bg-surface-900/90 border border-surface-800/40 rounded-xl;
+    background-color: rgb(var(--surface-900) / var(--glass-opacity-solid, 0.9));
+    @apply border border-surface-800/40 rounded-xl;
   }
 
   .btn-primary {
