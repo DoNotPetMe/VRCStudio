@@ -7,6 +7,7 @@ interface ElectronAPI {
   quit: () => Promise<void>;
   isMaximized: () => Promise<boolean>;
   setMinimizeToTray: (value: boolean) => Promise<void>;
+  setAlwaysOnTop: (value: boolean) => Promise<void>;
   openExternal: (url: string) => Promise<void>;
   readFile: (path: string) => Promise<{ success: boolean; content?: string; error?: string }>;
   listDir: (path: string) => Promise<{ success: boolean; entries?: Array<{ name: string; isDirectory: boolean; path: string }>; error?: string }>;
