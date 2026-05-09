@@ -106,7 +106,8 @@ export default function AvatarsPage() {
       setTab('vrc_search');
       setVrcSearchLoading(true);
       try {
-        setVrcSearchResults(await api.searchAvatars({ query: q || undefined, tag: t || undefined, count: 30 }));
+        const apiTag = t ? `author_tag_${t}` : undefined;
+        setVrcSearchResults(await api.searchAvatars({ query: q || undefined, tag: apiTag, count: 30 }));
       } catch {}
       setVrcSearchLoading(false);
     }
@@ -147,7 +148,9 @@ export default function AvatarsPage() {
   const handleSurpriseMe = async () => {
     setSurpriseMeLoading(true);
     try {
-      const results = await api.searchAvatars({ featured: true, sort: 'popularity', count: 50 });
+      const terms = ['cute', 'anime', 'robot', 'dragon', 'fox', 'wolf', 'miku', 'knight', 'witch', 'cat'];
+      const q = terms[Math.floor(Math.random() * terms.length)];
+      const results = await api.searchAvatars({ query: q, sort: 'updated', count: 50 });
       if (results.length > 0) setSelected(results[Math.floor(Math.random() * results.length)]);
     } catch {}
     setSurpriseMeLoading(false);
@@ -322,6 +325,17 @@ export default function AvatarsPage() {
           onChangeProvider={changeProvider}
           onSearch={() => searchVrcdb(searchInput.trim())}
           hasQuery={!!searchInput.trim()}
+          onFindByAuthor={async (authorId, authorName) => {
+            setVrcdbLoading(true);
+            setVrcdbError(null);
+            try {
+              const r = await vrcdb.getByAuthor(authorId);
+              setVrcdbResults(r.length > 0 ? r : await vrcdb.search(authorName));
+            } catch (err) {
+              setVrcdbError(err instanceof Error ? err.message : 'Search failed');
+            }
+            setVrcdbLoading(false);
+          }}
         />
       ) : (
         /* ── VRChat tabs content ── */
@@ -383,6 +397,13 @@ export default function AvatarsPage() {
                   >
                     {pinned ? <Pin size={11} /> : <PinOff size={11} />}
                   </button>
+                  <button
+                    onClick={e => { e.stopPropagation(); handleFindByCreator(avatar); }}
+                    className="absolute bottom-2 left-2 text-[10px] px-2 py-0.5 rounded bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/80"
+                    title={`More by ${avatar.authorName}`}
+                  >
+                    more
+                  </button>
                 </div>
               );
             })}
@@ -399,7 +420,7 @@ const VRCDB_PAGE_SIZE = 20;
 
 function VrcdbPanel({
   results, loading, error, copiedId, providerId,
-  onCopy, onWear, onChangeProvider, onSearch, hasQuery,
+  onCopy, onWear, onChangeProvider, onSearch, hasQuery, onFindByAuthor,
 }: {
   results: VRCDBAvatar[];
   loading: boolean;
@@ -411,6 +432,7 @@ function VrcdbPanel({
   onChangeProvider: (id: ProviderId) => void;
   onSearch: () => void;
   hasQuery: boolean;
+  onFindByAuthor: (authorId: string, authorName: string) => void;
 }) {
   const [wearingId, setWearingId] = useState<string | null>(null);
   const [wornId, setWornId] = useState<string | null>(null);
@@ -527,6 +549,12 @@ function VrcdbPanel({
                       >
                         {isWorn ? <><Check size={11} /> Worn</> : isWearing ? 'Switching...' : 'Wear'}
                       </button>
+                      <button onClick={() => onFindByAuthor(avatar.authorId, avatar.authorName)}
+                        className="text-[10px] px-2 py-1.5 rounded-lg border border-surface-700 hover:border-surface-500 transition-colors text-surface-400 hover:text-surface-200"
+                        title={`More by ${avatar.authorName}`}
+                      >
+                        more
+                      </button>
                       <button
                         onClick={() => onCopy(avatar.id)}
                         className="p-1.5 rounded-lg border border-surface-700 hover:border-surface-500 transition-colors text-surface-400 hover:text-surface-200"
@@ -624,6 +652,11 @@ function VrcdbPanel({
           )}
         </>
       )}
+      <div className="px-3 py-2 border-t border-surface-800/40 text-[10px] text-surface-600 leading-relaxed">
+        Avatar data is provided by third-party databases (avtrdb.com, worldbalancer.com, avtr.zip).
+        Database holder wanting your data removed?{' '}
+        <a href="mailto:vrcstudio@proton.me" className="text-accent-400 hover:underline">vrcstudio@proton.me</a>
+      </div>
     </div>
   );
 }

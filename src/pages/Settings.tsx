@@ -705,12 +705,11 @@ export default function SettingsPage() {
                 <div className={theme.visualizer.enabled ? '' : 'opacity-50 pointer-events-none'}>
                   <label className="block text-sm font-medium mb-2">Style</label>
                   <OptionRow
-                    options={['bars', 'blocks', 'wave', 'radial', 'dots']}
-                    labels={{ bars: 'Bars', blocks: 'Blocks', wave: 'Wave', radial: 'Radial', dots: 'Dots' }}
+                    options={['bars', 'blocks', 'wave', 'radial', 'dots', 'asteroids']}
+                    labels={{ bars: 'Bars', blocks: 'Blocks', wave: 'Wave', radial: 'Radial', dots: 'Dots', asteroids: 'Asteroids' }}
                     value={theme.visualizer.style ?? 'bars'}
-                    onChange={v => setVisualizer({ style: v as 'bars' | 'blocks' | 'wave' | 'radial' | 'dots' })}
+                    onChange={v => setVisualizer({ style: v as 'bars' | 'blocks' | 'wave' | 'radial' | 'dots' | 'asteroids' })}
                   />
-
                   <label className="block text-sm font-medium mt-4 mb-2">Frequency Focus</label>
                   <OptionRow
                     options={['all', 'bass', 'mids', 'treble']}
@@ -936,6 +935,20 @@ export default function SettingsPage() {
                   onChange={v => updateGeneral({ checkForUpdates: v })}
                 />
               </Section>
+              <Section title="UI Helpers" icon={SettingsIcon}>
+                <div className="flex items-center justify-between gap-4 py-1">
+                  <div>
+                    <p className="text-sm font-medium">Show "Lost?" helper button</p>
+                    <p className="text-xs text-surface-500 mt-0.5">Restore the getting-started helper tab in the sidebar</p>
+                  </div>
+                  <button
+                    onClick={() => { localStorage.removeItem('vrcstudio_helper_dismissed'); window.location.reload(); }}
+                    className="btn-secondary text-xs flex-shrink-0"
+                  >
+                    Re-enable
+                  </button>
+                </div>
+              </Section>
             </>
           )}
 
@@ -1106,7 +1119,7 @@ export default function SettingsPage() {
                 </p>
               </div>
               <div className="pt-2 text-center">
-                <p className="text-[11px] text-surface-600">Made by DoNotResurrect_</p>
+                <p className="text-[11px] text-surface-600">Made by DoNotPetMe or DoNotResurrect_ (on vrc)</p>
               </div>
             </Section>
           )}

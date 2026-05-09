@@ -38,7 +38,7 @@ export default function GroupsPage() {
 
   if (selectedGroup) {
     const handleVisitGroup = () => {
-      const url = `https://vrchat.com/home/group/${selectedGroup.shortCode}.${selectedGroup.discriminator}`;
+      const url = `https://vrchat.com/home/group/${selectedGroup.id}`;
       if (window.electronAPI?.openExternal) {
         window.electronAPI.openExternal(url);
       } else {

@@ -2,7 +2,7 @@ import { create } from 'zustand';
 
 export interface VisualizerConfig {
   enabled: boolean;
-  style: 'bars' | 'blocks' | 'wave' | 'radial' | 'dots';
+  style: 'bars' | 'blocks' | 'wave' | 'radial' | 'dots' | 'asteroids';
   sensitivity: number;          // 0.5 – 3
   barCount: number;             // 16 – 128
   focus: 'all' | 'bass' | 'mids' | 'treble';

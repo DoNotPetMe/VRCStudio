@@ -6,6 +6,7 @@ import type { VRCDBAvatar } from '../api/vrcdb';
 import { useAvatarSwitcherStore } from '../stores/avatarSwitcherStore';
 import { useAuthStore } from '../stores/authStore';
 import type { VRCAvatar } from '../types/vrchat';
+import AvatarPreviewModal from './AvatarPreviewModal';
 
 interface Props {
   open: boolean;
@@ -33,6 +34,7 @@ export default function AvatarSwitcher({ open, onClose }: Props) {
   const [vrcdbLoading, setVrcdbLoading] = useState(false);
   const [vrcdbError, setVrcdbError] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [previewAvatar, setPreviewAvatar] = useState<VRCAvatar | null>(null);
 
   const panelRef = useRef<HTMLDivElement>(null);
   const filterRef = useRef<HTMLInputElement>(null);
@@ -250,7 +252,8 @@ export default function AvatarSwitcher({ open, onClose }: Props) {
                     {pinnedAvatars.map(a => (
                       <AvatarRow key={a.id} avatar={a} isCurrent={a.id === currentAvatarId}
                         isPinned={isPinned(a.id)} isWearing={wearingId === a.id} isWorn={wornId === a.id}
-                        onWear={() => handleWear(a.id)} onTogglePin={() => togglePin(a.id)} />
+                        onWear={() => handleWear(a.id)} onTogglePin={() => togglePin(a.id)}
+                        onPreview={() => setPreviewAvatar(a)} />
                     ))}
                   </Section>
                 )}
@@ -259,7 +262,8 @@ export default function AvatarSwitcher({ open, onClose }: Props) {
                     {recentAvatars.map(a => (
                       <AvatarRow key={a.id} avatar={a} isCurrent={a.id === currentAvatarId}
                         isPinned={isPinned(a.id)} isWearing={wearingId === a.id} isWorn={wornId === a.id}
-                        onWear={() => handleWear(a.id)} onTogglePin={() => togglePin(a.id)} showRecent />
+                        onWear={() => handleWear(a.id)} onTogglePin={() => togglePin(a.id)} showRecent
+                        onPreview={() => setPreviewAvatar(a)} />
                     ))}
                   </Section>
                 )}
@@ -268,7 +272,8 @@ export default function AvatarSwitcher({ open, onClose }: Props) {
                     {restAvatars.map(a => (
                       <AvatarRow key={a.id} avatar={a} isCurrent={a.id === currentAvatarId}
                         isPinned={isPinned(a.id)} isWearing={wearingId === a.id} isWorn={wornId === a.id}
-                        onWear={() => handleWear(a.id)} onTogglePin={() => togglePin(a.id)} />
+                        onWear={() => handleWear(a.id)} onTogglePin={() => togglePin(a.id)}
+                        onPreview={() => setPreviewAvatar(a)} />
                     ))}
                   </Section>
                 )}
@@ -343,10 +348,19 @@ export default function AvatarSwitcher({ open, onClose }: Props) {
         </div>
 
         {/* Footer */}
-        <div className="px-4 py-2 border-t border-surface-800/40 flex-shrink-0">
-          <p className="text-[10px] text-surface-700 text-center">Esc to close · Ctrl+Shift+A to toggle</p>
+        <div className="flex-shrink-0">
+          {mode === 'vrcdb' && (
+            <div className="px-3 py-1.5 border-t border-surface-800/40 text-[9px] text-surface-700 leading-relaxed">
+              Data from third-party DBs (avtrdb.com, worldbalancer.com, avtr.zip). Removal:{' '}
+              <a href="mailto:vrcstudio@proton.me" className="text-accent-400 hover:underline">vrcstudio@proton.me</a>
+            </div>
+          )}
+          <div className="px-4 py-2 border-t border-surface-800/40">
+            <p className="text-[10px] text-surface-700 text-center">Esc to close · Ctrl+Shift+A to toggle</p>
+          </div>
         </div>
       </div>
+      {previewAvatar && <AvatarPreviewModal avatar={previewAvatar} onClose={() => setPreviewAvatar(null)} />}
     </div>
   );
 }
@@ -364,7 +378,7 @@ function Section({ label, children }: { label: string; children: React.ReactNode
 
 function AvatarRow({
   avatar, isCurrent, isPinned, isWearing, isWorn, showRecent,
-  onWear, onTogglePin,
+  onWear, onTogglePin, onPreview,
 }: {
   avatar: VRCAvatar;
   isCurrent: boolean;
@@ -374,12 +388,15 @@ function AvatarRow({
   showRecent?: boolean;
   onWear: () => void;
   onTogglePin: () => void;
+  onPreview: () => void;
 }) {
   const imgUrl = avatar.thumbnailImageUrl || avatar.imageUrl;
   return (
     <div className={`group flex items-center gap-2.5 px-3 py-1.5 hover:bg-surface-800/60 transition-colors ${isCurrent ? 'bg-accent-500/8' : ''}`}>
       <div className="relative flex-shrink-0">
-        <img src={imgUrl} alt="" className="w-9 h-9 rounded-lg object-cover bg-surface-800" loading="lazy" />
+        <button onClick={onPreview} className="block" title="Preview">
+          <img src={imgUrl} alt="" className="w-9 h-9 rounded-lg object-cover bg-surface-800 hover:ring-2 hover:ring-accent-400 transition-all cursor-zoom-in" loading="lazy" />
+        </button>
         {isCurrent && (
           <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 rounded-full ring-2 ring-surface-900 flex items-center justify-center">
             <Check size={7} strokeWidth={3} className="text-white" />

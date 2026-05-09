@@ -10,6 +10,7 @@ import { useFriendStore } from '../../stores/friendStore';
 import { useThemeStore } from '../../stores/themeStore';
 import { useAvatarSwitcherStore } from '../../stores/avatarSwitcherStore';
 import StatusPresetPanel from '../StatusPresetPanel';
+import TutorialHelper from '../TutorialHelper';
 import api from '../../api/vrchat';
 import { getBestAvatarUrl } from '../../utils/avatar';
 import { hasVRCPlus } from '../../utils/avatarImage';
@@ -180,6 +181,9 @@ export default function Sidebar() {
           </div>
         </div>
       </nav>
+
+      {/* Helper */}
+      <TutorialHelper />
 
       {/* Bottom */}
       <div className="p-2 border-t border-surface-800/40 space-y-0.5">
