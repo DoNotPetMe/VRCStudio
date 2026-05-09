@@ -1,8 +1,8 @@
 import { useEffect, Component, ErrorInfo, ReactNode } from 'react';
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { useAuthStore } from './stores/authStore';
-import { useThemeStore } from './stores/themeStore';
-import { useSettingsStore } from './stores/settingsStore';
+import { useThemeStore, restoreThemeFromDisk } from './stores/themeStore';
+import { useSettingsStore, restoreSettingsFromDisk } from './stores/settingsStore';
 import { usePolling } from './hooks/usePolling';
 import { useDiscordRPC } from './hooks/useDiscordRPC';
 import { requestNotificationPermission } from './utils/notifications';
@@ -150,11 +150,13 @@ export default function App() {
   useEffect(() => {
     applyTheme();
     requestNotificationPermission();
+    // Restore from persistent disk storage if localStorage is empty (crash recovery)
+    Promise.all([restoreThemeFromDisk(), restoreSettingsFromDisk()]).then(() => {
+      const { settings } = useSettingsStore.getState();
+      window.electronAPI?.setMinimizeToTray(settings.general.minimizeToTray);
+      window.electronAPI?.setAlwaysOnTop(settings.general.alwaysOnTop);
+    });
     restoreSession();
-    // Sync window-related settings to Electron main process
-    const { settings } = useSettingsStore.getState();
-    window.electronAPI?.setMinimizeToTray(settings.general.minimizeToTray);
-    window.electronAPI?.setAlwaysOnTop(settings.general.alwaysOnTop);
   }, []);
 
   // Re-apply theme after login so CSS custom properties are always in sync

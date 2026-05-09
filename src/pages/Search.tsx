@@ -106,6 +106,7 @@ export default function SearchPage() {
           <SearchInput
             value={query}
             onChange={setQuery}
+            onEnter={handleSearch}
             placeholder="Search users, worlds, avatars... or paste an ID/URL"
             autoFocus
           />

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { AppSettings } from '../types/vrchat';
+import { savePersistentData, loadPersistentData } from '../utils/persistentStorage';
 
 const SETTINGS_KEY = 'vrcstudio_settings';
 
@@ -84,7 +85,9 @@ function loadSettings(): AppSettings {
 
 function saveSettings(settings: AppSettings) {
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  savePersistentData('app_settings', settings).catch(() => {});
 }
+
 
 interface SettingsState {
   settings: AppSettings;
@@ -148,3 +151,19 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     set({ settings: defaultSettings });
   },
 }));
+
+export async function restoreSettingsFromDisk() {
+  const persisted = await loadPersistentData<Partial<AppSettings>>('app_settings');
+  if (!persisted || localStorage.getItem(SETTINGS_KEY)) return;
+  const merged: AppSettings = {
+    general:       { ...defaultSettings.general,       ...(persisted.general ?? {}) },
+    notifications: { ...defaultSettings.notifications, ...(persisted.notifications ?? {}) },
+    polling:       { ...defaultSettings.polling,       ...(persisted.polling ?? {}) },
+    display:       { ...defaultSettings.display,       ...(persisted.display ?? {}) },
+    privacy:       { ...defaultSettings.privacy,       ...(persisted.privacy ?? {}) },
+    performance:   { ...defaultSettings.performance,   ...(persisted.performance ?? {}) },
+    profile:       { ...defaultSettings.profile,       ...(persisted.profile ?? {}) },
+  };
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(merged));
+  useSettingsStore.setState({ settings: merged });
+}

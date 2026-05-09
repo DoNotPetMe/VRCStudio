@@ -271,6 +271,7 @@ export default function WorldsPage() {
         <SearchInput
           value={searchInput}
           onChange={setSearchInput}
+          onEnter={handleSearch}
           placeholder="Search worlds..."
           className="flex-1 max-w-md"
         />

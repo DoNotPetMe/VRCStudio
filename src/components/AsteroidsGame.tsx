@@ -5,14 +5,15 @@ import { useSystemAudio } from '../hooks/useAudioVisualizer';
 import { useThemeStore } from '../stores/themeStore';
 import { drawBlockShip } from '../utils/drawBlockShip';
 
-const ROT_SPEED = 0.065;
-const THRUST = 0.22;
-const DRAG = 0.985;
-const BULLET_SPEED = 14;
-const BULLET_LIFE = 58;
+const ROT_SPEED = 0.045;
+const THRUST = 0.09;
+const MAX_SPEED = 4.5;
+const DRAG = 0.988;
+const BULLET_SPEED = 10;
+const BULLET_LIFE = 65;
 const SHIP_R = 12;
-const RESPAWN_FRAMES = 150;
-const INVINCIBLE_FRAMES = 120;
+const RESPAWN_FRAMES = 120;
+const INVINCIBLE_FRAMES = 100;
 
 type Tier = 'large' | 'medium' | 'small';
 interface Asteroid { x: number; y: number; vx: number; vy: number; r: number; rot: number; rotV: number; sides: number; tier: Tier; }
@@ -26,8 +27,8 @@ interface GameState {
   particles: Particle[];
   fastEnergy: number; slowEnergy: number;
   beatCooldown: number;
-  score: number; lives: number; gameOver: boolean; level: number;
-  spawnCooldown: number;
+  score: number; lives: number; gameOver: boolean;
+  frames: number; spawnTimer: number;
 }
 
 function spawnExplosion(particles: Particle[], x: number, y: number, count: number, r: number) {
@@ -39,33 +40,30 @@ function spawnExplosion(particles: Particle[], x: number, y: number, count: numb
   }
 }
 
-function spawnWave(level: number, W: number, H: number): Asteroid[] {
-  const count = 3 + level;
-  return Array.from({ length: count }, () => {
-    const edge = Math.floor(Math.random() * 4);
-    const ax = edge === 0 ? -35 : edge === 1 ? W + 35 : Math.random() * W;
-    const ay = edge === 2 ? -35 : edge === 3 ? H + 35 : Math.random() * H;
-    const toAngle = Math.atan2(H / 2 - ay, W / 2 - ax) + (Math.random() - 0.5) * 1.1;
-    const spd = 0.55 + Math.random() * 0.65;
-    return {
-      x: ax, y: ay,
-      vx: Math.cos(toAngle) * spd, vy: Math.sin(toAngle) * spd,
-      r: 26 + Math.random() * 14,
-      rot: Math.random() * Math.PI * 2,
-      rotV: (Math.random() - 0.5) * 0.025,
-      sides: 7 + Math.floor(Math.random() * 4),
-      tier: 'large',
-    };
-  });
+function spawnAsteroid(W: number, H: number, difficulty: number): Asteroid {
+  const edge = Math.floor(Math.random() * 4);
+  const ax = edge === 0 ? -35 : edge === 1 ? W + 35 : Math.random() * W;
+  const ay = edge === 2 ? -35 : edge === 3 ? H + 35 : Math.random() * H;
+  const toAngle = Math.atan2(H / 2 - ay, W / 2 - ax) + (Math.random() - 0.5) * 1.2;
+  const spd = 0.45 + Math.random() * 0.5 + difficulty * 0.0004;
+  return {
+    x: ax, y: ay,
+    vx: Math.cos(toAngle) * spd, vy: Math.sin(toAngle) * spd,
+    r: 24 + Math.random() * 14,
+    rot: Math.random() * Math.PI * 2,
+    rotV: (Math.random() - 0.5) * 0.022,
+    sides: 7 + Math.floor(Math.random() * 4),
+    tier: 'large',
+  };
 }
 
 function initGame(W: number, H: number): GameState {
   return {
     ship: { x: W / 2, y: H / 2, angle: -Math.PI / 2, vx: 0, vy: 0, dead: false, deadTimer: 0, invincible: INVINCIBLE_FRAMES, thruster: false },
-    asteroids: spawnWave(1, W, H),
+    asteroids: [spawnAsteroid(W, H, 0), spawnAsteroid(W, H, 0), spawnAsteroid(W, H, 0)],
     bullets: [], particles: [],
     fastEnergy: 0, slowEnergy: 0, beatCooldown: 0,
-    score: 0, lives: 3, gameOver: false, level: 1, spawnCooldown: 0,
+    score: 0, lives: 3, gameOver: false, frames: 0, spawnTimer: 0,
   };
 }
 
@@ -161,6 +159,8 @@ export default function AsteroidsGame() {
         }
         gs.ship.thruster = thrust;
         gs.ship.vx *= DRAG; gs.ship.vy *= DRAG;
+        const spd = Math.hypot(gs.ship.vx, gs.ship.vy);
+        if (spd > MAX_SPEED) { gs.ship.vx *= MAX_SPEED / spd; gs.ship.vy *= MAX_SPEED / spd; }
         gs.ship.x = (gs.ship.x + gs.ship.vx + W) % W;
         gs.ship.y = (gs.ship.y + gs.ship.vy + H) % H;
         if (gs.ship.invincible > 0) gs.ship.invincible--;
@@ -244,13 +244,15 @@ export default function AsteroidsGame() {
       // Particles
       gs.particles = gs.particles.filter(p => { p.x += p.vx; p.y += p.vy; p.vx *= 0.97; p.vy *= 0.97; p.life--; return p.life > 0; });
 
-      // Next wave when clear
-      if (gs.asteroids.length === 0 && gs.bullets.length === 0 && gs.spawnCooldown === 0) {
-        gs.level++;
-        gs.asteroids = spawnWave(gs.level, W, H);
-        gs.spawnCooldown = 60;
+      // Continuous spawning — difficulty scales with time
+      gs.frames++;
+      const maxOnScreen = 3 + Math.min(8, Math.floor(gs.frames / 1800));
+      const spawnInterval = Math.max(120, 300 - Math.floor(gs.frames / 600) * 15);
+      gs.spawnTimer++;
+      if (gs.spawnTimer >= spawnInterval && gs.asteroids.length < maxOnScreen) {
+        gs.asteroids.push(spawnAsteroid(W, H, gs.frames));
+        gs.spawnTimer = 0;
       }
-      if (gs.spawnCooldown > 0) gs.spawnCooldown--;
 
       // ── Draw ──────────────────────────────────────────────
       ctx.fillStyle = 'rgb(5,8,18)';
@@ -306,7 +308,6 @@ export default function AsteroidsGame() {
       ctx.font = 'bold 13px monospace';
       ctx.fillStyle = 'rgba(255,255,255,0.75)';
       ctx.fillText(`SCORE: ${gs.score}`, 16, 28);
-      ctx.fillText(`LEVEL: ${gs.level}`, W - 100, 28);
       for (let i = 0; i < gs.lives; i++) {
         ctx.save();
         ctx.translate(18 + i * 22, H - 22);
@@ -338,7 +339,7 @@ export default function AsteroidsGame() {
 
       {/* Controls hint */}
       <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-10 text-[10px] text-white/30 font-mono">
-        WASD / ARROWS to steer · SPACE to fire · bullets also fire on music beats
+        WASD / ARROWS to steer · SPACE to fire
       </div>
 
       {/* Game over */}

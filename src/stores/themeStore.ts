@@ -1,8 +1,9 @@
 import { create } from 'zustand';
+import { savePersistentData, loadPersistentData } from '../utils/persistentStorage';
 
 export interface VisualizerConfig {
   enabled: boolean;
-  style: 'bars' | 'blocks' | 'wave' | 'radial' | 'dots' | 'asteroids';
+  style: 'bars' | 'blocks' | 'wave' | 'radial' | 'dots';
   sensitivity: number;          // 0.5 – 3
   barCount: number;             // 16 – 128
   focus: 'all' | 'bass' | 'mids' | 'treble';
@@ -13,7 +14,7 @@ export interface VisualizerConfig {
 export interface ThemeConfig {
   mode: 'dark' | 'light' | 'midnight' | 'oled';
   accentColor: 'blue' | 'purple' | 'green' | 'rose' | 'amber' | 'cyan';
-  premiumTheme: 'none' | 'iridescent' | 'holographic' | 'aurora' | 'cosmic';
+  premiumTheme: 'none' | 'iridescent' | 'holographic' | 'aurora' | 'cosmic' | 'asteroids';
   customCSS: string;
   fontSize: 'small' | 'medium' | 'large';
   sidebarWidth: 'compact' | 'normal' | 'wide';
@@ -48,23 +49,39 @@ const defaultTheme: ThemeConfig = {
   visualizer: defaultVisualizer,
 };
 
+function mergeTheme(saved: Partial<ThemeConfig>): ThemeConfig {
+  const style = (saved.visualizer?.style ?? defaultVisualizer.style) as VisualizerConfig['style'];
+  const safeStyle: VisualizerConfig['style'] = ['bars','blocks','wave','radial','dots'].includes(style) ? style : 'bars';
+  return {
+    ...defaultTheme,
+    ...saved,
+    visualizer: { ...defaultVisualizer, ...(saved.visualizer ?? {}), style: safeStyle },
+  };
+}
+
 function loadTheme(): ThemeConfig {
   try {
     const raw = localStorage.getItem(THEME_KEY);
     if (!raw) return defaultTheme;
-    const saved = JSON.parse(raw);
-    return {
-      ...defaultTheme,
-      ...saved,
-      visualizer: { ...defaultVisualizer, ...(saved.visualizer ?? {}) },
-    };
+    return mergeTheme(JSON.parse(raw));
   } catch {
     return defaultTheme;
   }
 }
 
+export async function restoreThemeFromDisk() {
+  const persisted = await loadPersistentData<Partial<ThemeConfig>>('app_theme');
+  if (!persisted) return;
+  if (localStorage.getItem(THEME_KEY)) return; // localStorage already has data
+  const theme = mergeTheme(persisted);
+  localStorage.setItem(THEME_KEY, JSON.stringify(theme));
+  useThemeStore.setState({ theme });
+  useThemeStore.getState().applyTheme();
+}
+
 function saveTheme(theme: ThemeConfig) {
   localStorage.setItem(THEME_KEY, JSON.stringify(theme));
+  savePersistentData('app_theme', theme).catch(() => {});
 }
 
 // RGB triplet values for each accent color (all 10 shades)
@@ -248,9 +265,10 @@ export const useThemeStore = create<ThemeState>((set, get) => ({
     root.style.setProperty('--glass-opacity', glassMap[theme.glassEffect ?? 'medium']);
     root.style.setProperty('--glass-opacity-solid', glassSolidMap[theme.glassEffect ?? 'medium']);
 
-    // Premium theme — applied as a class on <html> so CSS in globals.css can pick it up
+    // Premium theme — CSS class only for CSS-based overlays (not canvas-based ones like asteroids)
     root.classList.remove('premium-iridescent', 'premium-holographic', 'premium-aurora', 'premium-cosmic');
-    if (theme.premiumTheme && theme.premiumTheme !== 'none') {
+    const cssPremiums = ['iridescent', 'holographic', 'aurora', 'cosmic'];
+    if (theme.premiumTheme && cssPremiums.includes(theme.premiumTheme)) {
       root.classList.add(`premium-${theme.premiumTheme}`);
     }
 

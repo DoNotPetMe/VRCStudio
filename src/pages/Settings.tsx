@@ -410,12 +410,26 @@ export default function SettingsPage() {
               <Section title="Premium Themes" icon={Palette}>
                 <p className="text-xs text-surface-500 mb-2">Animated background overlays — sit behind everything, no impact on text legibility.</p>
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-                  {([{ key: 'none', label: 'Off', preview: 'bg-surface-800' }, { key: 'iridescent', label: 'Iridescent', preview: 'bg-gradient-to-br from-pink-500 via-purple-500 to-cyan-500' }, { key: 'holographic', label: 'Holographic', preview: 'bg-[conic-gradient(from_0deg,_#f0f,_#0ff,_#ff0,_#f0f)]' }, { key: 'aurora', label: 'Aurora', preview: 'bg-gradient-to-br from-emerald-500 via-blue-500 to-purple-500' }, { key: 'cosmic', label: 'Cosmic', preview: 'bg-gradient-to-br from-indigo-900 via-purple-900 to-black' }] as const).map(({ key, label, preview }) => (
+                  {([
+                    { key: 'none',         label: 'Off',          preview: 'bg-surface-800' },
+                    { key: 'iridescent',   label: 'Iridescent',   preview: 'bg-gradient-to-br from-pink-500 via-purple-500 to-cyan-500' },
+                    { key: 'holographic',  label: 'Holographic',  preview: 'bg-[conic-gradient(from_0deg,_#f0f,_#0ff,_#ff0,_#f0f)]' },
+                    { key: 'aurora',       label: 'Aurora',       preview: 'bg-gradient-to-br from-emerald-500 via-blue-500 to-purple-500' },
+                    { key: 'cosmic',       label: 'Cosmic',       preview: 'bg-gradient-to-br from-indigo-900 via-purple-900 to-black' },
+                    { key: 'asteroids',    label: 'Asteroids',    preview: 'bg-gradient-to-br from-[#050812] via-[#0d1836] to-[#050812] border border-accent-800/40' },
+                  ] as const).map(({ key, label, preview }) => (
                     <button key={key} onClick={() => setPremiumTheme(key)} className={`p-2 rounded-lg border transition-all ${theme.premiumTheme === key ? 'border-accent-500 bg-accent-500/10' : 'border-surface-700 hover:border-surface-600'}`}>
                       <div className={`w-full h-12 rounded mb-1.5 ${preview}`} />
                       <div className="text-xs font-medium">{label}</div>
                     </button>
                   ))}
+                  {theme.premiumTheme === 'asteroids' && (
+                    <div className="col-span-2 sm:col-span-5 mt-1">
+                      <button onClick={openAsteroidsGame} className="btn-primary text-sm flex items-center gap-2">
+                        <Gamepad2 size={14} /> Take the Wheel
+                      </button>
+                    </div>
+                  )}
                 </div>
               </Section>
 
@@ -433,10 +447,10 @@ export default function SettingsPage() {
                 <div className={theme.visualizer.enabled ? '' : 'opacity-50 pointer-events-none'}>
                   <label className="block text-sm font-medium mb-2">Style</label>
                   <OptionRow
-                    options={['bars', 'blocks', 'wave', 'radial', 'dots', 'asteroids']}
-                    labels={{ bars: 'Bars', blocks: 'Blocks', wave: 'Wave', radial: 'Radial', dots: 'Dots', asteroids: 'Asteroids' }}
+                    options={['bars', 'blocks', 'wave', 'radial', 'dots']}
+                    labels={{ bars: 'Bars', blocks: 'Blocks', wave: 'Wave', radial: 'Radial', dots: 'Dots' }}
                     value={theme.visualizer.style ?? 'bars'}
-                    onChange={v => setVisualizer({ style: v as 'bars' | 'blocks' | 'wave' | 'radial' | 'dots' | 'asteroids' })}
+                    onChange={v => setVisualizer({ style: v as 'bars' | 'blocks' | 'wave' | 'radial' | 'dots' })}
                   />
                   <label className="block text-sm font-medium mt-4 mb-2">Frequency Focus</label>
                   <OptionRow
@@ -453,15 +467,6 @@ export default function SettingsPage() {
                   <input type="range" min={0.5} max={3} step={0.1} value={theme.visualizer.sensitivity} onChange={e => setVisualizer({ sensitivity: parseFloat(e.target.value) })} className="w-full" />
                   <label className="block text-sm font-medium mt-3 mb-1">Smoothing: <span className="text-accent-400">{(theme.visualizer.smoothing * 100).toFixed(0)}%</span></label>
                   <input type="range" min={0} max={0.95} step={0.05} value={theme.visualizer.smoothing} onChange={e => setVisualizer({ smoothing: parseFloat(e.target.value) })} className="w-full" />
-                </div>
-                <div className="mt-4 pt-3 border-t border-surface-800/40">
-                  <p className="text-xs text-surface-500 mb-2">Play Asteroids as a real game. The ship fires to the music beat, or press Space yourself.</p>
-                  <button
-                    onClick={openAsteroidsGame}
-                    className="btn-primary text-sm flex items-center gap-2"
-                  >
-                    <Gamepad2 size={14} /> Take the Wheel
-                  </button>
                 </div>
               </Section>
 
