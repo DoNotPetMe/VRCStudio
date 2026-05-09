@@ -15,10 +15,10 @@ export default function AudioVisualizer() {
   // Per-bar peak hold buffer (for dots style)
   const peaksRef = useRef<Float32Array | null>(null);
 
-  // Plasma state: beat rings + smoothed energy
-  const plasmaRef = useRef<{
+  // Aurora state: traveling shockwave pulses driven by bass beats + smoothed energy
+  const auroraRef = useRef<{
     prevEnergy: number;
-    rings: Array<{ x: number; y: number; r: number; maxR: number; color: string; age: number }>;
+    pulses: Array<{ x: number; vel: number; amp: number; age: number }>;
   } | null>(null);
 
   useEffect(() => {
@@ -264,118 +264,118 @@ export default function AudioVisualizer() {
           ctx.stroke();
         }
 
-      } else if (cfg.style === 'plasma') {
-        if (!plasmaRef.current) plasmaRef.current = { prevEnergy: 0, rings: [] };
-        const ps = plasmaRef.current;
+      } else if (cfg.style === 'aurora') {
+        // Aurora: flowing silk ribbons across the screen. Each ribbon is a thick
+        // smooth path modulated by two sine layers (slow undulation + fine ripple)
+        // and a band-driven amplitude. Bass beats spawn shockwave pulses that
+        // travel horizontally and warp every ribbon as they pass.
+        if (!auroraRef.current) auroraRef.current = { prevEnergy: 0, pulses: [] };
+        const au = auroraRef.current;
 
-        fakePhase.current += 0.006;
+        fakePhase.current += 0.012;
         const t = fakePhase.current;
 
-        // Band energy helpers
+        // Band averages
         const bandAvg = (arr: Uint8Array | null, lo: number, hi: number): number => {
-          if (!arr) return 0.35;
+          if (!arr) return 0.30;
           let s = 0; for (let i = lo; i < hi; i++) s += arr[i] / 255;
-          return s / (hi - lo);
+          return s / Math.max(1, hi - lo);
         };
         const len = data?.length ?? 64;
         const bassEnd = Math.max(1, Math.floor(len * 0.10));
         const midEnd  = Math.max(2, Math.floor(len * 0.40));
-        const bassE  = Math.min(1.8, bandAvg(data, 0, bassEnd)  * cfg.sensitivity);
-        const midE   = Math.min(1.8, bandAvg(data, bassEnd, midEnd) * cfg.sensitivity);
-        const trebE  = Math.min(1.8, bandAvg(data, midEnd, len) * cfg.sensitivity);
+        const bassE = Math.min(1.6, bandAvg(data, 0, bassEnd) * cfg.sensitivity);
+        const midE  = Math.min(1.6, bandAvg(data, bassEnd, midEnd) * cfg.sensitivity);
+        const trebE = Math.min(1.6, bandAvg(data, midEnd, len) * cfg.sensitivity);
 
-        // Beat detection → spawn expanding ring
-        const smooth = ps.prevEnergy * 0.9 + bassE * 0.1;
-        if (bassE > smooth * 1.45 + 0.08 && ps.rings.length < 8) {
-          ps.rings.push({
-            x: W / 2, y: H / 2, r: 15,
-            maxR: Math.min(W, H) * 0.45,
-            color: getColor(0, bars), age: 0,
-          });
+        // Beat detection → spawn a left-to-right traveling shockwave
+        const smooth = au.prevEnergy * 0.88 + bassE * 0.12;
+        if (bassE > smooth * 1.45 + 0.07 && au.pulses.length < 5) {
+          au.pulses.push({ x: -W * 0.2, vel: W * 0.022 + bassE * W * 0.012, amp: 1, age: 0 });
         }
-        ps.prevEnergy = smooth;
+        au.prevEnergy = smooth;
 
-        // Draw expanding beat rings (normal composite, drawn first so plasma goes on top)
-        ps.rings = ps.rings.filter(ring => {
-          ring.r += (ring.maxR - ring.r) * 0.07 + 0.8;
-          ring.age++;
-          const alpha = Math.max(0, (1 - ring.r / ring.maxR)) * 0.55;
-          if (alpha < 0.01) return false;
-          ctx.beginPath();
-          ctx.arc(ring.x, ring.y, ring.r, 0, Math.PI * 2);
-          ctx.strokeStyle = ring.color;
-          ctx.lineWidth = 2.5;
-          ctx.globalAlpha = alpha;
-          ctx.stroke();
-          ctx.globalAlpha = 1;
-          return ring.age < 90;
+        // Update pulses
+        au.pulses = au.pulses.filter(p => {
+          p.x += p.vel;
+          p.age++;
+          p.amp *= 0.985;
+          return p.x < W * 1.2 && p.amp > 0.05;
         });
 
-        // Plasma blobs — 6 nodes in Lissajous orbits, each split into R/G/B channels
-        // for chromatic aberration; screen-blended so overlapping nodes create vivid
-        // color mixing that looks like real plasma discharge.
+        const RIBBONS = 6;
         const savedOp = ctx.globalCompositeOperation;
         ctx.globalCompositeOperation = 'screen';
 
-        const NODES = [
-          { ax: 1.3, ay: 0.9,  px: 0.00, py: 1.26, e: bassE, ci: 0.00, bR: 0.26 },
-          { ax: 2.1, ay: 1.7,  px: 1.88, py: 0.00, e: midE,  ci: 0.16, bR: 0.22 },
-          { ax: 0.7, ay: 1.5,  px: 3.77, py: 2.51, e: trebE, ci: 0.33, bR: 0.19 },
-          { ax: 1.8, ay: 0.6,  px: 0.94, py: 4.71, e: bassE, ci: 0.50, bR: 0.24 },
-          { ax: 1.1, ay: 2.3,  px: 2.83, py: 0.63, e: midE,  ci: 0.67, bR: 0.20 },
-          { ax: 2.5, ay: 1.3,  px: 5.03, py: 3.46, e: trebE, ci: 0.83, bR: 0.18 },
-        ];
+        for (let r = 0; r < RIBBONS; r++) {
+          // Each ribbon gets one of three energy bands
+          const band = r % 3 === 0 ? bassE : r % 3 === 1 ? midE : trebE;
+          const baseY = H * (0.18 + (r / (RIBBONS - 1)) * 0.64);
+          const phase = r * 1.27;
+          const slowFreq = 0.0028 + r * 0.0004;
+          const fineFreq = 0.012 + r * 0.0015;
+          const baseAmp = H * (0.045 + band * 0.10);
 
-        for (const n of NODES) {
-          const nx = W * 0.5 + Math.sin(n.ax * t + n.px) * W * 0.37;
-          const ny = H * 0.5 + Math.sin(n.ay * t + n.py) * H * 0.31;
-          const radius = Math.max(W, H) * (n.bR + n.e * 0.20);
-          const [cr, cg, cb] = getRGB(Math.floor(n.ci * (bars - 1)), bars);
+          // Color: rainbow sweeps along ribbon, accent stays solid, white = pearl
+          const colorIdx = Math.floor((r / RIBBONS) * (bars - 1));
+          const [cr, cg, cb] = getRGB(colorIdx, bars);
 
-          // Chromatic aberration: split into offset R / G / B radial gradients
-          const ab = 5 + n.e * 12;
-          const layers: [number, number, number, number, number][] = [
-            [cr, 0,  0,  -ab * 0.7, -ab * 0.3],
-            [0,  cg, 0,   0,          ab * 0.5],
-            [0,  0,  cb,  ab * 0.7,  -ab * 0.2],
-          ];
+          // Sample horizontal points
+          const STEPS = Math.max(48, Math.floor(W / 18));
+          const points: Array<[number, number]> = [];
+          for (let i = 0; i <= STEPS; i++) {
+            const x = (i / STEPS) * W;
 
-          for (const [lr, lg, lb, ox, oy] of layers) {
-            const gx = nx + ox, gy = ny + oy;
-            const grd = ctx.createRadialGradient(gx, gy, 0, gx, gy, radius);
-            const a0 = Math.min(0.99, 0.55 + n.e * 0.40);
-            const a1 = Math.min(0.99, 0.22 + n.e * 0.14);
-            grd.addColorStop(0,    `rgba(${lr},${lg},${lb},${a0.toFixed(2)})`);
-            grd.addColorStop(0.38, `rgba(${lr},${lg},${lb},${a1.toFixed(2)})`);
-            grd.addColorStop(0.72, `rgba(${lr},${lg},${lb},0.03)`);
-            grd.addColorStop(1,    `rgba(${lr},${lg},${lb},0)`);
-            ctx.fillStyle = grd;
-            ctx.beginPath();
-            ctx.arc(gx, gy, radius, 0, Math.PI * 2);
-            ctx.fill();
+            // Pulse warp: each active pulse adds a localized vertical kick
+            let pulseWarp = 0;
+            for (const pl of au.pulses) {
+              const dx = (x - pl.x) / (W * 0.10);
+              if (Math.abs(dx) < 3) pulseWarp += Math.exp(-dx * dx) * H * 0.06 * pl.amp;
+            }
+
+            const slow = Math.sin(x * slowFreq + t * 1.4 + phase);
+            const fine = Math.sin(x * fineFreq + t * 3.2 + phase * 1.7) * 0.35;
+            const y = baseY + (slow + fine) * baseAmp + pulseWarp * (r % 2 === 0 ? 1 : -1);
+            points.push([x, y]);
           }
+
+          // Draw glow halo first (wide, low alpha)
+          ctx.beginPath();
+          ctx.moveTo(points[0][0], points[0][1]);
+          for (let i = 1; i < points.length; i++) {
+            const [px, py] = points[i - 1];
+            const [nx, ny] = points[i];
+            const mx = (px + nx) / 2, my = (py + ny) / 2;
+            ctx.quadraticCurveTo(px, py, mx, my);
+          }
+          ctx.lineCap = 'round';
+          ctx.strokeStyle = `rgba(${cr},${cg},${cb},${(0.10 + band * 0.18).toFixed(3)})`;
+          ctx.lineWidth = 22 + band * 28;
+          ctx.stroke();
+
+          // Mid layer
+          ctx.strokeStyle = `rgba(${cr},${cg},${cb},${(0.22 + band * 0.32).toFixed(3)})`;
+          ctx.lineWidth = 9 + band * 10;
+          ctx.stroke();
+
+          // Bright core
+          ctx.strokeStyle = `rgba(${Math.min(255, cr + 40)},${Math.min(255, cg + 40)},${Math.min(255, cb + 40)},${(0.55 + band * 0.40).toFixed(3)})`;
+          ctx.lineWidth = 2 + band * 2.5;
+          ctx.stroke();
+        }
+
+        // Pulse marker — a vertical light column where each shockwave currently is
+        for (const pl of au.pulses) {
+          const grd = ctx.createLinearGradient(pl.x - W * 0.04, 0, pl.x + W * 0.04, 0);
+          const [pr, pg, pbB] = getRGB(0, bars);
+          grd.addColorStop(0, `rgba(${pr},${pg},${pbB},0)`);
+          grd.addColorStop(0.5, `rgba(${pr},${pg},${pbB},${(0.18 * pl.amp).toFixed(3)})`);
+          grd.addColorStop(1, `rgba(${pr},${pg},${pbB},0)`);
+          ctx.fillStyle = grd;
+          ctx.fillRect(pl.x - W * 0.05, 0, W * 0.10, H);
         }
 
         ctx.globalCompositeOperation = savedOp;
-
-        // Central frequency ring — thin radial bars in a circle
-        const pcx = W / 2, pcy = H / 2;
-        const innerR = Math.min(W, H) * 0.11;
-        const barThickPl = Math.max(1.5, (2 * Math.PI * innerR / bars) * 0.55);
-        for (let i = 0; i < bars; i++) {
-          const v = getBarValue(i, bars, data);
-          const angle = (i / bars) * Math.PI * 2 - Math.PI / 2;
-          ctx.beginPath();
-          ctx.moveTo(pcx + Math.cos(angle) * innerR,
-                     pcy + Math.sin(angle) * innerR);
-          ctx.lineTo(pcx + Math.cos(angle) * (innerR + v * innerR * 1.6),
-                     pcy + Math.sin(angle) * (innerR + v * innerR * 1.6));
-          ctx.strokeStyle = getColor(i, bars);
-          ctx.lineWidth = barThickPl;
-          ctx.globalAlpha = 0.75;
-          ctx.stroke();
-          ctx.globalAlpha = 1;
-        }
       }
     };
 
@@ -385,7 +385,7 @@ export default function AudioVisualizer() {
       window.removeEventListener('resize', resize);
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      plasmaRef.current = null;
+      auroraRef.current = null;
     };
   }, [visible, cfg.style, cfg.barCount, cfg.sensitivity, cfg.focus, cfg.color, accentColor, getFrequencyData]);
 

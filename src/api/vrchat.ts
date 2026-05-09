@@ -12,6 +12,18 @@ import type {
 const API_BASE = 'https://api.vrchat.cloud/api/1';
 const API_KEY = 'JlE5Jldo5Jibn0215Oi0JXqlu4w';
 
+// Only treat 401 responses with these exact session-related messages as a real session expiry.
+// VRChat returns 401 with other messages for access-control reasons (age-gated/private content),
+// and signing the user out in those cases is incorrect.
+function isSessionExpiredMessage(msg: string): boolean {
+  const m = (msg || '').toLowerCase();
+  return m.includes('missing credentials')
+    || m.includes('invalid username')
+    || m.includes('not logged in')
+    || m.includes('session has expired')
+    || m.includes('cookie expired');
+}
+
 class VRChatAPI {
   private authCookie: string = '';
   private twoFactorAuth: string = '';
@@ -73,10 +85,9 @@ class VRChatAPI {
 
     if (!res.ok) {
       const msg = res.data?.error?.message || `API request failed: ${res.status}`;
-      const isAuthError = res.status === 401 && (
-        !msg || msg.toLowerCase().includes('credentials') || msg.toLowerCase().includes('auth') || msg.toLowerCase().includes('login')
-      );
-      if (isAuthError) this.onSessionExpired?.();
+      if (res.status === 401 && isSessionExpiredMessage(msg)) {
+        this.onSessionExpired?.();
+      }
       throw new APIError(msg, res.status, res.data);
     }
 
@@ -94,10 +105,9 @@ class VRChatAPI {
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       const msg401 = body?.error?.message || '';
-      const isAuthError = res.status === 401 && (
-        !msg401 || msg401.toLowerCase().includes('credentials') || msg401.toLowerCase().includes('auth') || msg401.toLowerCase().includes('login')
-      );
-      if (isAuthError) this.onSessionExpired?.();
+      if (res.status === 401 && isSessionExpiredMessage(msg401)) {
+        this.onSessionExpired?.();
+      }
       throw new APIError(
         body?.error?.message || `API request failed: ${res.status}`,
         res.status,
@@ -375,6 +385,32 @@ class VRChatAPI {
 
   async getUserGroups(userId: string): Promise<any[]> {
     return this.request<any[]>(`/users/${userId}/groups`);
+  }
+
+  async getGroup(groupId: string): Promise<any> {
+    return this.request<any>(`/groups/${groupId}?includeRoles=true`);
+  }
+
+  async getGroupInstances(groupId: string): Promise<any[]> {
+    return this.request<any[]>(`/groups/${groupId}/instances`);
+  }
+
+  async getGroupAnnouncement(groupId: string): Promise<any> {
+    return this.request<any>(`/groups/${groupId}/announcement`);
+  }
+
+  async getGroupPosts(groupId: string, count = 10): Promise<{ posts: any[] }> {
+    return this.request<{ posts: any[] }>(`/groups/${groupId}/posts?n=${count}`);
+  }
+
+  async getRepresentedGroup(userId: string): Promise<any> {
+    return this.request<any>(`/users/${userId}/groups/represented`);
+  }
+
+  async setRepresentedGroup(groupId: string): Promise<void> {
+    await this.request(`/groups/${groupId}/represent`, {
+      method: 'PUT',
+    });
   }
 
   // --- Status update (used by sidebar preset) ---

@@ -447,10 +447,10 @@ export default function SettingsPage() {
                 <div className={theme.visualizer.enabled ? '' : 'opacity-50 pointer-events-none'}>
                   <label className="block text-sm font-medium mb-2">Style</label>
                   <OptionRow
-                    options={['bars', 'blocks', 'wave', 'radial', 'dots', 'plasma']}
-                    labels={{ bars: 'Bars', blocks: 'Blocks', wave: 'Wave', radial: 'Radial', dots: 'Dots', plasma: 'Plasma' }}
+                    options={['bars', 'blocks', 'wave', 'radial', 'dots', 'aurora']}
+                    labels={{ bars: 'Bars', blocks: 'Blocks', wave: 'Wave', radial: 'Radial', dots: 'Dots', aurora: 'Aurora' }}
                     value={theme.visualizer.style ?? 'bars'}
-                    onChange={v => setVisualizer({ style: v as 'bars' | 'blocks' | 'wave' | 'radial' | 'dots' | 'plasma' })}
+                    onChange={v => setVisualizer({ style: v as 'bars' | 'blocks' | 'wave' | 'radial' | 'dots' | 'aurora' })}
                   />
                   <label className="block text-sm font-medium mt-4 mb-2">Frequency Focus</label>
                   <OptionRow

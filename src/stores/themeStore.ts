@@ -3,7 +3,7 @@ import { savePersistentData, loadPersistentData } from '../utils/persistentStora
 
 export interface VisualizerConfig {
   enabled: boolean;
-  style: 'bars' | 'blocks' | 'wave' | 'radial' | 'dots' | 'plasma';
+  style: 'bars' | 'blocks' | 'wave' | 'radial' | 'dots' | 'aurora';
   sensitivity: number;          // 0.5 – 3
   barCount: number;             // 16 – 128
   focus: 'all' | 'bass' | 'mids' | 'treble';
@@ -50,8 +50,11 @@ const defaultTheme: ThemeConfig = {
 };
 
 function mergeTheme(saved: Partial<ThemeConfig>): ThemeConfig {
-  const style = (saved.visualizer?.style ?? defaultVisualizer.style) as VisualizerConfig['style'];
-  const safeStyle: VisualizerConfig['style'] = ['bars','blocks','wave','radial','dots','plasma'].includes(style) ? style : 'bars';
+  const rawStyle = saved.visualizer?.style ?? defaultVisualizer.style;
+  // Migrate retired 'plasma' → 'aurora'
+  const migrated = rawStyle === ('plasma' as any) ? 'aurora' : rawStyle;
+  const valid: VisualizerConfig['style'][] = ['bars','blocks','wave','radial','dots','aurora'];
+  const safeStyle: VisualizerConfig['style'] = valid.includes(migrated as any) ? migrated as VisualizerConfig['style'] : 'bars';
   return {
     ...defaultTheme,
     ...saved,

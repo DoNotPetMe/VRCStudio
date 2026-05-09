@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Users, Globe, MapPin, Send, ExternalLink } from 'lucide-react';
+import { Send, ExternalLink } from 'lucide-react';
 import api from '../api/vrchat';
 import LoadingSpinner from './common/LoadingSpinner';
 import type { VRCInstance, VRCWorld } from '../types/vrchat';
@@ -119,21 +119,29 @@ export default function InstanceModal({ worldId, instanceId, onClose }: Props) {
               </div>
 
               {/* Actions */}
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
                 <button
                   onClick={handleSelfInvite}
                   disabled={inviting || invited}
-                  className="btn-primary flex-1 text-sm flex items-center justify-center gap-1.5"
+                  className="btn-primary flex-1 min-w-[140px] text-sm flex items-center justify-center gap-1.5"
+                  title="Send yourself an in-game invite (works best when VRChat is already running)"
                 >
                   {invited ? (
                     <>Invite Sent!</>
                   ) : inviting ? (
                     <>Sending...</>
                   ) : (
-                    <><Send size={14} /> Join Instance</>
+                    <><Send size={14} /> Invite Me</>
                   )}
                 </button>
-                <button onClick={onClose} className="btn-secondary text-sm">
+                <a
+                  href={`vrchat://launch?ref=vrcstudio&id=${worldId}:${instanceId}`}
+                  className="btn-secondary flex-1 min-w-[140px] text-sm flex items-center justify-center gap-1.5"
+                  title="Open VRChat directly into this instance"
+                >
+                  <ExternalLink size={14} /> Launch in VRChat
+                </a>
+                <button onClick={onClose} className="btn-ghost text-sm">
                   Close
                 </button>
               </div>

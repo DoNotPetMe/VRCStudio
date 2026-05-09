@@ -388,11 +388,11 @@ export default function WorldsPage() {
   );
 }
 
-function StatPill({ icon: Icon, value, label }: { icon: typeof Globe; value: number; label: string }) {
+function StatPill({ icon: Icon, value, label }: { icon: typeof Globe; value: number | undefined; label: string }) {
   return (
     <div className="flex items-center gap-1.5 text-sm text-surface-400">
       <Icon size={14} />
-      <span className="font-semibold text-white">{value.toLocaleString()}</span>
+      <span className="font-semibold text-white">{(value ?? 0).toLocaleString()}</span>
       <span className="text-xs">{label}</span>
     </div>
   );

@@ -25,7 +25,6 @@ const mainNavItems = [
 
 const browseNavItems = [
   { to: '/worlds', icon: Globe, label: 'Worlds' },
-  { to: '/avatars', icon: Shirt, label: 'Avatars' },
   { to: '/groups', icon: UsersRound, label: 'Groups' },
   { to: '/favorites', icon: Star, label: 'Favorites' },
   { to: '/notifications', icon: Bell, label: 'Notifications' },
