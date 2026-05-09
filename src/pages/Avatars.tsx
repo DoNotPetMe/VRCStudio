@@ -3,6 +3,7 @@ import {
   Shirt, Search, ArrowLeft, Heart, AlertCircle, RotateCw,
   Pin, PinOff, Zap, Copy, Check, Database, ExternalLink,
   ChevronLeft, ChevronRight,
+  Monitor, Smartphone, Shuffle, User, Tag, X,
 } from 'lucide-react';
 import api from '../api/vrchat';
 import { vrcdb, VRCDB_PROVIDERS, getProviderId, setProviderId } from '../api/vrcdb';
@@ -14,6 +15,38 @@ import type { VRCAvatar } from '../types/vrchat';
 import { useAvatarSwitcherStore } from '../stores/avatarSwitcherStore';
 
 type AvatarTab = 'own' | 'favorites' | 'vrc_search' | 'vrcdb';
+
+function getPlatformSupport(avatar: VRCAvatar): { pc: boolean; quest: boolean } {
+  const pkgs = avatar.unityPackages ?? [];
+  return {
+    pc:    pkgs.some(p => p.platform === 'standalonewindows'),
+    quest: pkgs.some(p => p.platform === 'android'),
+  };
+}
+
+function PlatformBadge({ avatar }: { avatar: VRCAvatar }) {
+  const { pc, quest } = getPlatformSupport(avatar);
+  if (!pc && !quest) return null;
+  if (pc && quest) {
+    return (
+      <span className="flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full bg-green-500/15 text-green-400 border border-green-500/20 font-medium flex-shrink-0">
+        <Monitor size={8} /><span className="mx-0.5">+</span><Smartphone size={8} />
+      </span>
+    );
+  }
+  if (quest) {
+    return (
+      <span className="flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/20 font-medium flex-shrink-0">
+        <Smartphone size={8} /> Quest
+      </span>
+    );
+  }
+  return (
+    <span className="flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full bg-blue-500/15 text-blue-400 border border-blue-500/20 font-medium flex-shrink-0">
+      <Monitor size={8} /> PC
+    </span>
+  );
+}
 
 export default function AvatarsPage() {
   const { togglePin, isPinned, toggle: openSwitcher } = useAvatarSwitcherStore();
@@ -28,11 +61,13 @@ export default function AvatarsPage() {
   const [vrcdbLoading, setVrcdbLoading] = useState(false);
   const [vrcdbError, setVrcdbError] = useState<string | null>(null);
   const [searchInput, setSearchInput] = useState('');
+  const [tagInput, setTagInput] = useState('');
   const [selected, setSelected] = useState<VRCAvatar | null>(null);
   const [switching, setSwitching] = useState(false);
   const [ownAvatarsError, setOwnAvatarsError] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [providerId, setProviderIdState] = useState<ProviderId>(getProviderId());
+  const [surpriseMeLoading, setSurpriseMeLoading] = useState(false);
 
   useEffect(() => {
     loadFavoriteAvatars();
@@ -63,14 +98,15 @@ export default function AvatarsPage() {
 
   const handleSearch = async () => {
     const q = searchInput.trim();
-    if (!q) return;
+    const t = tagInput.trim();
+    if (!q && !t) return;
     if (tab === 'vrcdb') {
-      searchVrcdb(q);
+      if (q) searchVrcdb(q);
     } else {
       setTab('vrc_search');
       setVrcSearchLoading(true);
       try {
-        setVrcSearchResults(await api.searchAvatars({ query: q, count: 30 }));
+        setVrcSearchResults(await api.searchAvatars({ query: q || undefined, tag: t || undefined, count: 30 }));
       } catch {}
       setVrcSearchLoading(false);
     }
@@ -108,6 +144,25 @@ export default function AvatarsPage() {
     setVrcdbError(null);
   };
 
+  const handleSurpriseMe = async () => {
+    setSurpriseMeLoading(true);
+    try {
+      const results = await api.searchAvatars({ featured: true, sort: 'popularity', count: 50 });
+      if (results.length > 0) setSelected(results[Math.floor(Math.random() * results.length)]);
+    } catch {}
+    setSurpriseMeLoading(false);
+  };
+
+  const handleFindByCreator = async (avatar: VRCAvatar) => {
+    setSelected(null);
+    setTab('vrc_search');
+    setVrcSearchLoading(true);
+    setSearchInput(avatar.authorName);
+    try {
+      setVrcSearchResults(await api.searchAvatars({ query: avatar.authorName, count: 30 }));
+    } catch {}
+    setVrcSearchLoading(false);
+  };
 
   const searchPlaceholder = tab === 'vrcdb'
     ? 'Search VRCDB — name, author, or avtr_ ID...'
@@ -118,6 +173,7 @@ export default function AvatarsPage() {
 
   // ── Detail view ────────────────────────────────────────────────────────────
   if (selected) {
+    const { pc, quest } = getPlatformSupport(selected);
     return (
       <div className="max-w-3xl mx-auto animate-fade-in">
         <button onClick={() => setSelected(null)} className="btn-ghost flex items-center gap-1 mb-4 -ml-2">
@@ -128,8 +184,29 @@ export default function AvatarsPage() {
             <img src={selected.imageUrl} alt="" className="w-full h-full object-cover" />
           </div>
           <div className="p-6">
-            <h1 className="text-xl font-bold">{selected.name}</h1>
-            <p className="text-surface-400 text-sm mt-1">by {selected.authorName}</p>
+            <div className="flex items-start justify-between gap-3 flex-wrap">
+              <div>
+                <h1 className="text-xl font-bold">{selected.name}</h1>
+                <p className="text-surface-400 text-sm mt-1">by {selected.authorName}</p>
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0 mt-1">
+                {pc && quest && (
+                  <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-lg bg-green-500/15 text-green-400 border border-green-500/20 font-medium">
+                    <Monitor size={12} /> PC + <Smartphone size={12} /> Quest
+                  </span>
+                )}
+                {pc && !quest && (
+                  <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-lg bg-blue-500/15 text-blue-400 border border-blue-500/20 font-medium">
+                    <Monitor size={12} /> PC Only
+                  </span>
+                )}
+                {quest && !pc && (
+                  <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-lg bg-amber-500/15 text-amber-400 border border-amber-500/20 font-medium">
+                    <Smartphone size={12} /> Quest
+                  </span>
+                )}
+              </div>
+            </div>
             {selected.description && (
               <p className="text-sm text-surface-400 mt-4 whitespace-pre-wrap">{selected.description}</p>
             )}
@@ -147,9 +224,15 @@ export default function AvatarsPage() {
             <div className="mt-4 text-xs text-surface-600">
               Version {selected.version} &middot; Updated: {new Date(selected.updated_at).toLocaleDateString()}
             </div>
-            <div className="mt-4">
+            <div className="mt-4 flex flex-wrap gap-2">
               <button onClick={() => handleSelect(selected.id)} disabled={switching} className="btn-primary text-sm">
                 {switching ? 'Switching...' : 'Switch to this Avatar'}
+              </button>
+              <button
+                onClick={() => handleFindByCreator(selected)}
+                className="btn-secondary text-sm flex items-center gap-1.5"
+              >
+                <User size={14} /> More by {selected.authorName}
               </button>
             </div>
           </div>
@@ -172,15 +255,38 @@ export default function AvatarsPage() {
         </button>
       </div>
 
-      <div className="flex gap-2">
+      <div className="flex gap-2 flex-wrap">
         <SearchInput
           value={searchInput}
           onChange={setSearchInput}
           onEnter={handleSearch}
           placeholder={searchPlaceholder}
-          className="flex-1 max-w-md"
+          className="flex-1 min-w-40 max-w-md"
         />
+        {tab !== 'vrcdb' && (
+          <div className="flex items-center gap-1 bg-surface-800/60 border border-surface-700/40 rounded-lg px-2 min-w-32 max-w-xs flex-1">
+            <Tag size={13} className="text-surface-500 flex-shrink-0" />
+            <input
+              value={tagInput}
+              onChange={e => setTagInput(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleSearch()}
+              placeholder="Tag filter..."
+              className="bg-transparent text-sm text-surface-200 placeholder-surface-500 focus:outline-none flex-1 py-1.5 min-w-0"
+            />
+            {tagInput && (
+              <button onClick={() => setTagInput('')} className="text-surface-500 hover:text-surface-300"><X size={12} /></button>
+            )}
+          </div>
+        )}
         <button onClick={handleSearch} className="btn-primary text-sm">Search</button>
+        <button
+          onClick={handleSurpriseMe}
+          disabled={surpriseMeLoading}
+          className="btn-secondary text-sm flex items-center gap-1.5"
+          title="Pick a random popular avatar"
+        >
+          <Shuffle size={14} /> {surpriseMeLoading ? '...' : 'Surprise Me'}
+        </button>
       </div>
 
       {/* Tabs */}
@@ -262,7 +368,10 @@ export default function AvatarsPage() {
                     </div>
                     <div className="p-3">
                       <h3 className="text-sm font-semibold truncate">{avatar.name}</h3>
-                      <p className="text-xs text-surface-400 truncate">by {avatar.authorName}</p>
+                      <div className="flex items-center justify-between gap-1 mt-0.5">
+                        <p className="text-xs text-surface-400 truncate">by {avatar.authorName}</p>
+                        <PlatformBadge avatar={avatar} />
+                      </div>
                     </div>
                   </button>
                   <button

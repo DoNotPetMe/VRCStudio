@@ -195,6 +195,10 @@ ipcMain.handle('settings:setMinimizeToTray', (_e, value: boolean) => {
   minimizeToTray = value;
 });
 
+ipcMain.handle('window:setAlwaysOnTop', (_e, value: boolean) => {
+  mainWindow?.setAlwaysOnTop(value, 'normal');
+});
+
 // Shell
 ipcMain.handle('shell:openExternal', (_e, url: string) => shell.openExternal(url));
 

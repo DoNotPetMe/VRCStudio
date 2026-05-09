@@ -2,7 +2,7 @@ import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, Users, Globe, Shirt, Star, Settings,
   LogOut, Bell, Search, History, UsersRound, FileText, Camera,
-  ChevronDown, Flame, BarChart3, CalendarPlus, TrendingUp, Paintbrush, Flag,
+  ChevronDown, Flame, BarChart3, CalendarPlus, Paintbrush, Flag,
 } from 'lucide-react';
 import { useState } from 'react';
 import { useAuthStore } from '../../stores/authStore';
@@ -33,7 +33,6 @@ const toolsNavItems = [
   { to: '/avatar-editor', icon: Paintbrush, label: 'Avatar Editor' },
   { to: '/activity', icon: Flame, label: 'Activity Map' },
   { to: '/friend-analytics', icon: BarChart3, label: 'Analytics' },
-  { to: '/statistics', icon: TrendingUp, label: 'Statistics' },
   { to: '/events', icon: CalendarPlus, label: 'Events' },
   { to: '/game-log', icon: FileText, label: 'Game Log' },
   { to: '/screenshots', icon: Camera, label: 'Screenshots' },

@@ -27,7 +27,6 @@ import { useFriendStore } from '../stores/friendStore';
 import { useFeedStore } from '../stores/feedStore';
 import { useInstanceHistoryStore } from '../stores/instanceHistoryStore';
 import { useSettingsStore } from '../stores/settingsStore';
-import { useMediaDetection } from '../hooks/useAudioVisualizer';
 import UserAvatar from '../components/common/UserAvatar';
 import api from '../api/vrchat';
 import type { FeedEvent, UserStatus } from '../types/vrchat';
@@ -387,7 +386,7 @@ function getTimeOfDay(h: number) {
 
 // ─── Dashboard Greeting component ─────────────────────────────────────────────
 
-function getMusicGreeting(h: number, name: string): string {
+function getCasualGreeting(h: number, name: string): string {
   if (h >= 22 || h < 5) return `isn't it a little late to be jammin', ${name}?`;
   if (h >= 5 && h < 12) return `starting the day off with a bang! I like it, ${name}`;
   return `I like your style, ${name}`;
@@ -398,7 +397,6 @@ function DashboardGreeting() {
   const { settings } = useSettingsStore();
   const { onlineFriends } = useFriendStore();
   const { history } = useInstanceHistoryStore();
-  const media = useMediaDetection();
 
   const [now, setNow] = useState(() => new Date());
   const [weather, setWeather] = useState<WeatherInfo | null>(null);
@@ -408,10 +406,15 @@ function DashboardGreeting() {
 
   const displayName = settings.profile.nickname.trim() || user?.displayName || 'Traveler';
 
-  // Live clock — ticks every minute
+  // Live clock — syncs to the next whole minute so it's never late
   useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), 60_000);
-    return () => clearInterval(id);
+    let intervalId: ReturnType<typeof setInterval>;
+    const msToNextMinute = 60_000 - (Date.now() % 60_000);
+    const timeoutId = setTimeout(() => {
+      setNow(new Date());
+      intervalId = setInterval(() => setNow(new Date()), 60_000);
+    }, msToNextMinute);
+    return () => { clearTimeout(timeoutId); clearInterval(intervalId); };
   }, []);
 
   // Fetch weather once if enabled — with timeout + error handling
@@ -573,10 +576,7 @@ function DashboardGreeting() {
     <div className="flex items-start justify-between gap-6 w-full">
       <div className="min-w-0">
         <h1 className="text-xl font-semibold text-surface-100">
-          {media.active
-            ? <span className="text-gradient">{getMusicGreeting(hour, displayName)}</span>
-            : <>{getTimeOfDay(hour)}, <span className="text-gradient">{displayName}</span></>
-          }
+          <span className="text-gradient">{getCasualGreeting(hour, displayName)}</span>
         </h1>
         {/* Animated ticker */}
         <div className="mt-1.5 h-9 overflow-hidden">

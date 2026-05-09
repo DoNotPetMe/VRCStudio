@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import api, { APIError } from '../api/vrchat';
 import { savePersistentData, loadPersistentData } from '../utils/persistentStorage';
+import { sendSimpleNotification } from '../utils/notifications';
 import type { VRCCurrentUser } from '../types/vrchat';
 
 interface AuthState {
@@ -55,6 +56,21 @@ async function persistUser(user: VRCCurrentUser | null) {
 async function loadPersistedUser(): Promise<VRCCurrentUser | null> {
   return loadPersistentData(PERSISTENT_USER_KEY);
 }
+
+// Wire up session expiry handler — notify user and log them out automatically
+let sessionExpiredHandled = false;
+api.onSessionExpired = () => {
+  if (sessionExpiredHandled) return;
+  sessionExpiredHandled = true;
+  sendSimpleNotification(
+    'Session Expired',
+    'Your VRChat session has expired. Please log in again.',
+  );
+  clearStoredAuth();
+  api.clearAuth();
+  useAuthStore.setState({ user: null, isLoggedIn: false, needs2FA: false, error: 'Your session has expired. Please log in again.' });
+  setTimeout(() => { sessionExpiredHandled = false; }, 10_000);
+};
 
 export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,

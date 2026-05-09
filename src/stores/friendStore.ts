@@ -59,12 +59,15 @@ export const useFriendStore = create<FriendState>((set, get) => ({
       const oldFriends = get().onlineFriends;
       const prevLocations = get().previousLocations;
       const feed = useFeedStore.getState();
+      // Skip change events on the very first fetch — oldFriends is empty and
+      // firing friend_online for every friend would spam notifications on startup.
+      const isFirstFetch = get().lastUpdated === null;
 
       const oldMap = new Map(oldFriends.map(f => [f.id, f]));
 
       for (const friend of friends) {
         const old = oldMap.get(friend.id);
-        if (!old) {
+        if (!old && !isFirstFetch) {
           feed.addEvent({
             type: 'friend_online',
             userId: friend.id,
@@ -72,7 +75,7 @@ export const useFriendStore = create<FriendState>((set, get) => ({
             userAvatar: friend.currentAvatarThumbnailImageUrl,
             details: friend.statusDescription,
           });
-        } else if (old.location !== friend.location && friend.location !== 'private' && friend.location) {
+        } else if (!isFirstFetch && old && old.location !== friend.location && friend.location !== 'private' && friend.location) {
           const newWorldId = friend.location.split(':')[0];
           const oldWorldId = old.location?.split(':')[0];
 
@@ -96,7 +99,7 @@ export const useFriendStore = create<FriendState>((set, get) => ({
             .catch(e => console.warn('[Analytics] Failed to track world visit:', e));
         }
 
-        if (old && old.status !== friend.status) {
+        if (!isFirstFetch && old && old.status !== friend.status) {
           feed.addEvent({
             type: 'friend_status',
             userId: friend.id,
@@ -108,14 +111,16 @@ export const useFriendStore = create<FriendState>((set, get) => ({
         }
       }
 
-      for (const old of oldFriends) {
-        if (!friends.find(f => f.id === old.id)) {
-          feed.addEvent({
-            type: 'friend_offline',
-            userId: old.id,
-            userName: old.displayName,
-            userAvatar: old.currentAvatarThumbnailImageUrl,
-          });
+      if (!isFirstFetch) {
+        for (const old of oldFriends) {
+          if (!friends.find(f => f.id === old.id)) {
+            feed.addEvent({
+              type: 'friend_offline',
+              userId: old.id,
+              userName: old.displayName,
+              userAvatar: old.currentAvatarThumbnailImageUrl,
+            });
+          }
         }
       }
 

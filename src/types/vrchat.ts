@@ -203,6 +203,7 @@ export interface AppSettings {
   general: {
     startMinimized: boolean;
     minimizeToTray: boolean;
+    alwaysOnTop: boolean;
     launchOnStartup: boolean;
     confirmClose: boolean;
     checkForUpdates: boolean;

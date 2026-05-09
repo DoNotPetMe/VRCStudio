@@ -701,13 +701,6 @@ export default function SettingsPage() {
                   checked={theme.visualizer.enabled}
                   onChange={v => setVisualizer({ enabled: v })}
                 />
-                <Toggle
-                  label="Only when Spotify or YouTube is detected"
-                  description="Keeps the visualizer hidden when nothing is actively playing"
-                  checked={theme.visualizer.onlyWithMedia}
-                  onChange={v => setVisualizer({ onlyWithMedia: v })}
-                  disabled={!theme.visualizer.enabled}
-                />
 
                 <div className={theme.visualizer.enabled ? '' : 'opacity-50 pointer-events-none'}>
                   <label className="block text-sm font-medium mb-2">Style</label>
@@ -909,6 +902,13 @@ export default function SettingsPage() {
                   description="Send to system tray instead of closing when you click ✕"
                   checked={settings.general.minimizeToTray}
                   onChange={v => { updateGeneral({ minimizeToTray: v }); window.electronAPI?.setMinimizeToTray(v); }}
+                />
+                <Toggle
+                  label="Always on Top"
+                  description="Keep the window pinned above all other applications"
+                  checked={settings.general.alwaysOnTop}
+                  onChange={v => { updateGeneral({ alwaysOnTop: v }); window.electronAPI?.setAlwaysOnTop(v); }}
+                  disabled={!window.electronAPI}
                 />
                 <Toggle
                   label="Confirm Before Closing"

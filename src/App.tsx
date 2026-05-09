@@ -24,7 +24,6 @@ import Screenshots from './pages/Screenshots';
 import ActivityHeatmap from './pages/ActivityHeatmap';
 import FriendAnalytics from './pages/FriendAnalytics';
 import EventPlanner from './pages/EventPlanner';
-import StatisticsInsights from './pages/StatisticsInsights';
 import AvatarEditor from './pages/AvatarEditor';
 import Reports from './pages/Reports';
 import LoadingSpinner from './components/common/LoadingSpinner';
@@ -134,8 +133,7 @@ function AppShell() {
         <Route path="/activity" element={<ActivityHeatmap />} />
         <Route path="/friend-analytics" element={<FriendAnalytics />} />
         <Route path="/events" element={<EventPlanner />} />
-        <Route path="/statistics" element={<StatisticsInsights />} />
-        <Route path="/avatar-editor" element={<AvatarEditor />} />
+<Route path="/avatar-editor" element={<AvatarEditor />} />
         <Route path="/reports" element={<Reports />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="*" element={<Navigate to="/" replace />} />
@@ -153,9 +151,10 @@ export default function App() {
     applyTheme();
     requestNotificationPermission();
     restoreSession();
-    // Sync minimizeToTray setting to Electron main process
+    // Sync window-related settings to Electron main process
     const { settings } = useSettingsStore.getState();
     window.electronAPI?.setMinimizeToTray(settings.general.minimizeToTray);
+    window.electronAPI?.setAlwaysOnTop(settings.general.alwaysOnTop);
   }, []);
 
   usePolling();
