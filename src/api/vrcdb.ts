@@ -45,22 +45,6 @@ export const VRCDB_PROVIDERS = [
     byIdUrl: (id: string) => `https://api.avtrdb.com/v3/avatar/search/vrcx?fileId=${encodeURIComponent(id)}`,
     headers: AVTRDB_HEADERS,
   },
-  {
-    id: 'worldbalancer',
-    label: 'worldbalancer.com',
-    searchUrl: (q: string) => `https://avatarwbvrcxsearch.worldbalancer.com/vrcx_search?search=${encodeURIComponent(q)}&n=200`,
-    byAuthorUrl: (id: string) => `https://avatarwbvrcxsearch.worldbalancer.com/vrcx_search?authorId=${encodeURIComponent(id)}`,
-    byIdUrl: (id: string) => `https://avatarwbvrcxsearch.worldbalancer.com/vrcx_search?avatarId=${encodeURIComponent(id)}`,
-    headers: FALLBACK_HEADERS,
-  },
-  {
-    id: 'avtrzip',
-    label: 'avtr.zip',
-    searchUrl: (q: string) => `https://avtr.zip/vrcx_search?search=${encodeURIComponent(q)}&n=200`,
-    byAuthorUrl: (id: string) => `https://avtr.zip/vrcx_search?authorId=${encodeURIComponent(id)}`,
-    byIdUrl: (id: string) => `https://avtr.zip/vrcx_search?avatarId=${encodeURIComponent(id)}`,
-    headers: FALLBACK_HEADERS,
-  },
 ] as const;
 
 export type ProviderId = typeof VRCDB_PROVIDERS[number]['id'];
