@@ -8,7 +8,6 @@ export interface VisualizerConfig {
   focus: 'all' | 'bass' | 'mids' | 'treble';
   color: 'white' | 'accent' | 'rainbow';
   smoothing: number;            // 0 – 0.95
-  onlyWithMedia: boolean;
 }
 
 export interface ThemeConfig {
@@ -34,7 +33,6 @@ const defaultVisualizer: VisualizerConfig = {
   focus: 'all',
   color: 'white',
   smoothing: 0.7,
-  onlyWithMedia: true,
 };
 
 const defaultTheme: ThemeConfig = {

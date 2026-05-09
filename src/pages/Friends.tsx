@@ -1,6 +1,6 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import {
-  Users, MapPin, StickyNote, UserMinus, Globe,
+  Users, MapPin, StickyNote, Globe,
   ChevronRight, RotateCw, X, Star, ExternalLink, LogIn,
 } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
@@ -13,7 +13,7 @@ import UserAvatar from '../components/common/UserAvatar';
 import EmptyState from '../components/common/EmptyState';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import InstanceModal from '../components/InstanceModal';
-import type { VRCUser, UserStatus, VRCWorld } from '../types/vrchat';
+import type { VRCUser, UserStatus } from '../types/vrchat';
 import api from '../api/vrchat';
 import { getBestAvatarUrl } from '../utils/avatar';
 import { getTrustRank, RANK_COLORS } from '../utils/trustRank';
@@ -64,6 +64,7 @@ export default function FriendsPage() {
   const { onlineFriends, offlineFriends, notes, setNote, isLoading, fetchAllFriends } = useFriendStore();
   const { worldCache, getWorld } = useWorldStore();
   const { starredIds, toggleStar, isStarred } = useStarredFriendsStore();
+  const currentInstance = useInstanceHistoryStore(s => s.currentInstance);
   const [tab, setTab] = useState<FriendTab>('online');
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState<SortBy>('status');
@@ -75,7 +76,6 @@ export default function FriendsPage() {
   const [noteTags, setNoteTags] = useState<string[]>([]);
   const [instanceModal, setInstanceModal] = useState<{ worldId: string; instanceId: string } | null>(null);
   const [inviteSent, setInviteSent] = useState<string | null>(null);
-  const currentInstance = useInstanceHistoryStore(s => s.currentInstance);
 
   // GPS: group online friends by world
   const worldGroups = useMemo(() => {
@@ -121,7 +121,6 @@ export default function FriendsPage() {
 
     if (sortBy === 'status') {
       list.sort((a, b) => {
-        // Starred friends float to the top within status sort
         const starA = isStarred(a.id) ? 0 : 1;
         const starB = isStarred(b.id) ? 0 : 1;
         if (starA !== starB) return starA - starB;
@@ -160,7 +159,6 @@ export default function FriendsPage() {
   };
 
   const privateCount = onlineFriends.filter(f => f.location === 'private').length;
-  const travelingCount = onlineFriends.filter(f => f.travelingToLocation).length;
 
   return (
     <div className={`max-w-5xl mx-auto space-y-4 animate-fade-in ${detail.user ? 'mr-80' : ''}`}>
@@ -381,7 +379,7 @@ export default function FriendsPage() {
                 if (!tags?.length) return null;
                 const rank = getTrustRank(tags);
                 return (
-                  <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium mt-1 inline-block ${RANK_COLORS[rank]}`}>
+                  <span className={`inline-block text-[10px] px-2 py-0.5 rounded-full border font-medium mt-1 ${RANK_COLORS[rank]}`}>
                     {rank}
                   </span>
                 );
@@ -405,7 +403,7 @@ export default function FriendsPage() {
                 <div className="glass-panel p-3">
                   <div className="text-xs text-surface-500 mb-2">Links</div>
                   <div className="space-y-1">
-                    {(detail.fullUser || detail.user).bioLinks.filter(Boolean).map((link, i) => (
+                    {(detail.fullUser || detail.user).bioLinks!.filter(Boolean).map((link, i) => (
                       <button
                         key={i}
                         onClick={() => window.electronAPI?.openExternal(link)}
@@ -535,7 +533,6 @@ export default function FriendsPage() {
                 </>
               )}
 
-              {/* Invite to current world */}
               {currentInstance && detail.user && (
                 <button
                   onClick={async () => {

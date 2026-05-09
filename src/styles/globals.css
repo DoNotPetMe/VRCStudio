@@ -174,7 +174,7 @@
   }
 }
 
-/* ───────────────────────────────────────────────────────────────────────
+/* ─────────────────────────────────────────────────────────────────────────
    Premium themes — rendered as a real DOM element (.premium-overlay)
    with mix-blend-mode: screen, same technique as the audio visualiser.
    On the near-black surface-950 background, screen mode adds colour
@@ -263,7 +263,34 @@
   50%      { opacity: 1; }
 }
 
-/* ───────────────────────────────────────────────────────────────────────
+/* ─────────────────────────────────────────────────────────────────────────
+   Border-radius theming via --radius-base CSS variable.
+   The themeStore sets --radius-base to 0px / 8px / 16px.
+   These overrides propagate it to every panel and button in the UI.
+   ─────────────────────────────────────────────────────────────────── */
+:root { --radius-base: 8px; }
+
+.glass-panel,
+.glass-panel-solid,
+.btn-primary,
+.btn-secondary,
+.btn-ghost,
+.btn-danger,
+.btn-success,
+.btn-accent,
+.input-field,
+.sidebar-link,
+.stat-card,
+.card-hover,
+.tooltip {
+  border-radius: var(--radius-base) !important;
+}
+
+/* Keep status dots and badges circular regardless of setting */
+.status-dot,
+.badge { border-radius: 9999px !important; }
+
+/* ─────────────────────────────────────────────────────────────────────────
    Audio visualizer — fixed full-screen canvas behind the app shell.
    ─────────────────────────────────────────────────────────────────── */
 .audio-visualizer-canvas {

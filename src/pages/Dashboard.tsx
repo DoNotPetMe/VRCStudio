@@ -27,7 +27,6 @@ import { useFriendStore } from '../stores/friendStore';
 import { useFeedStore } from '../stores/feedStore';
 import { useInstanceHistoryStore } from '../stores/instanceHistoryStore';
 import { useSettingsStore } from '../stores/settingsStore';
-import { useMediaDetection } from '../hooks/useAudioVisualizer';
 import UserAvatar from '../components/common/UserAvatar';
 import api from '../api/vrchat';
 import type { FeedEvent, UserStatus } from '../types/vrchat';
@@ -94,7 +93,6 @@ export default function Dashboard() {
     setRejoining(null);
   };
 
-  // Deduplicate by worldId:instanceId — keep only the most recent visit to each instance
   const recentInstances = (() => {
     const seen = new Set<string>();
     const deduped = [];
@@ -106,7 +104,6 @@ export default function Dashboard() {
     return deduped;
   })();
 
-  // Build a map for O(1) friend avatar lookup in the activity feed
   const friendAvatarMap = new Map<string, string>();
   for (const f of [...onlineFriends, ...offlineFriends]) {
     friendAvatarMap.set(f.id, getBestAvatarUrl(f));
@@ -119,9 +116,7 @@ export default function Dashboard() {
     'busy': [],
   };
   for (const f of onlineFriends) {
-    if (statusGroups[f.status]) {
-      statusGroups[f.status].push(f);
-    }
+    if (statusGroups[f.status]) statusGroups[f.status].push(f);
   }
 
   const todayEvents = events.filter(e => Date.now() - e.timestamp < 86400000);
@@ -129,45 +124,17 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <DashboardGreeting />
       </div>
 
-      {/* Stats row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatCard
-          icon={Wifi}
-          label="Online"
-          value={onlineFriends.length}
-          accent="text-green-400"
-          bg="bg-green-500/10"
-          detail={`of ${onlineFriends.length + offlineFriends.length} friends`}
-        />
-        <StatCard
-          icon={Users}
-          label="Total Friends"
-          value={onlineFriends.length + offlineFriends.length}
-          accent="text-blue-400"
-          bg="bg-blue-500/10"
-        />
-        <StatCard
-          icon={Globe}
-          label="Join Me"
-          value={statusGroups['join me'].length}
-          accent="text-status-joinme"
-          bg="bg-blue-500/10"
-        />
-        <StatCard
-          icon={TrendingUp}
-          label="Events Today"
-          value={todayEvents.length}
-          accent="text-amber-400"
-          bg="bg-amber-500/10"
-        />
+        <StatCard icon={Wifi} label="Online" value={onlineFriends.length} accent="text-green-400" bg="bg-green-500/10" detail={`of ${onlineFriends.length + offlineFriends.length} friends`} />
+        <StatCard icon={Users} label="Total Friends" value={onlineFriends.length + offlineFriends.length} accent="text-blue-400" bg="bg-blue-500/10" />
+        <StatCard icon={Globe} label="Join Me" value={statusGroups['join me'].length} accent="text-status-joinme" bg="bg-blue-500/10" />
+        <StatCard icon={TrendingUp} label="Events Today" value={todayEvents.length} accent="text-amber-400" bg="bg-amber-500/10" />
       </div>
 
-      {/* Status breakdown */}
       <div className="glass-panel-solid p-4">
         <div className="flex items-center gap-6">
           {Object.entries(statusGroups).map(([status, friends]) => (
@@ -185,14 +152,10 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Recent Instances / Rejoin */}
       {recentInstances.length > 0 && (
         <div className="glass-panel-solid overflow-hidden">
           <div className="px-4 py-3 border-b border-surface-800/40 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-surface-300 flex items-center gap-2">
-              <History size={14} />
-              Recent Instances
-            </h2>
+            <h2 className="text-sm font-semibold text-surface-300 flex items-center gap-2"><History size={14} />Recent Instances</h2>
             <span className="text-xs text-surface-600">Rejoin private worlds</span>
           </div>
           <div className="divide-y divide-surface-800/30 max-h-64 overflow-y-auto">
@@ -205,9 +168,7 @@ export default function Dashboard() {
                   {inst.worldImage ? (
                     <img src={inst.worldImage} alt="" className="w-10 h-7 rounded object-cover flex-shrink-0 bg-surface-800" />
                   ) : (
-                    <div className="w-10 h-7 rounded bg-surface-800 flex items-center justify-center flex-shrink-0">
-                      <Globe size={12} className="text-surface-600" />
-                    </div>
+                    <div className="w-10 h-7 rounded bg-surface-800 flex items-center justify-center flex-shrink-0"><Globe size={12} className="text-surface-600" /></div>
                   )}
                   <div className="flex-1 min-w-0">
                     <div className="text-[13px] font-medium truncate text-surface-200">{inst.worldName}</div>
@@ -221,19 +182,10 @@ export default function Dashboard() {
                     onClick={() => handleRejoin(inst.id, inst.worldId, inst.instanceId)}
                     disabled={isRejoining || hasRejoined}
                     className={`text-xs px-2.5 py-1 rounded-md flex items-center gap-1 flex-shrink-0 transition-colors ${
-                      hasRejoined
-                        ? 'bg-green-500/15 text-green-400'
-                        : 'bg-accent-600/15 text-accent-400 hover:bg-accent-600/25'
+                      hasRejoined ? 'bg-green-500/15 text-green-400' : 'bg-accent-600/15 text-accent-400 hover:bg-accent-600/25'
                     }`}
-                    title={isPrivate ? 'Rejoin this private instance' : 'Join this instance'}
                   >
-                    {hasRejoined ? (
-                      <>Sent!</>
-                    ) : isRejoining ? (
-                      <>Joining...</>
-                    ) : (
-                      <><RotateCcw size={11} /> Rejoin</>
-                    )}
+                    {hasRejoined ? <>Sent!</> : isRejoining ? <>Joining...</> : <><RotateCcw size={11} /> Rejoin</>}
                   </button>
                 </div>
               );
@@ -243,19 +195,13 @@ export default function Dashboard() {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Activity Feed */}
         <div className="lg:col-span-2 glass-panel-solid overflow-hidden">
           <div className="px-4 py-3 border-b border-surface-800/40 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-surface-300 flex items-center gap-2">
-              <Activity size={14} />
-              Activity Feed
-            </h2>
+            <h2 className="text-sm font-semibold text-surface-300 flex items-center gap-2"><Activity size={14} />Activity Feed</h2>
             <span className="text-xs text-surface-600">{todayEvents.length} today</span>
           </div>
           {recentEvents.length === 0 ? (
-            <p className="text-surface-500 text-sm py-12 text-center">
-              No activity yet. Events will appear as friends come online and move around.
-            </p>
+            <p className="text-surface-500 text-sm py-12 text-center">No activity yet. Events will appear as friends come online and move around.</p>
           ) : (
             <div className="divide-y divide-surface-800/30 max-h-[520px] overflow-y-auto">
               {recentEvents.map(event => {
@@ -263,10 +209,7 @@ export default function Dashboard() {
                 const colorClasses = eventColors[event.type] || 'text-surface-400 bg-surface-500/10';
                 const [textColor, bgColor] = colorClasses.split(' ');
                 return (
-                  <div
-                    key={event.id}
-                    className="flex items-center gap-3 px-4 py-2.5 hover:bg-surface-800/30 transition-colors"
-                  >
+                  <div key={event.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-surface-800/30 transition-colors">
                     <div className={`w-7 h-7 rounded-lg ${bgColor} flex items-center justify-center flex-shrink-0`}>
                       <Icon size={13} className={textColor} />
                     </div>
@@ -289,57 +232,35 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* Online Friends sidebar */}
         <div className="glass-panel-solid overflow-hidden">
           <div className="px-4 py-3 border-b border-surface-800/40 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-surface-300 flex items-center gap-2">
-              <Users size={14} />
-              Online Now
-            </h2>
+            <h2 className="text-sm font-semibold text-surface-300 flex items-center gap-2"><Users size={14} />Online Now</h2>
             <span className="text-xs font-medium text-green-400 tabular-nums">{onlineFriends.length}</span>
           </div>
           {onlineFriends.length === 0 ? (
-            <div className="py-12 text-center">
-              <WifiOff size={24} className="mx-auto text-surface-700 mb-2" />
-              <p className="text-surface-500 text-sm">No friends online</p>
-            </div>
+            <div className="py-12 text-center"><WifiOff size={24} className="mx-auto text-surface-700 mb-2" /><p className="text-surface-500 text-sm">No friends online</p></div>
           ) : (
             <div className="divide-y divide-surface-800/20 max-h-[520px] overflow-y-auto">
               {onlineFriends.slice(0, 40).map(friend => (
-                <div
-                  key={friend.id}
-                  className="flex items-center gap-2.5 px-4 py-2 hover:bg-surface-800/30 transition-colors"
-                >
-                  <UserAvatar
-                    src={getBestAvatarUrl(friend)}
-                    status={friend.status}
-                    size="sm"
-                  />
+                <div key={friend.id} className="flex items-center gap-2.5 px-4 py-2 hover:bg-surface-800/30 transition-colors">
+                  <UserAvatar src={getBestAvatarUrl(friend)} status={friend.status} size="sm" />
                   <div className="min-w-0 flex-1">
                     <div className="text-[13px] font-medium truncate text-surface-200">{friend.displayName}</div>
-                    <div className="text-[11px] text-surface-500 truncate">
-                      {friend.statusDescription || friend.status}
-                    </div>
+                    <div className="text-[11px] text-surface-500 truncate">{friend.statusDescription || friend.status}</div>
                   </div>
                 </div>
               ))}
               {onlineFriends.length > 40 && (
-                <p className="text-xs text-surface-600 text-center py-2.5">
-                  +{onlineFriends.length - 40} more
-                </p>
+                <p className="text-xs text-surface-600 text-center py-2.5">+{onlineFriends.length - 40} more</p>
               )}
             </div>
           )}
         </div>
       </div>
 
-      {/* World Analytics */}
       <div className="glass-panel-solid p-4">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-sm font-semibold text-surface-300 flex items-center gap-2">
-            <Globe size={14} />
-            World Activity
-          </h2>
+          <h2 className="text-sm font-semibold text-surface-300 flex items-center gap-2"><Globe size={14} />World Activity</h2>
           <span className="text-xs text-surface-600">Auto-tracked</span>
         </div>
         <WorldAnalyticsPanel limit={8} />
@@ -348,7 +269,7 @@ export default function Dashboard() {
   );
 }
 
-// ─── Weather helpers ──────────────────────────────────────────────────────────
+// ─── Weather helpers ────────────────────────────────────────────────────────────────
 
 interface WeatherInfo {
   temp: number;
@@ -378,16 +299,7 @@ const weatherColorMap: Record<WeatherInfo['icon'], string> = {
   snow: 'text-cyan-300', storm: 'text-yellow-300', fog: 'text-surface-500', wind: 'text-surface-400',
 };
 
-function getTimeOfDay(h: number) {
-  if (h >= 5 && h < 12)  return 'Good morning';
-  if (h >= 12 && h < 17) return 'Good afternoon';
-  if (h >= 17 && h < 21) return 'Good evening';
-  return 'Good night';
-}
-
-// ─── Dashboard Greeting component ─────────────────────────────────────────────
-
-function getMusicGreeting(h: number, name: string): string {
+function getCasualGreeting(h: number, name: string): string {
   if (h >= 22 || h < 5) return `isn't it a little late to be jammin', ${name}?`;
   if (h >= 5 && h < 12) return `starting the day off with a bang! I like it, ${name}`;
   return `I like your style, ${name}`;
@@ -398,7 +310,6 @@ function DashboardGreeting() {
   const { settings } = useSettingsStore();
   const { onlineFriends } = useFriendStore();
   const { history } = useInstanceHistoryStore();
-  const media = useMediaDetection();
 
   const [now, setNow] = useState(() => new Date());
   const [weather, setWeather] = useState<WeatherInfo | null>(null);
@@ -408,32 +319,30 @@ function DashboardGreeting() {
 
   const displayName = settings.profile.nickname.trim() || user?.displayName || 'Traveler';
 
-  // Live clock — ticks every minute
+  // Live clock — syncs to the next whole minute so it's never late
   useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), 60_000);
-    return () => clearInterval(id);
+    let intervalId: ReturnType<typeof setInterval>;
+    const msToNextMinute = 60_000 - (Date.now() % 60_000);
+    const timeoutId = setTimeout(() => {
+      setNow(new Date());
+      intervalId = setInterval(() => setNow(new Date()), 60_000);
+    }, msToNextMinute);
+    return () => { clearTimeout(timeoutId); clearInterval(intervalId); };
   }, []);
 
-  // Fetch weather once if enabled — with timeout + error handling
   useEffect(() => {
     if (!settings.profile.showWeather || !settings.profile.greetingEnabled) return;
     if (!navigator.geolocation) { setWeatherFailed(true); return; }
-
-    // If geolocation doesn't respond in 8 seconds, give up gracefully
     const timeout = setTimeout(() => setWeatherFailed(true), 8_000);
-
     navigator.geolocation.getCurrentPosition(
       async ({ coords }) => {
         clearTimeout(timeout);
         try {
-          const url =
-            `https://api.open-meteo.com/v1/forecast?latitude=${coords.latitude.toFixed(4)}&longitude=${coords.longitude.toFixed(4)}&current=temperature_2m,weather_code&timezone=auto`;
+          const url = `https://api.open-meteo.com/v1/forecast?latitude=${coords.latitude.toFixed(4)}&longitude=${coords.longitude.toFixed(4)}&current=temperature_2m,weather_code&timezone=auto`;
           const res = await fetch(url);
           if (!res.ok) { setWeatherFailed(true); return; }
           const data = await res.json();
-          const code: number = data.current.weather_code;
-          const temp = Math.round(data.current.temperature_2m);
-          setWeather({ temp, ...wmoToWeather(code) });
+          setWeather({ temp: Math.round(data.current.temperature_2m), ...wmoToWeather(data.current.weather_code) });
         } catch { setWeatherFailed(true); }
       },
       () => { clearTimeout(timeout); setWeatherFailed(true); },
@@ -442,95 +351,46 @@ function DashboardGreeting() {
     return () => clearTimeout(timeout);
   }, [settings.profile.showWeather, settings.profile.greetingEnabled]);
 
-  const joinMeFriends = useMemo(
-    () => onlineFriends.filter(f => f.status === 'join me'),
-    [onlineFriends]
-  );
+  const joinMeFriends = useMemo(() => onlineFriends.filter(f => f.status === 'join me'), [onlineFriends]);
 
   const tickerMessages = useMemo(() => {
     const h = now.getHours();
     const msgs: Array<{ text: string; sub?: string }> = [];
 
-    // 1. Time-of-day contextual comment
-    if (h >= 0 && h < 5) {
-      msgs.push({ text: 'Late night session?', sub: format(now, 'h:mm a · EEEE, MMMM d') });
-    } else if (h >= 5 && h < 9) {
-      msgs.push({ text: 'Early start today', sub: format(now, 'h:mm a · EEEE, MMMM d') });
-    } else if (h >= 9 && h < 12) {
-      msgs.push({ text: 'Good morning', sub: format(now, 'h:mm a · EEEE, MMMM d') });
-    } else if (h >= 12 && h < 14) {
-      msgs.push({ text: 'Midday', sub: format(now, 'h:mm a · EEEE, MMMM d') });
-    } else if (h >= 14 && h < 18) {
-      msgs.push({ text: 'Good afternoon', sub: format(now, 'h:mm a · EEEE, MMMM d') });
-    } else if (h >= 18 && h < 22) {
-      msgs.push({ text: 'Good evening', sub: format(now, 'h:mm a · EEEE, MMMM d') });
-    } else {
-      msgs.push({ text: 'Good night', sub: format(now, 'h:mm a · EEEE, MMMM d') });
-    }
+    if (h >= 0 && h < 5) msgs.push({ text: 'Late night session?', sub: format(now, 'h:mm a · EEEE, MMMM d') });
+    else if (h < 9)  msgs.push({ text: 'Early start today', sub: format(now, 'h:mm a · EEEE, MMMM d') });
+    else if (h < 12) msgs.push({ text: 'Good morning', sub: format(now, 'h:mm a · EEEE, MMMM d') });
+    else if (h < 14) msgs.push({ text: 'Midday', sub: format(now, 'h:mm a · EEEE, MMMM d') });
+    else if (h < 18) msgs.push({ text: 'Good afternoon', sub: format(now, 'h:mm a · EEEE, MMMM d') });
+    else if (h < 22) msgs.push({ text: 'Good evening', sub: format(now, 'h:mm a · EEEE, MMMM d') });
+    else msgs.push({ text: 'Good night', sub: format(now, 'h:mm a · EEEE, MMMM d') });
 
-    // 2. Friends — conversational, not just a number
     const n = onlineFriends.length;
-    if (n === 0) {
-      msgs.push({
-        text: 'All quiet right now',
-        sub: 'Everyone seems to be offline — good time to explore',
-      });
-    } else if (n === 1) {
-      msgs.push({
-        text: `Just ${onlineFriends[0].displayName} is online`,
-        sub: 'You two have the place to yourselves',
-      });
-    } else if (n <= 5) {
-      msgs.push({
-        text: `${n} friends online right now`,
-        sub: `${onlineFriends[0].displayName} among them`,
-      });
-    } else if (n <= 15) {
-      msgs.push({
-        text: `${n} friends online — good turnout`,
-        sub: `${onlineFriends[0].displayName} and ${n - 1} others`,
-      });
-    } else {
-      msgs.push({
-        text: `${n} friends online — the crew's all here`,
-        sub: `${onlineFriends[0].displayName} and ${n - 1} others are on`,
-      });
-    }
+    if (n === 0) msgs.push({ text: 'All quiet right now', sub: 'Everyone seems to be offline — good time to explore' });
+    else if (n === 1) msgs.push({ text: `Just ${onlineFriends[0].displayName} is online`, sub: 'You two have the place to yourselves' });
+    else if (n <= 5) msgs.push({ text: `${n} friends online right now`, sub: `${onlineFriends[0].displayName} among them` });
+    else if (n <= 15) msgs.push({ text: `${n} friends online — good turnout`, sub: `${onlineFriends[0].displayName} and ${n - 1} others` });
+    else msgs.push({ text: `${n} friends online — the crew's all here`, sub: `${onlineFriends[0].displayName} and ${n - 1} others are on` });
 
-    // 3. Join-me friends
-    if (joinMeFriends.length === 1) {
-      msgs.push({
-        text: `${joinMeFriends[0].displayName} has their doors open`,
-        sub: 'They\'re on Join Me — hop in any time',
-      });
-    } else if (joinMeFriends.length > 1) {
+    if (joinMeFriends.length === 1) msgs.push({ text: `${joinMeFriends[0].displayName} has their doors open`, sub: "They're on Join Me — hop in any time" });
+    else if (joinMeFriends.length > 1) {
       const names = joinMeFriends.slice(0, 2).map(f => f.displayName).join(' & ');
-      msgs.push({
-        text: `${joinMeFriends.length} friends are inviting you`,
-        sub: joinMeFriends.length > 2 ? `${names} and ${joinMeFriends.length - 2} more` : names,
-      });
+      msgs.push({ text: `${joinMeFriends.length} friends are inviting you`, sub: joinMeFriends.length > 2 ? `${names} and ${joinMeFriends.length - 2} more` : names });
     }
 
-    // 4. Recent world visit context
     if (history.length > 0) {
       const last = history[0];
       const worldLabel = last.worldName && !last.worldName.startsWith('wrld_') ? last.worldName : 'a world';
       const recent = last.leftAt && (Date.now() - last.leftAt) < 2 * 60 * 60 * 1000;
-      if (recent) {
-        msgs.push({
-          text: `You just left ${worldLabel}`,
-          sub: `Spent ${Math.round((last.leftAt! - last.joinedAt) / 60000)}m there`,
-        });
-      }
+      if (recent) msgs.push({ text: `You just left ${worldLabel}`, sub: `Spent ${Math.round((last.leftAt! - last.joinedAt) / 60000)}m there` });
     }
 
-    // 5. Weather — with commentary
     if (weather) {
       const { temp, condition, icon } = weather;
       let commentary = '';
       if (icon === 'rain') commentary = 'Perfect weather to stay in VRChat';
       else if (icon === 'snow') commentary = 'Snowing outside — cosy in here though';
-      else if (icon === 'storm') commentary = 'Stay safe out there — you\'re better off in here';
+      else if (icon === 'storm') commentary = "Stay safe out there — you're better off in here";
       else if (icon === 'cloud') commentary = `${temp}°C and overcast outside`;
       else if (temp <= 5) commentary = `${temp}°C — quite cold out there`;
       else if (temp >= 28) commentary = `${temp}°C outside — peak VRChat weather`;
@@ -541,13 +401,10 @@ function DashboardGreeting() {
     return msgs;
   }, [now, onlineFriends, joinMeFriends, weather, history]);
 
-  // Rotate ticker every 8 seconds
   useEffect(() => {
     if (tickerRef.current) clearInterval(tickerRef.current);
     if (tickerMessages.length <= 1) return;
-    tickerRef.current = setInterval(() => {
-      setTickerIndex(i => (i + 1) % tickerMessages.length);
-    }, 8_000);
+    tickerRef.current = setInterval(() => setTickerIndex(i => (i + 1) % tickerMessages.length), 8_000);
     return () => { if (tickerRef.current) clearInterval(tickerRef.current); };
   }, [tickerMessages.length]);
 
@@ -557,9 +414,7 @@ function DashboardGreeting() {
   if (!settings.profile.greetingEnabled) {
     return (
       <div>
-        <h1 className="text-xl font-semibold text-surface-100">
-          Welcome back, <span className="text-gradient">{displayName}</span>
-        </h1>
+        <h1 className="text-xl font-semibold text-surface-100">Welcome back, <span className="text-gradient">{displayName}</span></h1>
         <p className="text-surface-500 text-sm mt-0.5">Here's what's happening in your VRChat world</p>
       </div>
     );
@@ -573,27 +428,18 @@ function DashboardGreeting() {
     <div className="flex items-start justify-between gap-6 w-full">
       <div className="min-w-0">
         <h1 className="text-xl font-semibold text-surface-100">
-          {media.active
-            ? <span className="text-gradient">{getMusicGreeting(hour, displayName)}</span>
-            : <>{getTimeOfDay(hour)}, <span className="text-gradient">{displayName}</span></>
-          }
+          <span className="text-gradient">{getCasualGreeting(hour, displayName)}</span>
         </h1>
-        {/* Animated ticker */}
         <div className="mt-1.5 h-9 overflow-hidden">
           <div key={safeTicker} className="animate-fade-in">
             <p className="text-sm text-surface-300 leading-tight">{currentTicker?.text}</p>
-            {currentTicker?.sub && (
-              <p className="text-xs text-surface-500 mt-0.5 leading-tight">{currentTicker.sub}</p>
-            )}
+            {currentTicker?.sub && <p className="text-xs text-surface-500 mt-0.5 leading-tight">{currentTicker.sub}</p>}
           </div>
         </div>
-        {/* Ticker dots */}
         {tickerMessages.length > 1 && (
           <div className="flex items-center gap-1 mt-1">
             {tickerMessages.map((_, i) => (
-              <button
-                key={i}
-                onClick={() => setTickerIndex(i)}
+              <button key={i} onClick={() => setTickerIndex(i)}
                 className={`w-1.5 h-1.5 rounded-full transition-all duration-300 ${
                   i === safeTicker ? 'bg-accent-400 w-3' : 'bg-surface-700 hover:bg-surface-600'
                 }`}
@@ -602,7 +448,6 @@ function DashboardGreeting() {
           </div>
         )}
       </div>
-      {/* Weather badge — only show if loaded or unavailable (never show eternal spinner) */}
       {settings.profile.showWeather && weather && (
         <div className="flex-shrink-0 glass-panel px-3 py-2 flex items-center gap-2 text-sm">
           <WeatherIcon size={16} className={weatherColor} />

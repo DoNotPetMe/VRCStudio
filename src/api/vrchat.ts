@@ -15,6 +15,7 @@ const API_KEY = 'JlE5Jldo5Jibn0215Oi0JXqlu4w';
 class VRChatAPI {
   private authCookie: string = '';
   private twoFactorAuth: string = '';
+  onSessionExpired: (() => void) | null = null;
 
   private get isElectron(): boolean {
     return !!window.electronAPI?.vrchatRequest;
@@ -23,7 +24,7 @@ class VRChatAPI {
   private get headers(): Record<string, string> {
     const h: Record<string, string> = {
       'Content-Type': 'application/json',
-      'User-Agent': 'VRCStudio/1.0.0',
+      'User-Agent': 'VRCStudio/1.0.0 (https://github.com/DoNotPetMe/VRCStudio; vrcstudio@proton.me)',
     };
     if (this.authCookie) {
       let cookies = `auth=${this.authCookie}`;
@@ -72,6 +73,7 @@ class VRChatAPI {
 
     if (!res.ok) {
       const msg = res.data?.error?.message || `API request failed: ${res.status}`;
+      if (res.status === 401) this.onSessionExpired?.();
       throw new APIError(msg, res.status, res.data);
     }
 
@@ -88,6 +90,7 @@ class VRChatAPI {
 
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
+      if (res.status === 401) this.onSessionExpired?.();
       throw new APIError(
         body?.error?.message || `API request failed: ${res.status}`,
         res.status,
