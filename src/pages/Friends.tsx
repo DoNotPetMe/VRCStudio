@@ -121,7 +121,6 @@ export default function FriendsPage() {
 
     if (sortBy === 'status') {
       list.sort((a, b) => {
-        // Starred friends float to the top within status sort
         const starA = isStarred(a.id) ? 0 : 1;
         const starB = isStarred(b.id) ? 0 : 1;
         if (starA !== starB) return starA - starB;
@@ -160,7 +159,6 @@ export default function FriendsPage() {
   };
 
   const privateCount = onlineFriends.filter(f => f.location === 'private').length;
-  const travelingCount = onlineFriends.filter(f => f.travelingToLocation).length;
 
   return (
     <div className={`max-w-5xl mx-auto space-y-4 animate-fade-in ${detail.user ? 'mr-80' : ''}`}>

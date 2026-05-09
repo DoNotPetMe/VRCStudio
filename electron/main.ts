@@ -403,7 +403,7 @@ ipcMain.handle('vrchat:request', async (_e, opts: {
 
     const reqHeaders: Record<string, string> = {
       'Content-Type': 'application/json',
-      'User-Agent': 'VRCStudio/1.0.0',
+      'User-Agent': 'VRCStudio/1.0.0 (https://github.com/DoNotPetMe/VRCStudio; vrcstudio@proton.me)',
       ...(opts.headers || {}),
     };
     if (cookieParts.length > 0) {
