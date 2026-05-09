@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Download, Copy, Check, ExternalLink } from 'lucide-react';
+import { X, Copy, Check, ExternalLink } from 'lucide-react';
 import type { VRCAvatar } from '../types/vrchat';
 
 interface AvatarPreviewModalProps {
@@ -18,23 +18,6 @@ export default function AvatarPreviewModal({ avatar, onClose }: AvatarPreviewMod
 
   const handleViewInVRChat = () => {
     window.open(`https://vrchat.com/home/avatar/${avatar.id}`, '_blank');
-  };
-
-  const handleDownloadImage = async () => {
-    try {
-      const response = await fetch(avatar.imageUrl);
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `${avatar.name}.png`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error('Failed to download image:', error);
-    }
   };
 
   return (
@@ -125,19 +108,12 @@ export default function AvatarPreviewModal({ avatar, onClose }: AvatarPreviewMod
           )}
 
           {/* Action buttons */}
-          <div className="space-y-2 mt-4">
+          <div className="mt-4">
             <button
               onClick={handleViewInVRChat}
               className="btn-primary w-full text-sm flex items-center justify-center gap-2"
             >
               <ExternalLink size={14} /> View in VRChat
-            </button>
-
-            <button
-              onClick={handleDownloadImage}
-              className="btn-secondary w-full text-sm flex items-center justify-center gap-2"
-            >
-              <Download size={14} /> Download Image
             </button>
           </div>
         </div>
