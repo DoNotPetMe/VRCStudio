@@ -307,12 +307,6 @@ function getCasualGreeting(h: number, name: string): string {
 
 // ─── Dashboard Greeting component ─────────────────────────────────────────────
 
-function getCasualGreeting(h: number, name: string): string {
-  if (h >= 22 || h < 5) return `isn't it a little late to be jammin', ${name}?`;
-  if (h >= 5 && h < 12) return `starting the day off with a bang! I like it, ${name}`;
-  return `I like your style, ${name}`;
-}
-
 function DashboardGreeting() {
   const { user } = useAuthStore();
   const { settings } = useSettingsStore();
