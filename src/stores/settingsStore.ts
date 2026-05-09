@@ -7,6 +7,7 @@ const defaultSettings: AppSettings = {
   general: {
     startMinimized: false,
     minimizeToTray: true,
+    alwaysOnTop: false,
     launchOnStartup: false,
     confirmClose: false,
     checkForUpdates: true,
