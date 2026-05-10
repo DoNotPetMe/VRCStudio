@@ -1,51 +1,136 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#0b1220"/>
-      <stop offset="100%" stop-color="#1e293b"/>
+    <!-- Concrete wall background -->
+    <linearGradient id="wall" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#1c1d22"/>
+      <stop offset="50%"  stop-color="#15161a"/>
+      <stop offset="100%" stop-color="#0c0d10"/>
     </linearGradient>
-    <linearGradient id="vGrad" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#7dd3fc"/>
-      <stop offset="60%" stop-color="#3b82f6"/>
-      <stop offset="100%" stop-color="#2563eb"/>
-    </linearGradient>
-    <radialGradient id="dotGlow" cx="0.5" cy="0.5" r="0.5">
-      <stop offset="0%" stop-color="#ffffff" stop-opacity="1"/>
-      <stop offset="35%" stop-color="#7dd3fc" stop-opacity="0.85"/>
-      <stop offset="100%" stop-color="#3b82f6" stop-opacity="0"/>
-    </radialGradient>
-    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
-      <feGaussianBlur stdDeviation="4" result="b"/>
-      <feMerge>
-        <feMergeNode in="b"/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
+
+    <!-- Wall noise/grit overlay -->
+    <filter id="wallGrit" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed="3" stitchTiles="stitch"/>
+      <feColorMatrix values="0 0 0 0 0
+                             0 0 0 0 0
+                             0 0 0 0 0
+                             0 0 0 0.18 0"/>
     </filter>
+
+    <!-- Spray edge: soft blurred halo around painted shapes -->
+    <filter id="overspray" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="3.2"/>
+    </filter>
+    <filter id="oversprayWide" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="6"/>
+    </filter>
+
+    <!-- Speckle texture inside the paint (dry-spray flecks) -->
+    <filter id="paintFleck" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="2.1" numOctaves="2" seed="7" stitchTiles="stitch" result="t"/>
+      <feColorMatrix in="t" values="0 0 0 0 0
+                                    0 0 0 0 0
+                                    0 0 0 0 0
+                                    0 0 0 0.55 -0.35"/>
+      <feComposite in2="SourceGraphic" operator="in"/>
+    </filter>
+
+    <!-- Spray color: hot pink → red core -->
+    <linearGradient id="paint" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#fb7185"/>
+      <stop offset="55%"  stop-color="#ef4444"/>
+      <stop offset="100%" stop-color="#b91c1c"/>
+    </linearGradient>
+
+    <!-- Glob style for the drips -->
+    <radialGradient id="dripBlob" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0%"  stop-color="#ef4444"/>
+      <stop offset="60%" stop-color="#dc2626"/>
+      <stop offset="100%" stop-color="#7f1d1d"/>
+    </radialGradient>
   </defs>
 
-  <!-- Background: rounded dark square -->
-  <rect x="0" y="0" width="256" height="256" rx="56" ry="56" fill="url(#bg)"/>
+  <!-- Wall -->
+  <rect x="0" y="0" width="256" height="256" rx="56" ry="56" fill="url(#wall)"/>
+  <rect x="0" y="0" width="256" height="256" rx="56" ry="56" fill="black" filter="url(#wallGrit)" opacity="0.6"/>
 
-  <!-- Subtle inner highlight ring -->
-  <rect x="2" y="2" width="252" height="252" rx="55" ry="55" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width="2"/>
+  <!-- Subtle inner bevel -->
+  <rect x="2" y="2" width="252" height="252" rx="55" ry="55"
+        fill="none" stroke="rgba(255,255,255,0.04)" stroke-width="2"/>
 
-  <!-- The "V" — chevron, drawn as a thick stroke -->
-  <g filter="url(#glow)">
-    <path d="M 60 70 L 128 192 L 196 70"
-          fill="none"
-          stroke="url(#vGrad)"
-          stroke-width="26"
-          stroke-linecap="round"
-          stroke-linejoin="round"/>
-  </g>
+  <!--
+    The whole tag is rotated a couple of degrees off-axis — graffiti is
+    almost never perfectly level. Rotating around the center of the icon.
+  -->
+  <g transform="rotate(-4 128 128)">
 
-  <!-- Center pulse dot (presence indicator) -->
-  <circle cx="128" cy="120" r="34" fill="url(#dotGlow)" opacity="0.65"/>
-  <circle cx="128" cy="120" r="9" fill="#ffffff"/>
+    <!-- Wide ambient haze of the paint color (atmospheric) -->
+    <rect x="22" y="78" width="212" height="80" rx="20" fill="#dc2626" opacity="0.12" filter="url(#oversprayWide)"/>
 
-  <!-- Concentric arcs above the V (radio waves / OSC vibe) -->
-  <g stroke="#7dd3fc" fill="none" stroke-linecap="round" opacity="0.55">
-    <path d="M 88 78 Q 128 50 168 78" stroke-width="3.5"/>
-    <path d="M 76 64 Q 128 28 180 64" stroke-width="2.5" opacity="0.6"/>
+    <!-- Overspray halo (soft blurred duplicate behind the letters) -->
+    <text x="128" y="148"
+          text-anchor="middle"
+          font-family="Impact, 'Arial Black', 'Helvetica Neue', sans-serif"
+          font-size="108"
+          font-weight="900"
+          letter-spacing="-2"
+          fill="#ef4444"
+          opacity="0.55"
+          filter="url(#overspray)">VRC</text>
+
+    <!-- Main "VRC" tag -->
+    <text x="128" y="148"
+          text-anchor="middle"
+          font-family="Impact, 'Arial Black', 'Helvetica Neue', sans-serif"
+          font-size="108"
+          font-weight="900"
+          letter-spacing="-2"
+          fill="url(#paint)">VRC</text>
+
+    <!-- Dry-spray flecks layered on top of the letters -->
+    <text x="128" y="148"
+          text-anchor="middle"
+          font-family="Impact, 'Arial Black', 'Helvetica Neue', sans-serif"
+          font-size="108"
+          font-weight="900"
+          letter-spacing="-2"
+          fill="#0a0a0a"
+          filter="url(#paintFleck)"
+          opacity="0.55">VRC</text>
+
+    <!--
+      Drips falling from letter bases.
+      Each drip = a thin tapered rectangle + a small bulb at the bottom.
+    -->
+    <g fill="url(#dripBlob)">
+      <!-- Drip from V -->
+      <rect x="76" y="148" width="3.2" height="34" rx="1.6"/>
+      <circle cx="77.6" cy="184" r="3.6"/>
+      <!-- Long drip from R -->
+      <rect x="124" y="148" width="3.6" height="48" rx="1.8"/>
+      <circle cx="125.8" cy="198" r="4.2"/>
+      <!-- Short drip from R right leg -->
+      <rect x="148" y="148" width="2.6" height="22" rx="1.3"/>
+      <circle cx="149.3" cy="171" r="2.8"/>
+      <!-- Drip from C -->
+      <rect x="190" y="148" width="3" height="28" rx="1.5"/>
+      <circle cx="191.5" cy="178" r="3.2"/>
+    </g>
+
+    <!--
+      Stencil "STUDIO" underneath — small, sprayed through a stencil so it
+      has hard horizontal edges and overspray fade.
+    -->
+    <g transform="translate(0, 14)">
+      <rect x="62" y="180" width="132" height="22" rx="2" fill="#fafafa" opacity="0.10" filter="url(#overspray)"/>
+      <text x="128" y="198"
+            text-anchor="middle"
+            font-family="'Courier New', 'Andale Mono', monospace"
+            font-size="22"
+            font-weight="700"
+            letter-spacing="6"
+            fill="#fafafa"
+            opacity="0.92">STUDIO</text>
+    </g>
+
   </g>
 </svg>
