@@ -74,8 +74,11 @@ export const useWorldStore = create<WorldState>((set, get) => ({
   },
 
   getWorld: async (worldId) => {
+    // Cache may contain a LimitedWorld from list/search endpoints — those
+    // never include `instances`. Only treat the cache as authoritative when
+    // we already have the full World response (i.e. `instances` is set).
     const cached = get().worldCache[worldId];
-    if (cached) return cached;
+    if (cached && Array.isArray(cached.instances)) return cached;
 
     const world = await api.getWorld(worldId);
     set((state) => ({
