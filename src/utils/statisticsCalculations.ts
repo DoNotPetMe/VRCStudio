@@ -2,7 +2,7 @@
  * Statistics calculation utilities for the insights dashboard
  */
 
-import type { InstanceHistoryEntry } from '../types/vrchat';
+import type { InstanceHistoryEntry } from '../stores/instanceHistoryStore';
 import { differenceInDays, differenceInHours, startOfDay, startOfWeek, startOfMonth, endOfDay } from 'date-fns';
 
 export interface SessionStats {
@@ -38,18 +38,18 @@ export interface ActivityStreak {
  */
 export function calculateSessionStats(history: InstanceHistoryEntry[], daysBack = 30): SessionStats {
   const cutoff = Date.now() - daysBack * 24 * 60 * 60 * 1000;
-  const relevantHistory = history.filter(h => h.timestamp >= cutoff);
+  const relevantHistory = history.filter(h => h.joinedAt >= cutoff);
 
   if (relevantHistory.length === 0) {
     return { totalPlaytime: 0, totalSessions: 0, averageSessionDuration: 0, longestSession: 0 };
   }
 
-  const sorted = [...relevantHistory].sort((a, b) => a.timestamp - b.timestamp);
+  const sorted = [...relevantHistory].sort((a, b) => a.joinedAt - b.joinedAt);
   let totalPlaytime = 0;
   let longestSession = 0;
 
   for (let i = 1; i < sorted.length; i++) {
-    const duration = sorted[i].timestamp - sorted[i - 1].timestamp;
+    const duration = sorted[i].joinedAt - sorted[i - 1].joinedAt;
     // Assume sessions longer than 2 hours are false positives
     if (duration > 0 && duration < 2 * 60 * 60 * 1000) {
       totalPlaytime += duration;
@@ -74,11 +74,11 @@ export function calculateWorldInsights(history: InstanceHistoryEntry[]): WorldIn
   for (const entry of history) {
     const [worldId] = entry.worldId.split(':');
     if (!worldMap.has(worldId)) {
-      worldMap.set(worldId, { visits: 1, times: [entry.timestamp] });
+      worldMap.set(worldId, { visits: 1, times: [entry.joinedAt] });
     } else {
       const existing = worldMap.get(worldId)!;
       existing.visits++;
-      existing.times.push(entry.timestamp);
+      existing.times.push(entry.joinedAt);
     }
   }
 
@@ -116,7 +116,7 @@ export function calculateActivityByHour(history: InstanceHistoryEntry[]): Activi
   const totalCount = history.length;
 
   for (const entry of history) {
-    const hour = new Date(entry.timestamp).getHours();
+    const hour = new Date(entry.joinedAt).getHours();
     hourCounts[hour]++;
   }
 
@@ -137,7 +137,7 @@ export function calculateActivityStreaks(history: InstanceHistoryEntry[]): Activ
 
   const activeDays = new Set(
     history.map(h => {
-      const d = new Date(h.timestamp);
+      const d = new Date(h.joinedAt);
       return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
     })
   );

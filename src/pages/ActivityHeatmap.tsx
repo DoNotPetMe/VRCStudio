@@ -416,7 +416,7 @@ export default function ActivityHeatmapPage() {
               <div className="min-w-0">
                 <div className="text-sm font-semibold">{fmtMins(stats.longest.dur)}</div>
                 <div className="text-[11px] text-surface-500 truncate">
-                  Longest session · {stats.longest.worldName !== stats.longest.worldName.startsWith('wrld_') ? stats.longest.worldName : 'Unknown world'}
+                  Longest session · {stats.longest.worldName && !stats.longest.worldName.startsWith('wrld_') ? stats.longest.worldName : 'Unknown world'}
                 </div>
               </div>
             </div>

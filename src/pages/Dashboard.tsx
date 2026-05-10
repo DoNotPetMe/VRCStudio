@@ -120,7 +120,14 @@ export default function Dashboard() {
   }
 
   const todayEvents = events.filter(e => Date.now() - e.timestamp < 86400000);
-  const recentEvents = events.slice(0, 40);
+
+  const [feedFilter, setFeedFilter] = useState<'all' | 'worlds' | 'friends'>('all');
+  const filteredEvents = useMemo(() => {
+    if (feedFilter === 'worlds') return events.filter(e => e.type === 'friend_location' || e.type === 'world_visit');
+    if (feedFilter === 'friends') return events.filter(e => e.type === 'friend_online' || e.type === 'friend_offline' || e.type === 'friend_status' || e.type === 'friend_avatar' || e.type === 'friend_add' || e.type === 'friend_remove');
+    return events;
+  }, [events, feedFilter]);
+  const recentEvents = filteredEvents.slice(0, 40);
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -196,32 +203,71 @@ export default function Dashboard() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 glass-panel-solid overflow-hidden">
-          <div className="px-4 py-3 border-b border-surface-800/40 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-surface-300 flex items-center gap-2"><Activity size={14} />Activity Feed</h2>
-            <span className="text-xs text-surface-600">{todayEvents.length} today</span>
+          <div className="px-4 py-3 border-b border-surface-800/40 flex items-center justify-between gap-3 flex-wrap">
+            <h2 className="text-sm font-semibold text-surface-300 flex items-center gap-2">
+              <Activity size={14} />Activity Feed
+              <span className="ml-1 inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-rose-500/15 text-rose-400">
+                <span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-pulse" />LIVE
+              </span>
+            </h2>
+            <div className="flex items-center gap-1">
+              {(['all', 'worlds', 'friends'] as const).map(f => (
+                <button
+                  key={f}
+                  onClick={() => setFeedFilter(f)}
+                  className={`text-[10px] font-medium px-2 py-0.5 rounded-full uppercase tracking-wider transition-colors ${
+                    feedFilter === f ? 'bg-accent-500/20 text-accent-300' : 'text-surface-500 hover:text-surface-300'
+                  }`}
+                >
+                  {f}
+                </button>
+              ))}
+              <span className="text-xs text-surface-600 ml-2">{todayEvents.length} today</span>
+            </div>
           </div>
           {recentEvents.length === 0 ? (
-            <p className="text-surface-500 text-sm py-12 text-center">No activity yet. Events will appear as friends come online and move around.</p>
+            <p className="text-surface-500 text-sm py-12 text-center">
+              {feedFilter === 'all'
+                ? 'No activity yet. Events will appear as friends come online and move around.'
+                : `No ${feedFilter} activity yet.`}
+            </p>
           ) : (
             <div className="divide-y divide-surface-800/30 max-h-[520px] overflow-y-auto">
               {recentEvents.map(event => {
                 const Icon = eventIcons[event.type] || Activity;
                 const colorClasses = eventColors[event.type] || 'text-surface-400 bg-surface-500/10';
                 const [textColor, bgColor] = colorClasses.split(' ');
+                const isWorldEvent = event.type === 'friend_location' || event.type === 'world_visit';
                 return (
                   <div key={event.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-surface-800/30 transition-colors">
-                    <div className={`w-7 h-7 rounded-lg ${bgColor} flex items-center justify-center flex-shrink-0`}>
-                      <Icon size={13} className={textColor} />
-                    </div>
-                    {(friendAvatarMap.get(event.userId) || event.userAvatar) && (
-                      <UserAvatar src={friendAvatarMap.get(event.userId) || event.userAvatar || ''} size="sm" />
+                    {isWorldEvent && event.worldImage ? (
+                      <img src={event.worldImage} alt="" className="w-10 h-7 rounded object-cover flex-shrink-0 bg-surface-800" />
+                    ) : (
+                      <div className={`w-7 h-7 rounded-lg ${bgColor} flex items-center justify-center flex-shrink-0`}>
+                        <Icon size={13} className={textColor} />
+                      </div>
+                    )}
+                    {((event.userId && friendAvatarMap.get(event.userId)) || event.userAvatar) && (
+                      <UserAvatar src={(event.userId && friendAvatarMap.get(event.userId)) || event.userAvatar || ''} size="sm" />
                     )}
                     <div className="flex-1 min-w-0">
-                      <span className="text-[13px]">
+                      <div className="text-[13px] truncate">
                         <span className="font-medium text-surface-200">{event.userName}</span>{' '}
                         <span className="text-surface-500">{eventMessage(event)}</span>
-                      </span>
+                      </div>
+                      {isWorldEvent && event.worldName && (
+                        <div className="text-[10px] text-blue-400/70 truncate">in {event.worldName}</div>
+                      )}
                     </div>
+                    {isWorldEvent && event.worldId && event.instanceId && (
+                      <a
+                        href={`vrchat://launch?ref=vrcstudio&id=${event.worldId}:${event.instanceId}`}
+                        title="Launch directly into this instance"
+                        className="text-[10px] px-2 py-0.5 rounded-md bg-accent-600/15 text-accent-400 hover:bg-accent-600/25 flex-shrink-0 transition-colors"
+                      >
+                        Join
+                      </a>
+                    )}
                     <span className="text-[11px] text-surface-600 flex-shrink-0 tabular-nums">
                       {formatDistanceToNow(event.timestamp, { addSuffix: true })}
                     </span>

@@ -26,10 +26,13 @@ import FriendAnalytics from './pages/FriendAnalytics';
 import EventPlanner from './pages/EventPlanner';
 import AvatarEditor from './pages/AvatarEditor';
 import Reports from './pages/Reports';
+import OSCPage from './pages/OSC';
 import LoadingSpinner from './components/common/LoadingSpinner';
 import { useLocationTracking } from './hooks/useLocationTracking';
+import { useTrayStatus } from './hooks/useTrayStatus';
 import AvatarSwitcher from './components/AvatarSwitcher';
 import { useAvatarSwitcherStore } from './stores/avatarSwitcherStore';
+import { useOSCStore } from './stores/oscStore';
 
 // Error boundary to catch React rendering errors and show them instead of a blank screen
 class ErrorBoundary extends Component<
@@ -100,6 +103,15 @@ function AppShell() {
   const { isOpen: switcherOpen, close: closeSwitcher, toggle: toggleSwitcher } = useAvatarSwitcherStore();
   useDiscordRPC();
   useLocationTracking();
+  useTrayStatus();
+
+  // Auto-start OSC if configured
+  useEffect(() => {
+    const cfg = useOSCStore.getState().config;
+    if (cfg.autoStart) {
+      useOSCStore.getState().start().catch(() => {});
+    }
+  }, []);
 
   useEffect(() => {
     const unregister = keyboardManager.registerAll([
@@ -135,6 +147,7 @@ function AppShell() {
         <Route path="/events" element={<EventPlanner />} />
 <Route path="/avatar-editor" element={<AvatarEditor />} />
         <Route path="/reports" element={<Reports />} />
+        <Route path="/osc" element={<OSCPage />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

@@ -2,7 +2,7 @@ import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, Users, Globe, Shirt, Star, Settings,
   LogOut, Bell, Search, History, UsersRound, FileText, Camera,
-  ChevronDown, Flame, BarChart3, CalendarPlus, Paintbrush, Flag,
+  ChevronDown, Flame, BarChart3, CalendarPlus, Paintbrush, Flag, Radio,
 } from 'lucide-react';
 import { useState } from 'react';
 import { useAuthStore } from '../../stores/authStore';
@@ -31,6 +31,7 @@ const browseNavItems = [
 ];
 
 const toolsNavItems = [
+  { to: '/osc', icon: Radio, label: 'OSC' },
   { to: '/avatar-editor', icon: Paintbrush, label: 'Avatar Editor' },
   { to: '/activity', icon: Flame, label: 'Activity Map' },
   { to: '/friend-analytics', icon: BarChart3, label: 'Analytics' },

@@ -13,9 +13,102 @@ let rpcConnected = false;
 let minimizeToTray = true;
 let isQuitting = false;
 
+// ─── OSC (VRChat) ──────────────────────────────────────────────────────────
+// VRChat OSC convention: app sends to 127.0.0.1:9000, listens on 127.0.0.1:9001
+type OSCArg = { type: string; value: any } | string | number | boolean;
+let oscPort: any = null;
+let oscEnabled = false;
+let oscSendHost = '127.0.0.1';
+let oscSendPort = 9000;
+let oscRecvPort = 9001;
+const oscParamCache: Record<string, any> = {};
+
+async function startOSC(opts: { sendHost?: string; sendPort?: number; recvPort?: number } = {}) {
+  if (opts.sendHost) oscSendHost = opts.sendHost;
+  if (opts.sendPort) oscSendPort = opts.sendPort;
+  if (opts.recvPort) oscRecvPort = opts.recvPort;
+
+  if (oscPort) {
+    try { oscPort.close(); } catch {}
+    oscPort = null;
+  }
+
+  try {
+    const osc: any = await import('osc');
+    oscPort = new osc.UDPPort({
+      localAddress: '0.0.0.0',
+      localPort: oscRecvPort,
+      remoteAddress: oscSendHost,
+      remotePort: oscSendPort,
+      metadata: true,
+    });
+
+    oscPort.on('ready', () => {
+      oscEnabled = true;
+      console.log(`[OSC] Listening on :${oscRecvPort}, sending to ${oscSendHost}:${oscSendPort}`);
+      mainWindow?.webContents.send('osc:status', { connected: true, sendHost: oscSendHost, sendPort: oscSendPort, recvPort: oscRecvPort });
+    });
+
+    oscPort.on('message', (msg: { address: string; args: any[] }) => {
+      // Cache parameter values for /avatar/parameters/* paths
+      if (msg.address?.startsWith('/avatar/parameters/')) {
+        const value = Array.isArray(msg.args) && msg.args.length > 0
+          ? (msg.args[0]?.value ?? msg.args[0])
+          : null;
+        oscParamCache[msg.address] = value;
+      }
+      mainWindow?.webContents.send('osc:message', {
+        address: msg.address,
+        args: (msg.args || []).map((a: any) => a?.value ?? a),
+      });
+    });
+
+    oscPort.on('error', (err: any) => {
+      console.warn('[OSC] error:', err?.message || err);
+      mainWindow?.webContents.send('osc:status', { connected: false, error: err?.message || String(err) });
+    });
+
+    oscPort.open();
+    return { ok: true };
+  } catch (err: any) {
+    console.warn('[OSC] failed to start:', err?.message || err);
+    oscEnabled = false;
+    return { ok: false, error: err?.message || String(err) };
+  }
+}
+
+function stopOSC() {
+  if (oscPort) {
+    try { oscPort.close(); } catch {}
+    oscPort = null;
+  }
+  oscEnabled = false;
+  mainWindow?.webContents.send('osc:status', { connected: false });
+}
+
+function sendOSC(address: string, args: OSCArg[] = []) {
+  if (!oscPort || !oscEnabled) return { ok: false, error: 'OSC not started' };
+  try {
+    const formatted = args.map(a => {
+      if (typeof a === 'object' && a !== null && 'type' in a) return a;
+      if (typeof a === 'string') return { type: 's', value: a };
+      if (typeof a === 'boolean') return { type: a ? 'T' : 'F', value: a };
+      if (Number.isInteger(a)) return { type: 'i', value: a };
+      return { type: 'f', value: a };
+    });
+    oscPort.send({ address, args: formatted });
+    return { ok: true };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || String(err) };
+  }
+}
+
 // ─── Window ──────────────────────────────────────────────────────────────────
 
 function createWindow() {
+  const windowIconPath = path.join(__dirname, '..', 'public', 'icon.png');
+  const windowIcon = fs.existsSync(windowIconPath) ? nativeImage.createFromPath(windowIconPath) : undefined;
+
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 820,
@@ -24,6 +117,7 @@ function createWindow() {
     frame: false,
     titleBarStyle: 'hidden',
     backgroundColor: '#020617',
+    icon: windowIcon,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
@@ -52,15 +146,55 @@ function createWindow() {
   mainWindow.on('closed', () => { mainWindow = null; });
 }
 
-function createTray() {
-  const icon = nativeImage.createEmpty();
-  tray = new Tray(icon);
-  tray.setToolTip('VRC Studio');
+function loadTrayIcon(): Electron.NativeImage {
+  const iconPath = path.join(__dirname, '..', 'public', 'tray-icon.png');
+  const fallbackPath = path.join(__dirname, '..', 'public', 'icon.png');
+  for (const p of [iconPath, fallbackPath]) {
+    if (fs.existsSync(p)) {
+      const img = nativeImage.createFromPath(p);
+      if (!img.isEmpty()) {
+        // Resize for tray (16x16 on win/linux, 22x22 on mac retina handles itself)
+        return process.platform === 'darwin' ? img.resize({ width: 18, height: 18 }) : img.resize({ width: 16, height: 16 });
+      }
+    }
+  }
+  return nativeImage.createEmpty();
+}
 
-  const contextMenu = Menu.buildFromTemplate([
+function buildTrayMenu(): Electron.Menu {
+  const setStatus = (status: string) => {
+    mainWindow?.webContents.send('tray:setStatus', status);
+    if (!mainWindow?.isVisible()) {
+      // Window may be hidden; status update still goes through via IPC.
+    }
+  };
+
+  return Menu.buildFromTemplate([
     {
       label: 'Show VRC Studio',
       click: () => { mainWindow?.show(); mainWindow?.focus(); },
+    },
+    { type: 'separator' },
+    {
+      label: 'Set Status',
+      submenu: [
+        { label: '🟢  Join Me',  click: () => setStatus('join me') },
+        { label: '🔵  Online',   click: () => setStatus('active') },
+        { label: '🟡  Ask Me',   click: () => setStatus('ask me') },
+        { label: '🔴  Do Not Disturb', click: () => setStatus('busy') },
+        { type: 'separator' },
+        { label: '⚪  Offline (invisible)', click: () => setStatus('offline') },
+      ],
+    },
+    {
+      label: 'OSC Quick Actions',
+      submenu: [
+        { label: 'Toggle Mute',  click: () => sendOSC('/input/Voice', [{ type: 'i', value: 0 }]) },
+        { label: 'Jump',         click: () => { sendOSC('/input/Jump', [{ type: 'i', value: 1 }]); setTimeout(() => sendOSC('/input/Jump', [{ type: 'i', value: 0 }]), 100); } },
+        { type: 'separator' },
+        { label: 'Send "AFK" to chatbox', click: () => sendOSC('/chatbox/input', [{ type: 's', value: 'AFK' }, { type: 'T', value: true }, { type: 'F', value: false }]) },
+        { label: 'Clear chatbox',         click: () => sendOSC('/chatbox/input', [{ type: 's', value: '' }, { type: 'T', value: true }, { type: 'F', value: false }]) },
+      ],
     },
     { type: 'separator' },
     {
@@ -70,13 +204,21 @@ function createTray() {
         tray?.destroy();
         tray = null;
         disconnectDiscordRPC();
+        stopOSC();
         app.quit();
       },
     },
   ]);
+}
 
-  tray.setContextMenu(contextMenu);
+function createTray() {
+  tray = new Tray(loadTrayIcon());
+  tray.setToolTip('VRC Studio');
+  tray.setContextMenu(buildTrayMenu());
   tray.on('double-click', () => { mainWindow?.show(); mainWindow?.focus(); });
+  tray.on('click', () => {
+    if (process.platform === 'win32') { mainWindow?.show(); mainWindow?.focus(); }
+  });
 }
 
 // ─── Discord RPC ─────────────────────────────────────────────────────────────
@@ -382,6 +524,22 @@ ipcMain.handle('audio:detectMedia', async () => {
 });
 
 
+// ─── OSC IPC ─────────────────────────────────────────────────────────────────
+
+ipcMain.handle('osc:start', (_e, opts: { sendHost?: string; sendPort?: number; recvPort?: number } = {}) => {
+  return startOSC(opts);
+});
+ipcMain.handle('osc:stop', () => { stopOSC(); return { ok: true }; });
+ipcMain.handle('osc:status', () => ({
+  connected: oscEnabled,
+  sendHost: oscSendHost,
+  sendPort: oscSendPort,
+  recvPort: oscRecvPort,
+}));
+ipcMain.handle('osc:send', (_e, address: string, args: OSCArg[] = []) => sendOSC(address, args));
+ipcMain.handle('osc:getCachedParams', () => ({ ...oscParamCache }));
+ipcMain.handle('osc:clearCache', () => { for (const k of Object.keys(oscParamCache)) delete oscParamCache[k]; return { ok: true }; });
+
 // ─── VRChat API Proxy ────────────────────────────────────────────────────────
 
 ipcMain.handle('vrchat:request', async (_e, opts: {
@@ -544,4 +702,5 @@ app.on('activate', () => {
 app.on('before-quit', () => {
   isQuitting = true;
   disconnectDiscordRPC();
+  stopOSC();
 });

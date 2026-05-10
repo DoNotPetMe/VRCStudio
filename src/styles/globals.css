@@ -116,6 +116,12 @@
            focus:border-accent-500/60 transition-all duration-150 text-sm;
   }
 
+  .osc-input {
+    @apply w-full bg-surface-900 border border-surface-700 rounded-md px-2.5 py-1.5 text-sm
+           text-surface-100 placeholder-surface-500 focus:outline-none focus:border-accent-500
+           transition-colors;
+  }
+
   .sidebar-link {
     @apply flex items-center gap-2.5 px-3 py-2 rounded-lg text-surface-400
            hover:text-surface-200 hover:bg-surface-800/50 transition-all duration-100 text-[13px] font-medium;

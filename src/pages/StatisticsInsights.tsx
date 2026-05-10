@@ -158,12 +158,12 @@ export default function StatisticsInsightsPage() {
           label="Longest Streak"
           value={`${streaks.longest}d`}
           subtext="all time"
-          color="orange"
+          color="amber"
         />
         <StatCard
           icon={Calendar}
           label="Last Activity"
-          value={formatDistanceToNow(new Date(history[history.length - 1]?.timestamp || Date.now()), { addSuffix: true })}
+          value={formatDistanceToNow(new Date(history[history.length - 1]?.joinedAt || Date.now()), { addSuffix: true })}
           color="cyan"
         />
       </div>

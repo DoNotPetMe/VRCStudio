@@ -60,4 +60,30 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Generic outbound GET (routes through main process, sends User-Agent: VRCX)
   httpGet: (url: string, headers?: Record<string, string>) =>
     ipcRenderer.invoke('http:get', url, headers),
+
+  // OSC (VRChat)
+  oscStart: (opts?: { sendHost?: string; sendPort?: number; recvPort?: number }) =>
+    ipcRenderer.invoke('osc:start', opts || {}),
+  oscStop: () => ipcRenderer.invoke('osc:stop'),
+  oscStatus: () => ipcRenderer.invoke('osc:status'),
+  oscSend: (address: string, args?: any[]) => ipcRenderer.invoke('osc:send', address, args || []),
+  oscGetCachedParams: () => ipcRenderer.invoke('osc:getCachedParams'),
+  oscClearCache: () => ipcRenderer.invoke('osc:clearCache'),
+  onOscMessage: (cb: (msg: { address: string; args: any[] }) => void) => {
+    const handler = (_e: any, msg: any) => cb(msg);
+    ipcRenderer.on('osc:message', handler);
+    return () => ipcRenderer.removeListener('osc:message', handler);
+  },
+  onOscStatus: (cb: (status: any) => void) => {
+    const handler = (_e: any, status: any) => cb(status);
+    ipcRenderer.on('osc:status', handler);
+    return () => ipcRenderer.removeListener('osc:status', handler);
+  },
+
+  // Tray quick-status events (from right-click menu)
+  onTraySetStatus: (cb: (status: string) => void) => {
+    const handler = (_e: any, status: string) => cb(status);
+    ipcRenderer.on('tray:setStatus', handler);
+    return () => ipcRenderer.removeListener('tray:setStatus', handler);
+  },
 });

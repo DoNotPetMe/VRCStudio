@@ -131,18 +131,24 @@ export default function FriendEventDetail({ friend, events, onClose }: FriendEve
                           {getEventLabel(event.type)}
                         </span>
                       </div>
-                      {event.data && Object.keys(event.data).length > 0 && (
+                      {(event.worldName || event.details || event.newValue) && (
                         <div className="text-xs text-surface-400 space-y-1">
-                          {event.data.world && (
+                          {event.worldName && (
                             <div className="flex items-center gap-1.5">
                               <MapPin size={12} />
-                              <span className="truncate">{event.data.world}</span>
+                              <span className="truncate">{event.worldName}</span>
                             </div>
                           )}
-                          {event.data.status && (
+                          {event.newValue && event.type === 'friend_status' && (
                             <div className="flex items-center gap-1.5">
                               <MessageCircle size={12} />
-                              <span className="truncate">Status: {event.data.status}</span>
+                              <span className="truncate">Status: {event.newValue}</span>
+                            </div>
+                          )}
+                          {event.details && event.details !== event.worldName && (
+                            <div className="flex items-center gap-1.5">
+                              <MessageCircle size={12} />
+                              <span className="truncate">{event.details}</span>
                             </div>
                           )}
                         </div>

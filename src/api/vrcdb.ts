@@ -40,7 +40,7 @@ export const VRCDB_PROVIDERS = [
   {
     id: 'avtrdb',
     label: 'avtrdb.com',
-    searchUrl: (q: string) => `https://api.avtrdb.com/v3/avatar/search/vrcx?search=${encodeURIComponent(q)}&n=200`,
+    searchUrl: (q: string, n = 200) => `https://api.avtrdb.com/v3/avatar/search/vrcx?search=${encodeURIComponent(q)}&n=${n}`,
     byAuthorUrl: (id: string) => `https://api.avtrdb.com/v3/avatar/search/vrcx?authorId=${encodeURIComponent(id)}`,
     byIdUrl: (id: string) => `https://api.avtrdb.com/v3/avatar/search/vrcx?fileId=${encodeURIComponent(id)}`,
     headers: AVTRDB_HEADERS,
@@ -130,7 +130,7 @@ async function tryProviders(
 }
 
 export const vrcdb = {
-  search: (query: string) => tryProviders(p => p.searchUrl(query)),
+  search: (query: string, count = 200) => tryProviders(p => p.searchUrl(query, count)),
   getByAuthor: (authorId: string) => tryProviders(p => p.byAuthorUrl(authorId)),
   getById: (avatarId: string) => tryProviders(p => p.byIdUrl(avatarId)),
 };

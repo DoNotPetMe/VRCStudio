@@ -46,6 +46,26 @@ interface ElectronAPI {
     data: any;
     raw: string;
   }>;
+
+  // Persistent app data
+  saveAppData: (key: string, data: string) => Promise<{ success: boolean }>;
+  loadAppData: (key: string) => Promise<string | null>;
+  deleteAppData: (key: string) => Promise<{ success: boolean }>;
+  clearAllAppData: () => Promise<{ success: boolean }>;
+
+  // OSC
+  oscStart: (opts?: { sendHost?: string; sendPort?: number; recvPort?: number }) =>
+    Promise<{ ok: boolean; error?: string }>;
+  oscStop: () => Promise<{ ok: boolean }>;
+  oscStatus: () => Promise<{ connected: boolean; sendHost: string; sendPort: number; recvPort: number }>;
+  oscSend: (address: string, args?: any[]) => Promise<{ ok: boolean; error?: string }>;
+  oscGetCachedParams: () => Promise<Record<string, any>>;
+  oscClearCache: () => Promise<{ ok: boolean }>;
+  onOscMessage: (cb: (msg: { address: string; args: any[] }) => void) => () => void;
+  onOscStatus: (cb: (status: any) => void) => () => void;
+
+  // Tray quick-status
+  onTraySetStatus: (cb: (status: string) => void) => () => void;
 }
 
 interface Window {

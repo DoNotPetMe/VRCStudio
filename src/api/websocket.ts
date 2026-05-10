@@ -122,6 +122,8 @@ class VRChatWebSocket {
         if (data.location && data.location !== 'private') {
           const worldId = data.worldId || data.location?.split(':')[0];
           const worldName = data.world?.name || worldId;
+          const worldImage = data.world?.thumbnailImageUrl || data.world?.imageUrl;
+          const instanceId = data.location?.includes(':') ? data.location.split(':')[1] : undefined;
 
           feed.addEvent({
             type: 'friend_location',
@@ -129,6 +131,9 @@ class VRChatWebSocket {
             userName: data.user?.displayName || data.userId,
             userAvatar: data.user?.currentAvatarThumbnailImageUrl,
             worldId,
+            worldName: data.world?.name,
+            worldImage,
+            instanceId,
             details: data.world?.name ? `Joined ${data.world.name}` : 'Changed location',
             newValue: data.location,
           });
