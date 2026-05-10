@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Globe, TrendingUp, Clock, Star, Search, Users, Heart, ArrowLeft, LogIn, X } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { Globe, TrendingUp, Clock, Star, Search, Users, Heart, ArrowLeft, LogIn, X, ExternalLink } from 'lucide-react';
 import { useWorldStore } from '../stores/worldStore';
 import { useFriendStore } from '../stores/friendStore';
 import SearchInput from '../components/common/SearchInput';
@@ -10,6 +10,7 @@ import InstanceModal from '../components/InstanceModal';
 import type { VRCWorld } from '../types/vrchat';
 import { getBestAvatarUrl } from '../utils/avatar';
 import api from '../api/vrchat';
+import { useInstanceLabels } from '../hooks/useInstanceLabels';
 
 type WorldTab = 'search' | 'active' | 'recent' | 'favorites';
 
@@ -103,6 +104,19 @@ export default function WorldsPage() {
   const friendsInWorld = (worldId: string) =>
     onlineFriends.filter(f => f.location?.startsWith(worldId));
 
+  // Resolve group / owner names for whatever instances are visible
+  const detailInstanceIds = useMemo(
+    () => (selectedWorld?.instances ?? []).map(([id]) => id),
+    [selectedWorld?.id, selectedWorld?.instances?.length]
+  );
+  const detailLabels = useInstanceLabels(detailInstanceIds);
+
+  const pickerInstanceIds = useMemo(
+    () => (instancePicker?.instances ?? []).map(([id]) => id),
+    [instancePicker?.worldId, instancePicker?.instances?.length]
+  );
+  const pickerLabels = useInstanceLabels(pickerInstanceIds);
+
   if (selectedWorld) {
     const friends = friendsInWorld(selectedWorld.id);
     return (
@@ -189,33 +203,48 @@ export default function WorldsPage() {
                 {(() => {
                   const grouped = selectedWorld.instances.filter(([id]) => id.includes('group('));
                   const other = selectedWorld.instances.filter(([id]) => !id.includes('group('));
-                  const Row = ({ id, count }: { id: string; count: number }) => (
-                    <div className="glass-panel px-3 py-2.5 flex items-center gap-3 hover:border-accent-500/30 transition-colors">
-                      <button
-                        className="flex-1 flex items-center gap-2 min-w-0 text-left"
-                        onClick={() => setInstanceModal({ worldId: selectedWorld.id, instanceId: id })}
-                      >
-                        <span className="badge bg-surface-700 text-surface-300 text-[10px] flex-shrink-0">
-                          {instanceLabel(id)}
-                        </span>
-                        <span className="text-xs text-surface-400 flex items-center gap-1 flex-shrink-0 ml-auto">
-                          <Users size={11} /> {count}
-                        </span>
-                      </button>
-                      <button
-                        onClick={() => handleSelfInvite(selectedWorld.id, id)}
-                        disabled={!!rejoiningInstance}
-                        className={`flex items-center gap-1 text-xs flex-shrink-0 px-2 py-1 rounded-md transition-colors ${
-                          rejoiningInstance === id
-                            ? 'bg-green-500/15 text-green-400'
-                            : 'bg-accent-600/15 text-accent-400 hover:bg-accent-600/25'
-                        }`}
-                      >
-                        <LogIn size={11} />
-                        <span className="text-[10px]">{rejoiningInstance === id ? 'Sent!' : 'Invite me'}</span>
-                      </button>
-                    </div>
-                  );
+                  const Row = ({ id, count }: { id: string; count: number }) => {
+                    const label = detailLabels[id] || {};
+                    const displayName = label.groupName || label.ownerName;
+                    return (
+                      <div className="glass-panel px-3 py-2.5 flex items-center gap-3 hover:border-accent-500/30 transition-colors">
+                        <button
+                          className="flex-1 flex items-center gap-2 min-w-0 text-left"
+                          onClick={() => setInstanceModal({ worldId: selectedWorld.id, instanceId: id })}
+                        >
+                          <span className="badge bg-surface-700 text-surface-300 text-[10px] flex-shrink-0">
+                            {instanceLabel(id)}
+                          </span>
+                          <span className="text-xs text-surface-200 truncate min-w-0">
+                            {displayName ?? <span className="text-surface-500 italic">Public</span>}
+                          </span>
+                          <span className="text-xs text-surface-400 flex items-center gap-1 flex-shrink-0 ml-auto">
+                            <Users size={11} /> {count}
+                          </span>
+                        </button>
+                        <a
+                          href={`vrchat://launch?ref=vrcstudio&id=${selectedWorld.id}:${id}`}
+                          className="flex items-center gap-1 text-xs flex-shrink-0 px-2 py-1 rounded-md bg-surface-700/50 text-surface-300 hover:bg-surface-700 transition-colors"
+                          title="Launch directly into this instance"
+                        >
+                          <ExternalLink size={11} />
+                          <span className="text-[10px]">Launch</span>
+                        </a>
+                        <button
+                          onClick={() => handleSelfInvite(selectedWorld.id, id)}
+                          disabled={!!rejoiningInstance}
+                          className={`flex items-center gap-1 text-xs flex-shrink-0 px-2 py-1 rounded-md transition-colors ${
+                            rejoiningInstance === id
+                              ? 'bg-green-500/15 text-green-400'
+                              : 'bg-accent-600/15 text-accent-400 hover:bg-accent-600/25'
+                          }`}
+                        >
+                          <LogIn size={11} />
+                          <span className="text-[10px]">{rejoiningInstance === id ? 'Sent!' : 'Invite me'}</span>
+                        </button>
+                      </div>
+                    );
+                  };
                   return (
                     <>
                       {grouped.length > 0 && (
@@ -357,28 +386,42 @@ export default function WorldsPage() {
               ) : instancePicker.instances.length === 0 ? (
                 <p className="text-xs text-surface-500 text-center py-6">No active instances found</p>
               ) : (
-                instancePicker.instances.map(([id, count]) => (
-                  <div key={id} className="glass-panel px-3 py-2.5 flex items-center gap-3">
-                    <span className="badge bg-surface-700 text-surface-300 text-[10px] flex-shrink-0">
-                      {instanceLabel(id)}
-                    </span>
-                    <span className="text-xs text-surface-400 flex items-center gap-1 ml-auto flex-shrink-0">
-                      <Users size={11} /> {count}
-                    </span>
-                    <button
-                      onClick={() => handleSelfInvite(instancePicker.worldId, id)}
-                      disabled={!!rejoiningInstance}
-                      className={`flex items-center gap-1 text-xs px-2 py-1 rounded-md flex-shrink-0 transition-colors ${
-                        rejoiningInstance === id
-                          ? 'bg-green-500/15 text-green-400'
-                          : 'bg-accent-600/15 text-accent-400 hover:bg-accent-600/25'
-                      }`}
-                    >
-                      <LogIn size={11} />
-                      {rejoiningInstance === id ? 'Sent!' : 'Invite me'}
-                    </button>
-                  </div>
-                ))
+                instancePicker.instances.map(([id, count]) => {
+                  const label = pickerLabels[id] || {};
+                  const displayName = label.groupName || label.ownerName;
+                  return (
+                    <div key={id} className="glass-panel px-3 py-2.5 flex items-center gap-2">
+                      <span className="badge bg-surface-700 text-surface-300 text-[10px] flex-shrink-0">
+                        {instanceLabel(id)}
+                      </span>
+                      <span className="text-xs text-surface-200 truncate min-w-0 flex-1">
+                        {displayName ?? <span className="text-surface-500 italic">Public</span>}
+                      </span>
+                      <span className="text-xs text-surface-400 flex items-center gap-1 flex-shrink-0">
+                        <Users size={11} /> {count}
+                      </span>
+                      <a
+                        href={`vrchat://launch?ref=vrcstudio&id=${instancePicker.worldId}:${id}`}
+                        className="flex items-center gap-1 text-xs flex-shrink-0 px-2 py-1 rounded-md bg-surface-700/50 text-surface-300 hover:bg-surface-700 transition-colors"
+                        title="Launch directly into this instance"
+                      >
+                        <ExternalLink size={11} />
+                      </a>
+                      <button
+                        onClick={() => handleSelfInvite(instancePicker.worldId, id)}
+                        disabled={!!rejoiningInstance}
+                        className={`flex items-center gap-1 text-xs px-2 py-1 rounded-md flex-shrink-0 transition-colors ${
+                          rejoiningInstance === id
+                            ? 'bg-green-500/15 text-green-400'
+                            : 'bg-accent-600/15 text-accent-400 hover:bg-accent-600/25'
+                        }`}
+                      >
+                        <LogIn size={11} />
+                        {rejoiningInstance === id ? 'Sent!' : 'Invite me'}
+                      </button>
+                    </div>
+                  );
+                })
               )}
             </div>
           </div>
