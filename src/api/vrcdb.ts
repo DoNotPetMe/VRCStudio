@@ -40,12 +40,16 @@ export const VRCDB_PROVIDERS = [
   {
     id: 'avtrdb',
     label: 'avtrdb.com',
+    // avtrdb's /v3/avatar/search/vrcx endpoint REQUIRES a `search` param.
+    // Tag searches piggy-back on the same endpoint by passing the tag as
+    // the search term — avtrdb's full-text index covers tag names.
     searchUrl: (q: string, n = 200) => `https://api.avtrdb.com/v3/avatar/search/vrcx?search=${encodeURIComponent(q)}&n=${n}`,
     byAuthorUrl: (id: string) => `https://api.avtrdb.com/v3/avatar/search/vrcx?authorId=${encodeURIComponent(id)}`,
     byIdUrl: (id: string) => `https://api.avtrdb.com/v3/avatar/search/vrcx?fileId=${encodeURIComponent(id)}`,
-    tagSearchUrl: (tag: string, n = 50) => `https://api.avtrdb.com/v3/avatar/search/vrcx?tag=${encodeURIComponent(tag)}&n=${n}`,
-    latestUrl: (n = 50) => `https://api.avtrdb.com/v3/avatar/latest/vrcx?n=${n}`,
-    similarImageUrl: (imageUrl: string, n = 30) => `https://api.avtrdb.com/v3/avatar/similar/image/vrcx?imageUrl=${encodeURIComponent(imageUrl)}&n=${n}`,
+    tagSearchUrl: (tag: string, n = 50) => `https://api.avtrdb.com/v3/avatar/search/vrcx?search=${encodeURIComponent(tag)}&n=${n}`,
+    // Open the canonical avtrdb page for an avatar (e.g. to use their
+    // built-in "find similar" image search there).
+    webPageUrl: (avatarId: string) => `https://avtrdb.com/avatar/${encodeURIComponent(avatarId)}`,
     headers: AVTRDB_HEADERS,
   },
 ] as const;
@@ -139,6 +143,9 @@ export const vrcdb = {
   getByAuthor: (authorId: string) => tryProviders(p => p.byAuthorUrl(authorId)),
   getById: (avatarId: string) => tryProviders(p => p.byIdUrl(avatarId)),
   searchByTag: (tag: string, count = 50) => tryProviders(p => 'tagSearchUrl' in p ? p.tagSearchUrl(tag, count) : null),
-  latest: (count = 50) => tryProviders(p => 'latestUrl' in p ? p.latestUrl(count) : null),
-  similarImage: (imageUrl: string, count = 30) => tryProviders(p => 'similarImageUrl' in p ? p.similarImageUrl(imageUrl, count) : null),
+  /** Web URL for an avatar on the active provider (for opening in browser). */
+  webUrlFor: (avatarId: string): string | null => {
+    const p = VRCDB_PROVIDERS.find(p => p.id === getProviderId()) ?? VRCDB_PROVIDERS[0];
+    return 'webPageUrl' in p ? p.webPageUrl(avatarId) : null;
+  },
 };

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { X, Pin, PinOff, Shirt, RotateCw, Search, Check, Clock, Database, Copy, Tag, Sparkles, Image, ExternalLink } from 'lucide-react';
+import { X, Pin, PinOff, Shirt, RotateCw, Search, Check, Clock, Database, Copy, Tag, Image, ExternalLink } from 'lucide-react';
 import api from '../api/vrchat';
 import { vrcdb, VRCDB_PROVIDERS, getProviderId } from '../api/vrcdb';
 import type { VRCDBAvatar } from '../api/vrcdb';
@@ -14,7 +14,7 @@ interface Props {
 }
 
 type SwitcherMode = 'mine' | 'vrcdb';
-type VrcdbTab = 'name' | 'tag' | 'latest' | 'image';
+type VrcdbTab = 'name' | 'tag';
 
 export default function AvatarSwitcher({ open, onClose }: Props) {
   const {
@@ -33,13 +33,11 @@ export default function AvatarSwitcher({ open, onClose }: Props) {
   const [vrcdbTab, setVrcdbTab] = useState<VrcdbTab>('name');
   const [vrcdbQuery, setVrcdbQuery] = useState('');
   const [tagQuery, setTagQuery] = useState('');
-  const [imageQuery, setImageQuery] = useState('');
   const [vrcdbResults, setVrcdbResults] = useState<VRCDBAvatar[]>([]);
   const [vrcdbLoading, setVrcdbLoading] = useState(false);
   const [vrcdbError, setVrcdbError] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [previewAvatar, setPreviewAvatar] = useState<VRCAvatar | null>(null);
-  const [latestLoaded, setLatestLoaded] = useState(false);
 
   const panelRef = useRef<HTMLDivElement>(null);
   const filterRef = useRef<HTMLInputElement>(null);
@@ -80,13 +78,6 @@ export default function AvatarSwitcher({ open, onClose }: Props) {
       setTimeout(() => (mode === 'mine' ? filterRef : vrcdbRef).current?.focus(), 50);
     }
   }, [mode]);
-
-  // Auto-load latest when switching to that tab
-  useEffect(() => {
-    if (vrcdbTab === 'latest' && !latestLoaded && mode === 'vrcdb') {
-      handleLatest();
-    }
-  }, [vrcdbTab, mode]);
 
   useEffect(() => {
     if (!open) return;
@@ -138,15 +129,11 @@ export default function AvatarSwitcher({ open, onClose }: Props) {
     runVrcdbSearch(() => vrcdb.searchByTag(t, 50));
   };
 
-  const handleLatest = () => {
-    setLatestLoaded(true);
-    runVrcdbSearch(() => vrcdb.latest(50));
-  };
-
-  const searchByImage = () => {
-    const url = imageQuery.trim();
+  const openSimilarImageSearch = (avatarId: string) => {
+    const url = vrcdb.webUrlFor(avatarId);
     if (!url) return;
-    runVrcdbSearch(() => vrcdb.similarImage(url, 30));
+    if (window.electronAPI?.openExternal) window.electronAPI.openExternal(url);
+    else window.open(url, '_blank');
   };
 
   const copyId = (id: string) => {
@@ -178,8 +165,6 @@ export default function AvatarSwitcher({ open, onClose }: Props) {
   const vrcdbTabs: { id: VrcdbTab; icon: React.ElementType; label: string }[] = [
     { id: 'name', icon: Search, label: 'Name' },
     { id: 'tag', icon: Tag, label: 'Tag' },
-    { id: 'latest', icon: Sparkles, label: 'Latest' },
-    { id: 'image', icon: Image, label: 'Image' },
   ];
 
   const showEmptyState = !vrcdbLoading && !vrcdbError && vrcdbResults.length === 0;
@@ -258,7 +243,7 @@ export default function AvatarSwitcher({ open, onClose }: Props) {
         )}
 
         {/* Search input for vrcdb tabs */}
-        {mode === 'vrcdb' && vrcdbTab !== 'latest' && (
+        {mode === 'vrcdb' && (
           <div className="px-3 py-2 flex-shrink-0 border-b border-surface-800/40">
             {vrcdbTab === 'name' && (
               <div className="flex gap-2">
@@ -296,46 +281,6 @@ export default function AvatarSwitcher({ open, onClose }: Props) {
                 </button>
               </div>
             )}
-
-            {vrcdbTab === 'image' && (
-              <div className="space-y-2">
-                <div className="relative">
-                  <Image size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-surface-500 pointer-events-none" />
-                  <input
-                    value={imageQuery}
-                    onChange={e => setImageQuery(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && searchByImage()}
-                    placeholder="Paste image URL..."
-                    className="w-full bg-surface-800 text-sm pl-8 pr-3 py-1.5 rounded-lg border border-surface-700/40 focus:outline-none focus:border-accent-500/50 placeholder-surface-600"
-                  />
-                </div>
-                <button
-                  onClick={searchByImage}
-                  disabled={vrcdbLoading || !imageQuery.trim()}
-                  className="btn-primary text-xs w-full"
-                >
-                  Find Similar Avatars
-                </button>
-                <p className="text-[9px] text-surface-700 leading-relaxed">
-                  Paste a VRChat avatar thumbnail URL to find visually similar avatars in the database.
-                </p>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Latest: just a refresh button */}
-        {mode === 'vrcdb' && vrcdbTab === 'latest' && (
-          <div className="px-3 py-2 flex-shrink-0 border-b border-surface-800/40 flex items-center justify-between">
-            <span className="text-[10px] text-surface-600">Most recently added avatars</span>
-            <button
-              onClick={handleLatest}
-              disabled={vrcdbLoading}
-              className="p-1 hover:bg-surface-800 rounded transition-colors text-surface-500 hover:text-surface-200"
-              title="Refresh"
-            >
-              <RotateCw size={12} className={vrcdbLoading ? 'animate-spin' : ''} />
-            </button>
           </div>
         )}
 
@@ -410,8 +355,7 @@ export default function AvatarSwitcher({ open, onClose }: Props) {
             /* ── VRCDB ── */
             vrcdbLoading ? (
               <div className="flex items-center justify-center py-16 text-surface-500 text-sm gap-2">
-                <RotateCw size={14} className="animate-spin" />
-                {vrcdbTab === 'latest' ? 'Fetching latest...' : 'Searching...'}
+                <RotateCw size={14} className="animate-spin" /> Searching...
               </div>
             ) : vrcdbError ? (
               <div className="p-4 text-xs text-rose-400 space-y-1">
@@ -420,7 +364,7 @@ export default function AvatarSwitcher({ open, onClose }: Props) {
               </div>
             ) : showEmptyState ? (
               <div className="text-center py-16 text-surface-500">
-                {vrcdbTab === 'name' && (
+                {vrcdbTab === 'name' ? (
                   <>
                     <Search size={32} className="mx-auto mb-3 opacity-30" />
                     <p className="text-sm">{vrcdbQuery ? 'No results found' : 'Search by avatar name'}</p>
@@ -428,8 +372,7 @@ export default function AvatarSwitcher({ open, onClose }: Props) {
                       {vrcdbQuery ? 'Try a different name or author' : 'Type a name and press Go'}
                     </p>
                   </>
-                )}
-                {vrcdbTab === 'tag' && (
+                ) : (
                   <>
                     <Tag size={32} className="mx-auto mb-3 opacity-30" />
                     <p className="text-sm">{tagQuery ? 'No avatars with that tag' : 'Search by tag'}</p>
@@ -438,26 +381,10 @@ export default function AvatarSwitcher({ open, onClose }: Props) {
                     </p>
                   </>
                 )}
-                {vrcdbTab === 'latest' && (
-                  <>
-                    <Sparkles size={32} className="mx-auto mb-3 opacity-30" />
-                    <p className="text-sm">No avatars loaded</p>
-                    <button onClick={handleLatest} className="btn-secondary text-xs mt-3">Load Latest</button>
-                  </>
-                )}
-                {vrcdbTab === 'image' && (
-                  <>
-                    <Image size={32} className="mx-auto mb-3 opacity-30" />
-                    <p className="text-sm">{imageQuery ? 'No similar avatars found' : 'Find similar avatars'}</p>
-                    <p className="text-xs mt-1 text-surface-600">
-                      Paste a thumbnail URL above to find visually similar avatars
-                    </p>
-                  </>
-                )}
               </div>
             ) : (
               <div className="py-2">
-                <Section label={`${vrcdbResults.length} ${vrcdbTab === 'latest' ? 'newest' : 'results'}`}>
+                <Section label={`${vrcdbResults.length} results`}>
                   {vrcdbResults.map(a => {
                     const isWearing = wearingId === a.id;
                     const isWorn = wornId === a.id;
@@ -478,6 +405,13 @@ export default function AvatarSwitcher({ open, onClose }: Props) {
                           <div className="text-[10px] text-surface-600 truncate">{a.authorName}</div>
                         </div>
                         <div className="flex items-center gap-1 flex-shrink-0">
+                          <button
+                            onClick={() => openSimilarImageSearch(a.id)}
+                            className="p-1 rounded text-surface-600 hover:text-accent-400 transition-colors opacity-0 group-hover:opacity-100"
+                            title="Find similar avatars on avtrdb.com"
+                          >
+                            <Image size={11} />
+                          </button>
                           <button
                             onClick={() => copyId(a.id)}
                             className="p-1 rounded text-surface-600 hover:text-surface-300 transition-colors opacity-0 group-hover:opacity-100"
