@@ -43,6 +43,9 @@ export const VRCDB_PROVIDERS = [
     searchUrl: (q: string, n = 200) => `https://api.avtrdb.com/v3/avatar/search/vrcx?search=${encodeURIComponent(q)}&n=${n}`,
     byAuthorUrl: (id: string) => `https://api.avtrdb.com/v3/avatar/search/vrcx?authorId=${encodeURIComponent(id)}`,
     byIdUrl: (id: string) => `https://api.avtrdb.com/v3/avatar/search/vrcx?fileId=${encodeURIComponent(id)}`,
+    tagSearchUrl: (tag: string, n = 50) => `https://api.avtrdb.com/v3/avatar/search/vrcx?tag=${encodeURIComponent(tag)}&n=${n}`,
+    latestUrl: (n = 50) => `https://api.avtrdb.com/v3/avatar/latest/vrcx?n=${n}`,
+    similarImageUrl: (imageUrl: string, n = 30) => `https://api.avtrdb.com/v3/avatar/similar/image/vrcx?imageUrl=${encodeURIComponent(imageUrl)}&n=${n}`,
     headers: AVTRDB_HEADERS,
   },
 ] as const;
@@ -114,23 +117,28 @@ async function fetchUrl(url: string, headers: Record<string, string>): Promise<{
 
 // Try the active provider first, then fall back to others on hard error.
 async function tryProviders(
-  pick: (p: typeof VRCDB_PROVIDERS[number]) => string,
+  pick: (p: typeof VRCDB_PROVIDERS[number]) => string | null,
 ): Promise<VRCDBAvatar[]> {
   const order = [getProvider(), ...VRCDB_PROVIDERS.filter(p => p.id !== getProviderId())];
   const errors: string[] = [];
   for (const provider of order) {
     const url = pick(provider);
+    if (!url) continue; // provider doesn't support this operation
     const result = await fetchUrl(url, provider.headers());
     if (result.status >= 200 && result.status < 300) {
       return result.avatars;
     }
     errors.push(`${provider.label} → ${result.status}${result.rawError ? `: ${result.rawError}` : ''}`);
   }
+  if (errors.length === 0) throw new Error('No provider supports this search type');
   throw new Error(`All providers failed:\n${errors.join('\n')}`);
 }
 
 export const vrcdb = {
-  search: (query: string, count = 200) => tryProviders(p => p.searchUrl(query, count)),
+  search: (query: string, count = 50) => tryProviders(p => p.searchUrl(query, count)),
   getByAuthor: (authorId: string) => tryProviders(p => p.byAuthorUrl(authorId)),
   getById: (avatarId: string) => tryProviders(p => p.byIdUrl(avatarId)),
+  searchByTag: (tag: string, count = 50) => tryProviders(p => 'tagSearchUrl' in p ? p.tagSearchUrl(tag, count) : null),
+  latest: (count = 50) => tryProviders(p => 'latestUrl' in p ? p.latestUrl(count) : null),
+  similarImage: (imageUrl: string, count = 30) => tryProviders(p => 'similarImageUrl' in p ? p.similarImageUrl(imageUrl, count) : null),
 };
