@@ -11,6 +11,16 @@ export interface VisualizerConfig {
   smoothing: number;            // 0 – 0.95
 }
 
+export type BorderStyle =
+  | 'default'
+  | 'rainbow'
+  | 'neon'
+  | 'pulse'
+  | 'glow'
+  | 'flame'
+  | 'shimmer'
+  | 'cyber';
+
 export interface ThemeConfig {
   mode: 'dark' | 'light' | 'midnight' | 'oled';
   accentColor: 'blue' | 'purple' | 'green' | 'rose' | 'amber' | 'cyan';
@@ -19,6 +29,7 @@ export interface ThemeConfig {
   fontSize: 'small' | 'medium' | 'large';
   sidebarWidth: 'compact' | 'normal' | 'wide';
   borderRadius: 'sharp' | 'rounded' | 'pill';
+  borderStyle: BorderStyle;
   animationSpeed: 'none' | 'subtle' | 'normal';
   glassEffect: 'none' | 'light' | 'medium';
   visualizer: VisualizerConfig;
@@ -44,6 +55,7 @@ const defaultTheme: ThemeConfig = {
   fontSize: 'medium',
   sidebarWidth: 'normal',
   borderRadius: 'rounded',
+  borderStyle: 'default',
   animationSpeed: 'normal',
   glassEffect: 'medium',
   visualizer: defaultVisualizer,
@@ -55,9 +67,14 @@ function mergeTheme(saved: Partial<ThemeConfig>): ThemeConfig {
   const migrated = rawStyle === ('plasma' as any) ? 'aurora' : rawStyle;
   const valid: VisualizerConfig['style'][] = ['bars','blocks','wave','radial','dots','aurora'];
   const safeStyle: VisualizerConfig['style'] = valid.includes(migrated as any) ? migrated as VisualizerConfig['style'] : 'bars';
+  const validBorder: BorderStyle[] = ['default','rainbow','neon','pulse','glow','flame','shimmer','cyber'];
+  const safeBorderStyle: BorderStyle = validBorder.includes(saved.borderStyle as any)
+    ? (saved.borderStyle as BorderStyle)
+    : 'default';
   return {
     ...defaultTheme,
     ...saved,
+    borderStyle: safeBorderStyle,
     visualizer: { ...defaultVisualizer, ...(saved.visualizer ?? {}), style: safeStyle },
   };
 }
@@ -153,6 +170,7 @@ interface ThemeState {
   setFontSize: (size: ThemeConfig['fontSize']) => void;
   setSidebarWidth: (width: ThemeConfig['sidebarWidth']) => void;
   setBorderRadius: (radius: ThemeConfig['borderRadius']) => void;
+  setBorderStyle: (style: ThemeConfig['borderStyle']) => void;
   setAnimationSpeed: (speed: ThemeConfig['animationSpeed']) => void;
   setGlassEffect: (effect: ThemeConfig['glassEffect']) => void;
   setPremiumTheme: (theme: ThemeConfig['premiumTheme']) => void;
@@ -201,6 +219,13 @@ export const useThemeStore = create<ThemeState>((set, get) => ({
 
   setBorderRadius: (borderRadius) => {
     const theme = { ...get().theme, borderRadius };
+    saveTheme(theme);
+    set({ theme });
+    get().applyTheme();
+  },
+
+  setBorderStyle: (borderStyle) => {
+    const theme = { ...get().theme, borderStyle };
     saveTheme(theme);
     set({ theme });
     get().applyTheme();
@@ -257,6 +282,14 @@ export const useThemeStore = create<ThemeState>((set, get) => ({
     // Border radius
     const radiusMap: Record<string, string> = { sharp: '0px', rounded: '8px', pill: '16px' };
     root.style.setProperty('--radius-base', radiusMap[theme.borderRadius ?? 'rounded']);
+
+    // Border style (animated border themes)
+    const allBorderStyles: BorderStyle[] = [
+      'default', 'rainbow', 'neon', 'pulse', 'glow', 'flame', 'shimmer', 'cyber',
+    ];
+    for (const s of allBorderStyles) root.classList.remove(`border-theme-${s}`);
+    const bs: BorderStyle = (theme.borderStyle ?? 'default');
+    if (bs !== 'default') root.classList.add(`border-theme-${bs}`);
 
     // Animation speed
     const durationMap: Record<string, string> = { none: '0ms', subtle: '100ms', normal: '200ms' };

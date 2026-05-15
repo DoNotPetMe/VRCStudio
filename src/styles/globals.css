@@ -305,6 +305,173 @@
 .badge { border-radius: 9999px !important; }
 
 /* ───────────────────────────────────────────────────────────────────────
+   Animated border themes.
+   Applied as `html.border-theme-<style>` by themeStore.applyTheme().
+   Selectors target structural panels/buttons/inputs plus any element
+   wearing a Tailwind `border-surface-*` utility so inline borders shift
+   too. Uses @property to animate a custom CSS variable across the whole
+   document, then derives per-element border colors from that variable.
+   ─────────────────────────────────────────────────────────────────── */
+
+@property --bdr-hue {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: true;
+}
+
+@property --bdr-flame {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: true;
+}
+
+@property --bdr-shimmer {
+  syntax: '<percentage>';
+  initial-value: 0%;
+  inherits: true;
+}
+
+@keyframes bdr-hue-cycle { to { --bdr-hue: 360deg; } }
+@keyframes bdr-flame-cycle { 0%, 100% { --bdr-flame: -15deg; } 50% { --bdr-flame: 25deg; } }
+@keyframes bdr-shimmer-cycle { to { --bdr-shimmer: 200%; } }
+@keyframes bdr-pulse-ring {
+  0%, 100% { box-shadow: 0 0 0 0 rgb(var(--accent-500) / 0.45); }
+  50%      { box-shadow: 0 0 0 4px rgb(var(--accent-500) / 0);    }
+}
+@keyframes bdr-glow-breathe {
+  0%, 100% { box-shadow: 0 0 8px  rgb(var(--accent-500) / 0.25); }
+  50%      { box-shadow: 0 0 18px rgb(var(--accent-500) / 0.55); }
+}
+
+/* Drive the shared variables from the root element */
+html.border-theme-rainbow  { animation: bdr-hue-cycle      6s linear  infinite; }
+html.border-theme-flame    { animation: bdr-flame-cycle    4s ease-in-out infinite; }
+html.border-theme-shimmer  { animation: bdr-shimmer-cycle  3s linear  infinite; }
+html.border-theme-cyber    { animation: bdr-hue-cycle      4s steps(8, end) infinite; }
+
+/* Element list — all the visible "border" surfaces in the UI. */
+html[class*="border-theme-"] .glass-panel,
+html[class*="border-theme-"] .glass-panel-solid,
+html[class*="border-theme-"] .stat-card,
+html[class*="border-theme-"] .input-field,
+html[class*="border-theme-"] .osc-input,
+html[class*="border-theme-"] .btn-primary,
+html[class*="border-theme-"] .btn-secondary,
+html[class*="border-theme-"] .btn-danger,
+html[class*="border-theme-"] .btn-success,
+html[class*="border-theme-"] .btn-accent,
+html[class*="border-theme-"] .tooltip,
+html[class*="border-theme-"] [class*="border-surface-"] {
+  transition: border-color 120ms linear, box-shadow 200ms ease-out;
+}
+
+/* ── Rainbow: full hue cycle ── */
+html.border-theme-rainbow .glass-panel,
+html.border-theme-rainbow .glass-panel-solid,
+html.border-theme-rainbow .stat-card,
+html.border-theme-rainbow .input-field,
+html.border-theme-rainbow .osc-input,
+html.border-theme-rainbow .btn-secondary,
+html.border-theme-rainbow .tooltip,
+html.border-theme-rainbow [class*="border-surface-"] {
+  border-color: hsl(var(--bdr-hue) 95% 62%) !important;
+  box-shadow: 0 0 12px hsl(var(--bdr-hue) 95% 55% / 0.18);
+}
+
+/* ── Neon: vivid accent + glow ── */
+html.border-theme-neon .glass-panel,
+html.border-theme-neon .glass-panel-solid,
+html.border-theme-neon .stat-card,
+html.border-theme-neon .input-field,
+html.border-theme-neon .osc-input,
+html.border-theme-neon .btn-secondary,
+html.border-theme-neon .tooltip,
+html.border-theme-neon [class*="border-surface-"] {
+  border-color: rgb(var(--accent-400)) !important;
+  box-shadow: 0 0 12px rgb(var(--accent-500) / 0.6),
+              inset 0 0 6px rgb(var(--accent-500) / 0.15);
+}
+
+/* ── Pulse: accent ring that pulses outward ── */
+html.border-theme-pulse .glass-panel,
+html.border-theme-pulse .glass-panel-solid,
+html.border-theme-pulse .stat-card,
+html.border-theme-pulse .input-field,
+html.border-theme-pulse .osc-input,
+html.border-theme-pulse .btn-secondary,
+html.border-theme-pulse .tooltip,
+html.border-theme-pulse [class*="border-surface-"] {
+  border-color: rgb(var(--accent-500) / 0.7) !important;
+  animation: bdr-pulse-ring 2.4s ease-in-out infinite;
+}
+
+/* ── Glow: soft accent halo that breathes ── */
+html.border-theme-glow .glass-panel,
+html.border-theme-glow .glass-panel-solid,
+html.border-theme-glow .stat-card,
+html.border-theme-glow .input-field,
+html.border-theme-glow .osc-input,
+html.border-theme-glow .btn-secondary,
+html.border-theme-glow .tooltip,
+html.border-theme-glow [class*="border-surface-"] {
+  border-color: rgb(var(--accent-600) / 0.55) !important;
+  animation: bdr-glow-breathe 3.5s ease-in-out infinite;
+}
+
+/* ── Flame: warm orange/red, slight hue wobble ── */
+html.border-theme-flame .glass-panel,
+html.border-theme-flame .glass-panel-solid,
+html.border-theme-flame .stat-card,
+html.border-theme-flame .input-field,
+html.border-theme-flame .osc-input,
+html.border-theme-flame .btn-secondary,
+html.border-theme-flame .tooltip,
+html.border-theme-flame [class*="border-surface-"] {
+  /* base is amber-500, hue rotates between -15deg → +25deg → red/yellow */
+  border-color: hsl(calc(28deg + var(--bdr-flame)) 92% 58%) !important;
+  box-shadow: 0 0 14px hsl(calc(28deg + var(--bdr-flame)) 92% 48% / 0.45);
+}
+
+/* ── Shimmer: moving gradient sheen across border-image ── */
+html.border-theme-shimmer .glass-panel,
+html.border-theme-shimmer .glass-panel-solid,
+html.border-theme-shimmer .stat-card,
+html.border-theme-shimmer .input-field,
+html.border-theme-shimmer .osc-input,
+html.border-theme-shimmer .btn-secondary,
+html.border-theme-shimmer .tooltip,
+html.border-theme-shimmer [class*="border-surface-"] {
+  border-color: transparent !important;
+  border-image-source: linear-gradient(
+    90deg,
+    rgb(var(--surface-700)) 0%,
+    rgb(var(--accent-300)) calc(var(--bdr-shimmer) - 20%),
+    rgb(var(--accent-100)) var(--bdr-shimmer),
+    rgb(var(--accent-300)) calc(var(--bdr-shimmer) + 20%),
+    rgb(var(--surface-700)) 100%
+  );
+  border-image-slice: 1;
+}
+
+/* ── Cyber: chunky stepped hue cycle, magenta→cyan→lime feel ── */
+html.border-theme-cyber .glass-panel,
+html.border-theme-cyber .glass-panel-solid,
+html.border-theme-cyber .stat-card,
+html.border-theme-cyber .input-field,
+html.border-theme-cyber .osc-input,
+html.border-theme-cyber .btn-secondary,
+html.border-theme-cyber .tooltip,
+html.border-theme-cyber [class*="border-surface-"] {
+  border-color: hsl(var(--bdr-hue) 100% 60%) !important;
+  box-shadow: 0 0 0 1px hsl(var(--bdr-hue) 100% 50% / 0.4),
+              0 0 14px hsl(calc(var(--bdr-hue) + 180deg) 100% 50% / 0.35);
+}
+
+/* The sidebar's left edge is a 1px right border too — keep it in sync */
+html[class*="border-theme-"] aside,
+html[class*="border-theme-"] nav { border-color: inherit; }
+
+/* ───────────────────────────────────────────────────────────────────────
    Audio visualizer — fixed full-screen canvas behind the app shell.
    ─────────────────────────────────────────────────────────────────── */
 .audio-visualizer-canvas {

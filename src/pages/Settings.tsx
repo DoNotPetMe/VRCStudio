@@ -99,7 +99,7 @@ export default function SettingsPage() {
   const { onlineFriends, offlineFriends } = useFriendStore();
   const {
     theme, setMode, setAccentColor, setCustomCSS, setFontSize,
-    setSidebarWidth, setBorderRadius, setAnimationSpeed, setGlassEffect,
+    setSidebarWidth, setBorderRadius, setBorderStyle, setAnimationSpeed, setGlassEffect,
     setPremiumTheme, setVisualizer, resetTheme,
   } = useThemeStore();
   const { accounts, removeAccount } = useMultiAccountStore();
@@ -405,6 +405,31 @@ export default function SettingsPage() {
               <Section title="Effects & Animation" icon={Zap}>
                 <div><label className="block text-sm font-medium mb-2">Glass Effect</label><OptionRow options={['none', 'light', 'medium']} value={theme.glassEffect} onChange={v => setGlassEffect(v as 'none' | 'light' | 'medium')} /></div>
                 <div><label className="block text-sm font-medium mb-2">Animation Speed</label><OptionRow options={['none', 'subtle', 'normal']} value={theme.animationSpeed} onChange={v => setAnimationSpeed(v as 'none' | 'subtle' | 'normal')} /></div>
+              </Section>
+
+              <Section title="Border Style" icon={Palette}>
+                <p className="text-xs text-surface-500 mb-2">Animated borders for panels, cards, buttons, and inputs.</p>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  {([
+                    { key: 'default', label: 'Default',  preview: 'border-2 border-surface-600' },
+                    { key: 'rainbow', label: 'Rainbow',  preview: 'border-2 border-transparent bg-[conic-gradient(from_0deg,_#f0f,_#0ff,_#ff0,_#f00,_#f0f)] [background-clip:border-box]' },
+                    { key: 'neon',    label: 'Neon',     preview: 'border-2 border-accent-400 shadow-[0_0_10px_rgb(var(--accent-500)/0.7)]' },
+                    { key: 'pulse',   label: 'Pulse',    preview: 'border-2 border-accent-500/70 shadow-[0_0_0_3px_rgb(var(--accent-500)/0.25)]' },
+                    { key: 'glow',    label: 'Glow',     preview: 'border-2 border-accent-600/60 shadow-[0_0_14px_rgb(var(--accent-500)/0.45)]' },
+                    { key: 'flame',   label: 'Flame',    preview: 'border-2 border-orange-500 shadow-[0_0_12px_rgb(239,68,68,0.55)] bg-gradient-to-br from-orange-500/15 to-red-600/15' },
+                    { key: 'shimmer', label: 'Shimmer',  preview: 'border-2 bg-gradient-to-r from-surface-700 via-accent-200 to-surface-700 [border-image:linear-gradient(90deg,rgb(var(--surface-700)),rgb(var(--accent-200)),rgb(var(--surface-700)))_1]' },
+                    { key: 'cyber',   label: 'Cyber',    preview: 'border-2 border-fuchsia-400 shadow-[0_0_10px_rgb(168,85,247,0.6),0_0_14px_rgb(34,211,238,0.4)]' },
+                  ] as const).map(({ key, label, preview }) => (
+                    <button
+                      key={key}
+                      onClick={() => setBorderStyle(key)}
+                      className={`p-2 rounded-lg border transition-all ${theme.borderStyle === key ? 'border-accent-500 bg-accent-500/10' : 'border-surface-700 hover:border-surface-600'}`}
+                    >
+                      <div className={`w-full h-12 rounded ${preview}`} />
+                      <div className="text-xs font-medium mt-1.5">{label}</div>
+                    </button>
+                  ))}
+                </div>
               </Section>
 
               <Section title="Premium Themes" icon={Palette}>
