@@ -306,170 +306,210 @@
 
 /* ───────────────────────────────────────────────────────────────────────
    Animated border themes.
-   Applied as `html.border-theme-<style>` by themeStore.applyTheme().
-   Selectors target structural panels/buttons/inputs plus any element
-   wearing a Tailwind `border-surface-*` utility so inline borders shift
-   too. Uses @property to animate a custom CSS variable across the whole
-   document, then derives per-element border colors from that variable.
+
+   Performance notes — what we *don't* do here:
+   - No `[class*="border-surface-"]` selector (matched hundreds of inline
+     borders per frame, killed the paint budget).
+   - No animated `box-shadow` on every element (paint-heavy).
+   - No animated background-image / border-image per element.
+
+   What we do instead:
+   - Animate a SINGLE custom property on <html> (via @property + keyframes).
+   - Bordered elements derive their border-color from that variable via
+     hsl(), so only a `recalc` happens per frame — no extra paint regions.
+   - Glow effects are STATIC (no animation), applied via a single layer
+     `box-shadow` rule, so the compositor can cache them.
+   - Element list scoped via :where() to avoid specificity wars.
    ─────────────────────────────────────────────────────────────────── */
 
-@property --bdr-hue {
-  syntax: '<angle>';
-  initial-value: 0deg;
-  inherits: true;
+@property --bdr-hue     { syntax: '<angle>'; initial-value: 0deg; inherits: true; }
+@property --bdr-flame   { syntax: '<angle>'; initial-value: 0deg; inherits: true; }
+@property --bdr-shimmer { syntax: '<percentage>'; initial-value: 0%; inherits: true; }
+@property --bdr-pulse   { syntax: '<number>'; initial-value: 0.55; inherits: true; }
+@property --bdr-rot     { syntax: '<angle>'; initial-value: 0deg; inherits: true; }
+
+@keyframes bdr-hue-cycle     { to { --bdr-hue: 360deg; } }
+@keyframes bdr-rot-cycle     { to { --bdr-rot: 360deg; } }
+@keyframes bdr-flame-wobble  { 0%, 100% { --bdr-flame: -12deg; } 50% { --bdr-flame: 22deg; } }
+@keyframes bdr-shimmer-slide { to { --bdr-shimmer: 200%; } }
+@keyframes bdr-pulse-throb   { 0%, 100% { --bdr-pulse: 0.35; } 50% { --bdr-pulse: 1; } }
+
+/* One driver per active theme — all animation work happens on a single
+   <html>-level property change, not per element. */
+html.border-theme-rainbow     { animation: bdr-hue-cycle     8s linear infinite; }
+html.border-theme-cyber       { animation: bdr-hue-cycle     5s steps(8, end) infinite; }
+html.border-theme-holographic { animation: bdr-rot-cycle    12s linear infinite; }
+html.border-theme-flame       { animation: bdr-flame-wobble  4s ease-in-out infinite; }
+html.border-theme-shimmer     { animation: bdr-shimmer-slide 4s linear infinite; }
+html.border-theme-pulse       { animation: bdr-pulse-throb   2.2s ease-in-out infinite; }
+
+/* Scope: only structural surfaces. :where() keeps specificity flat (0,1,0)
+   so individual components can still override if they need to. */
+html[class*="border-theme-"] :where(
+  .glass-panel, .glass-panel-solid, .stat-card,
+  .btn-primary, .btn-secondary, .btn-danger, .btn-success, .btn-accent,
+  .input-field, .osc-input, .tooltip
+) {
+  transition: border-color 180ms linear;
 }
 
-@property --bdr-flame {
-  syntax: '<angle>';
-  initial-value: 0deg;
-  inherits: true;
+/* ── Rainbow: smooth full hue cycle, lightweight ── */
+html.border-theme-rainbow :where(
+  .glass-panel, .glass-panel-solid, .stat-card,
+  .btn-secondary, .input-field, .osc-input, .tooltip
+) {
+  border-color: hsl(var(--bdr-hue) 90% 62%);
 }
 
-@property --bdr-shimmer {
-  syntax: '<percentage>';
-  initial-value: 0%;
-  inherits: true;
+/* ── Neon: static vivid accent + soft glow — feels electric, costs nothing ── */
+html.border-theme-neon :where(
+  .glass-panel, .glass-panel-solid, .stat-card,
+  .btn-secondary, .input-field, .osc-input, .tooltip
+) {
+  border-color: rgb(var(--accent-400));
+  box-shadow: 0 0 10px rgb(var(--accent-500) / 0.55);
 }
 
-@keyframes bdr-hue-cycle { to { --bdr-hue: 360deg; } }
-@keyframes bdr-flame-cycle { 0%, 100% { --bdr-flame: -15deg; } 50% { --bdr-flame: 25deg; } }
-@keyframes bdr-shimmer-cycle { to { --bdr-shimmer: 200%; } }
-@keyframes bdr-pulse-ring {
-  0%, 100% { box-shadow: 0 0 0 0 rgb(var(--accent-500) / 0.45); }
-  50%      { box-shadow: 0 0 0 4px rgb(var(--accent-500) / 0);    }
-}
-@keyframes bdr-glow-breathe {
-  0%, 100% { box-shadow: 0 0 8px  rgb(var(--accent-500) / 0.25); }
-  50%      { box-shadow: 0 0 18px rgb(var(--accent-500) / 0.55); }
+/* ── Pulse: opacity throb on a static accent color (no box-shadow per frame) ── */
+html.border-theme-pulse :where(
+  .glass-panel, .glass-panel-solid, .stat-card,
+  .btn-secondary, .input-field, .osc-input, .tooltip
+) {
+  border-color: rgb(var(--accent-400) / var(--bdr-pulse));
 }
 
-/* Drive the shared variables from the root element */
-html.border-theme-rainbow  { animation: bdr-hue-cycle      6s linear  infinite; }
-html.border-theme-flame    { animation: bdr-flame-cycle    4s ease-in-out infinite; }
-html.border-theme-shimmer  { animation: bdr-shimmer-cycle  3s linear  infinite; }
-html.border-theme-cyber    { animation: bdr-hue-cycle      4s steps(8, end) infinite; }
-
-/* Element list — all the visible "border" surfaces in the UI. */
-html[class*="border-theme-"] .glass-panel,
-html[class*="border-theme-"] .glass-panel-solid,
-html[class*="border-theme-"] .stat-card,
-html[class*="border-theme-"] .input-field,
-html[class*="border-theme-"] .osc-input,
-html[class*="border-theme-"] .btn-primary,
-html[class*="border-theme-"] .btn-secondary,
-html[class*="border-theme-"] .btn-danger,
-html[class*="border-theme-"] .btn-success,
-html[class*="border-theme-"] .btn-accent,
-html[class*="border-theme-"] .tooltip,
-html[class*="border-theme-"] [class*="border-surface-"] {
-  transition: border-color 120ms linear, box-shadow 200ms ease-out;
+/* ── Holographic: rotating multi-color gradient border via border-image ── */
+html.border-theme-holographic :where(
+  .glass-panel, .glass-panel-solid, .stat-card,
+  .btn-secondary, .input-field, .osc-input, .tooltip
+) {
+  border-color: transparent;
+  border-image: linear-gradient(
+    calc(45deg + var(--bdr-rot)),
+    #ff00aa, #00d4ff, #ffe600, #ff5400, #ff00aa
+  ) 1;
 }
 
-/* ── Rainbow: full hue cycle ── */
-html.border-theme-rainbow .glass-panel,
-html.border-theme-rainbow .glass-panel-solid,
-html.border-theme-rainbow .stat-card,
-html.border-theme-rainbow .input-field,
-html.border-theme-rainbow .osc-input,
-html.border-theme-rainbow .btn-secondary,
-html.border-theme-rainbow .tooltip,
-html.border-theme-rainbow [class*="border-surface-"] {
-  border-color: hsl(var(--bdr-hue) 95% 62%) !important;
-  box-shadow: 0 0 12px hsl(var(--bdr-hue) 95% 55% / 0.18);
+/* ── Flame: warm hue wobble (amber → red → orange) ── */
+html.border-theme-flame :where(
+  .glass-panel, .glass-panel-solid, .stat-card,
+  .btn-secondary, .input-field, .osc-input, .tooltip
+) {
+  border-color: hsl(calc(26deg + var(--bdr-flame)) 92% 58%);
+}
+/* Glow only on big containers — keeps perf reasonable */
+html.border-theme-flame :where(.glass-panel, .glass-panel-solid, .stat-card) {
+  box-shadow: 0 0 14px hsl(calc(26deg + var(--bdr-flame)) 92% 48% / 0.35);
 }
 
-/* ── Neon: vivid accent + glow ── */
-html.border-theme-neon .glass-panel,
-html.border-theme-neon .glass-panel-solid,
-html.border-theme-neon .stat-card,
-html.border-theme-neon .input-field,
-html.border-theme-neon .osc-input,
-html.border-theme-neon .btn-secondary,
-html.border-theme-neon .tooltip,
-html.border-theme-neon [class*="border-surface-"] {
-  border-color: rgb(var(--accent-400)) !important;
-  box-shadow: 0 0 12px rgb(var(--accent-500) / 0.6),
-              inset 0 0 6px rgb(var(--accent-500) / 0.15);
-}
-
-/* ── Pulse: accent ring that pulses outward ── */
-html.border-theme-pulse .glass-panel,
-html.border-theme-pulse .glass-panel-solid,
-html.border-theme-pulse .stat-card,
-html.border-theme-pulse .input-field,
-html.border-theme-pulse .osc-input,
-html.border-theme-pulse .btn-secondary,
-html.border-theme-pulse .tooltip,
-html.border-theme-pulse [class*="border-surface-"] {
-  border-color: rgb(var(--accent-500) / 0.7) !important;
-  animation: bdr-pulse-ring 2.4s ease-in-out infinite;
-}
-
-/* ── Glow: soft accent halo that breathes ── */
-html.border-theme-glow .glass-panel,
-html.border-theme-glow .glass-panel-solid,
-html.border-theme-glow .stat-card,
-html.border-theme-glow .input-field,
-html.border-theme-glow .osc-input,
-html.border-theme-glow .btn-secondary,
-html.border-theme-glow .tooltip,
-html.border-theme-glow [class*="border-surface-"] {
-  border-color: rgb(var(--accent-600) / 0.55) !important;
-  animation: bdr-glow-breathe 3.5s ease-in-out infinite;
-}
-
-/* ── Flame: warm orange/red, slight hue wobble ── */
-html.border-theme-flame .glass-panel,
-html.border-theme-flame .glass-panel-solid,
-html.border-theme-flame .stat-card,
-html.border-theme-flame .input-field,
-html.border-theme-flame .osc-input,
-html.border-theme-flame .btn-secondary,
-html.border-theme-flame .tooltip,
-html.border-theme-flame [class*="border-surface-"] {
-  /* base is amber-500, hue rotates between -15deg → +25deg → red/yellow */
-  border-color: hsl(calc(28deg + var(--bdr-flame)) 92% 58%) !important;
-  box-shadow: 0 0 14px hsl(calc(28deg + var(--bdr-flame)) 92% 48% / 0.45);
-}
-
-/* ── Shimmer: moving gradient sheen across border-image ── */
-html.border-theme-shimmer .glass-panel,
-html.border-theme-shimmer .glass-panel-solid,
-html.border-theme-shimmer .stat-card,
-html.border-theme-shimmer .input-field,
-html.border-theme-shimmer .osc-input,
-html.border-theme-shimmer .btn-secondary,
-html.border-theme-shimmer .tooltip,
-html.border-theme-shimmer [class*="border-surface-"] {
-  border-color: transparent !important;
-  border-image-source: linear-gradient(
+/* ── Shimmer: traveling sheen via gradient stops moving along border ── */
+html.border-theme-shimmer :where(
+  .glass-panel, .glass-panel-solid, .stat-card,
+  .btn-secondary, .input-field, .osc-input, .tooltip
+) {
+  border-color: transparent;
+  border-image: linear-gradient(
     90deg,
-    rgb(var(--surface-700)) 0%,
-    rgb(var(--accent-300)) calc(var(--bdr-shimmer) - 20%),
-    rgb(var(--accent-100)) var(--bdr-shimmer),
-    rgb(var(--accent-300)) calc(var(--bdr-shimmer) + 20%),
-    rgb(var(--surface-700)) 100%
-  );
-  border-image-slice: 1;
+    rgb(var(--surface-700) / 0.6) 0%,
+    rgb(var(--accent-300)) calc(var(--bdr-shimmer) - 15%),
+    rgb(var(--accent-50))  var(--bdr-shimmer),
+    rgb(var(--accent-300)) calc(var(--bdr-shimmer) + 15%),
+    rgb(var(--surface-700) / 0.6) 100%
+  ) 1;
 }
 
-/* ── Cyber: chunky stepped hue cycle, magenta→cyan→lime feel ── */
-html.border-theme-cyber .glass-panel,
-html.border-theme-cyber .glass-panel-solid,
-html.border-theme-cyber .stat-card,
-html.border-theme-cyber .input-field,
-html.border-theme-cyber .osc-input,
-html.border-theme-cyber .btn-secondary,
-html.border-theme-cyber .tooltip,
-html.border-theme-cyber [class*="border-surface-"] {
-  border-color: hsl(var(--bdr-hue) 100% 60%) !important;
-  box-shadow: 0 0 0 1px hsl(var(--bdr-hue) 100% 50% / 0.4),
-              0 0 14px hsl(calc(var(--bdr-hue) + 180deg) 100% 50% / 0.35);
+/* ── Cyber: stepped 8-frame hue cycle, chunky retro feel ── */
+html.border-theme-cyber :where(
+  .glass-panel, .glass-panel-solid, .stat-card,
+  .btn-secondary, .input-field, .osc-input, .tooltip
+) {
+  border-color: hsl(var(--bdr-hue) 100% 60%);
+}
+/* Single complementary glow only on hero containers */
+html.border-theme-cyber :where(.glass-panel, .glass-panel-solid, .stat-card) {
+  box-shadow: 0 0 14px hsl(calc(var(--bdr-hue) + 180deg) 100% 50% / 0.4);
 }
 
-/* The sidebar's left edge is a 1px right border too — keep it in sync */
-html[class*="border-theme-"] aside,
-html[class*="border-theme-"] nav { border-color: inherit; }
+/* ───────────────────────────────────────────────────────────────────────
+   Liveliness toggles — small, optional touches that make the app feel
+   alive. Each is gated by a single class on <html>.
+   ─────────────────────────────────────────────────────────────────── */
+
+/* Hover-lift: a 2px translateY on cards/panels with a hover state. Pure
+   transform — composited, no repaint. */
+html.live-hover-lift .card-hover,
+html.live-hover-lift .stat-card,
+html.live-hover-lift .glass-panel-solid {
+  will-change: transform;
+  transition: transform 200ms cubic-bezier(0.2, 0.8, 0.2, 1),
+              box-shadow 200ms ease-out,
+              border-color var(--transition-duration, 200ms) ease-out;
+}
+html.live-hover-lift .card-hover:hover,
+html.live-hover-lift .stat-card:hover,
+html.live-hover-lift .glass-panel-solid:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgb(0 0 0 / 0.25);
+}
+
+/* Status-pulse: friend online dots breathe. Only the green/yellow active
+   variants — offline/dnd stay still. */
+@keyframes live-status-breathe {
+  0%, 100% { box-shadow: 0 0 0 0 currentColor; opacity: 1; }
+  50%      { box-shadow: 0 0 0 4px transparent; opacity: 0.85; }
+}
+html.live-status-pulse .status-dot.bg-green-500,
+html.live-status-pulse .status-dot.bg-emerald-500,
+html.live-status-pulse .status-dot.bg-blue-500 {
+  animation: live-status-breathe 2.4s ease-in-out infinite;
+}
+
+/* Cursor-glow: a fixed-position circle follows the pointer. Set
+   --cursor-x / --cursor-y from React. radial-gradient is GPU-friendly. */
+html.live-cursor-glow::after {
+  content: '';
+  position: fixed;
+  top: 0; left: 0;
+  width: 480px; height: 480px;
+  pointer-events: none;
+  z-index: 9999;
+  transform: translate(calc(var(--cursor-x, -9999px) - 240px),
+                       calc(var(--cursor-y, -9999px) - 240px));
+  background: radial-gradient(circle, rgb(var(--accent-400) / 0.18) 0%, transparent 60%);
+  mix-blend-mode: screen;
+  will-change: transform;
+}
+
+/* Ambient-haze: very slow accent-color radial drift behind the shell.
+   Single keyframe on a single fixed pseudo-element — cheap. */
+@keyframes live-haze-drift {
+  0%, 100% { transform: translate(0, 0) scale(1); opacity: 0.6; }
+  50%      { transform: translate(2%, -1%) scale(1.05); opacity: 0.85; }
+}
+html.live-ambient-haze::before {
+  content: '';
+  position: fixed;
+  inset: -10%;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(ellipse 70% 60% at 20% 30%, rgb(var(--accent-500) / 0.18) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 50% at 80% 70%, rgb(var(--accent-300) / 0.14) 0%, transparent 60%);
+  filter: blur(40px);
+  animation: live-haze-drift 18s ease-in-out infinite;
+}
+
+/* Particles canvas is mounted by <LivelinessEffects /> — these styles
+   just pin it behind the UI. */
+.live-particles-canvas {
+  position: fixed;
+  inset: 0;
+  width: 100vw; height: 100vh;
+  z-index: 0;
+  pointer-events: none;
+  mix-blend-mode: screen;
+  opacity: 0.55;
+}
 
 /* ───────────────────────────────────────────────────────────────────────
    Audio visualizer — fixed full-screen canvas behind the app shell.

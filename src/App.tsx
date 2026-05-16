@@ -31,6 +31,7 @@ import LoadingSpinner from './components/common/LoadingSpinner';
 import { useLocationTracking } from './hooks/useLocationTracking';
 import { useTrayStatus } from './hooks/useTrayStatus';
 import AvatarSwitcher from './components/AvatarSwitcher';
+import LivelinessEffects from './components/LivelinessEffects';
 import { useAvatarSwitcherStore } from './stores/avatarSwitcherStore';
 import { useOSCStore } from './stores/oscStore';
 
@@ -128,6 +129,7 @@ function AppShell() {
 
   return (
     <>
+    <LivelinessEffects />
     <AvatarSwitcher open={switcherOpen} onClose={closeSwitcher} />
     <Routes>
       <Route element={<AppLayout />}>

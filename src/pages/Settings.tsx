@@ -100,7 +100,7 @@ export default function SettingsPage() {
   const {
     theme, setMode, setAccentColor, setCustomCSS, setFontSize,
     setSidebarWidth, setBorderRadius, setBorderStyle, setAnimationSpeed, setGlassEffect,
-    setPremiumTheme, setVisualizer, resetTheme,
+    setPremiumTheme, setVisualizer, setLiveliness, resetTheme,
   } = useThemeStore();
   const { accounts, removeAccount } = useMultiAccountStore();
   const openAsteroidsGame = useAsteroidsGameStore(s => s.open);
@@ -408,27 +408,72 @@ export default function SettingsPage() {
               </Section>
 
               <Section title="Border Style" icon={Palette}>
-                <p className="text-xs text-surface-500 mb-2">Animated borders for panels, cards, buttons, and inputs.</p>
+                <p className="text-xs text-surface-500 mb-2">Borders for panels, cards, buttons, and inputs. Each option is GPU-friendly — animation runs on a single root-level CSS variable.</p>
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                   {([
-                    { key: 'default', label: 'Default',  preview: 'border-2 border-surface-600' },
-                    { key: 'rainbow', label: 'Rainbow',  preview: 'border-2 border-transparent bg-[conic-gradient(from_0deg,_#f0f,_#0ff,_#ff0,_#f00,_#f0f)] [background-clip:border-box]' },
-                    { key: 'neon',    label: 'Neon',     preview: 'border-2 border-accent-400 shadow-[0_0_10px_rgb(var(--accent-500)/0.7)]' },
-                    { key: 'pulse',   label: 'Pulse',    preview: 'border-2 border-accent-500/70 shadow-[0_0_0_3px_rgb(var(--accent-500)/0.25)]' },
-                    { key: 'glow',    label: 'Glow',     preview: 'border-2 border-accent-600/60 shadow-[0_0_14px_rgb(var(--accent-500)/0.45)]' },
-                    { key: 'flame',   label: 'Flame',    preview: 'border-2 border-orange-500 shadow-[0_0_12px_rgb(239,68,68,0.55)] bg-gradient-to-br from-orange-500/15 to-red-600/15' },
-                    { key: 'shimmer', label: 'Shimmer',  preview: 'border-2 bg-gradient-to-r from-surface-700 via-accent-200 to-surface-700 [border-image:linear-gradient(90deg,rgb(var(--surface-700)),rgb(var(--accent-200)),rgb(var(--surface-700)))_1]' },
-                    { key: 'cyber',   label: 'Cyber',    preview: 'border-2 border-fuchsia-400 shadow-[0_0_10px_rgb(168,85,247,0.6),0_0_14px_rgb(34,211,238,0.4)]' },
-                  ] as const).map(({ key, label, preview }) => (
+                    { key: 'default',     label: 'Default',     preview: 'border-2 border-surface-600',
+                      blurb: 'Standard subtle borders' },
+                    { key: 'rainbow',     label: 'Rainbow',     preview: 'border-2 border-transparent bg-[conic-gradient(from_0deg,_#f0f,_#0ff,_#ff0,_#f00,_#f0f)] [background-clip:border-box]',
+                      blurb: 'Smooth hue cycle (8s)' },
+                    { key: 'neon',        label: 'Neon',        preview: 'border-2 border-accent-400 shadow-[0_0_10px_rgb(var(--accent-500)/0.7)]',
+                      blurb: 'Static vivid accent + glow' },
+                    { key: 'pulse',       label: 'Pulse',       preview: 'border-2 border-accent-500/70 shadow-[0_0_0_3px_rgb(var(--accent-500)/0.25)]',
+                      blurb: 'Opacity throb, no shadow' },
+                    { key: 'holographic', label: 'Holographic', preview: 'border-2 [border-image:linear-gradient(135deg,#f0a,#0df,#fe0,#f40,#f0a)_1]',
+                      blurb: 'Rotating gradient stripe' },
+                    { key: 'flame',       label: 'Flame',       preview: 'border-2 border-orange-500 shadow-[0_0_12px_rgb(239,68,68,0.55)] bg-gradient-to-br from-orange-500/15 to-red-600/15',
+                      blurb: 'Amber/red hue wobble' },
+                    { key: 'shimmer',     label: 'Shimmer',     preview: 'border-2 [border-image:linear-gradient(90deg,rgb(var(--surface-700)/0.6),rgb(var(--accent-300)),rgb(var(--accent-50)),rgb(var(--accent-300)),rgb(var(--surface-700)/0.6))_1]',
+                      blurb: 'Traveling light sheen' },
+                    { key: 'cyber',       label: 'Cyber',       preview: 'border-2 border-fuchsia-400 shadow-[0_0_14px_rgb(34,211,238,0.45)]',
+                      blurb: 'Stepped 8-color cycle' },
+                  ] as const).map(({ key, label, preview, blurb }) => (
                     <button
                       key={key}
                       onClick={() => setBorderStyle(key)}
-                      className={`p-2 rounded-lg border transition-all ${theme.borderStyle === key ? 'border-accent-500 bg-accent-500/10' : 'border-surface-700 hover:border-surface-600'}`}
+                      className={`p-2 rounded-lg border transition-all text-left ${theme.borderStyle === key ? 'border-accent-500 bg-accent-500/10' : 'border-surface-700 hover:border-surface-600'}`}
                     >
                       <div className={`w-full h-12 rounded ${preview}`} />
                       <div className="text-xs font-medium mt-1.5">{label}</div>
+                      <div className="text-[10px] text-surface-500 leading-tight mt-0.5">{blurb}</div>
                     </button>
                   ))}
+                </div>
+              </Section>
+
+              <Section title="Liveliness" icon={Zap}>
+                <p className="text-xs text-surface-500 mb-2">Optional effects that make the shell feel less static. All toggleable, all cheap — pick what you like.</p>
+                <div className="space-y-2">
+                  <LivelinessToggle
+                    enabled={theme.liveliness.hoverLift}
+                    onToggle={v => setLiveliness({ hoverLift: v })}
+                    label="Hover lift"
+                    description="Cards and panels rise 2px when hovered"
+                  />
+                  <LivelinessToggle
+                    enabled={theme.liveliness.statusPulse}
+                    onToggle={v => setLiveliness({ statusPulse: v })}
+                    label="Status dot pulse"
+                    description="Online indicators gently breathe"
+                  />
+                  <LivelinessToggle
+                    enabled={theme.liveliness.particles}
+                    onToggle={v => setLiveliness({ particles: v })}
+                    label="Floating particles"
+                    description="Slow-drifting accent-colored dots behind the UI"
+                  />
+                  <LivelinessToggle
+                    enabled={theme.liveliness.cursorGlow}
+                    onToggle={v => setLiveliness({ cursorGlow: v })}
+                    label="Cursor glow"
+                    description="A soft halo follows your pointer"
+                  />
+                  <LivelinessToggle
+                    enabled={theme.liveliness.ambientHaze}
+                    onToggle={v => setLiveliness({ ambientHaze: v })}
+                    label="Ambient haze"
+                    description="Subtle accent-color gradient drifts behind everything"
+                  />
                 </div>
               </Section>
 
@@ -751,6 +796,31 @@ function SliderRow({ label, value, min, max, step, unit, onChange }: { label: st
       <input type="range" min={min} max={max} step={step} value={value} onChange={e => onChange(Number(e.target.value))} className="w-full accent-accent-500" />
       <div className="flex justify-between text-xs text-surface-600 mt-1"><span>{min}{unit}</span><span>{max}{unit}</span></div>
     </div>
+  );
+}
+
+function LivelinessToggle({ enabled, onToggle, label, description }: {
+  enabled: boolean;
+  onToggle: (v: boolean) => void;
+  label: string;
+  description: string;
+}) {
+  return (
+    <label className="flex items-start gap-3 p-2.5 rounded-lg border border-surface-700 bg-surface-800/40 hover:bg-surface-800/60 cursor-pointer transition-colors">
+      <button
+        type="button"
+        role="switch"
+        aria-checked={enabled}
+        onClick={() => onToggle(!enabled)}
+        className={`relative w-9 h-5 rounded-full transition-colors flex-shrink-0 mt-0.5 ${enabled ? 'bg-accent-500' : 'bg-surface-700'}`}
+      >
+        <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${enabled ? 'translate-x-4' : ''}`} />
+      </button>
+      <div className="min-w-0 flex-1">
+        <div className="text-sm font-medium">{label}</div>
+        <div className="text-xs text-surface-500 leading-snug">{description}</div>
+      </div>
+    </label>
   );
 }
 

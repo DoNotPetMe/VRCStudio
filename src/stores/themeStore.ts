@@ -16,10 +16,18 @@ export type BorderStyle =
   | 'rainbow'
   | 'neon'
   | 'pulse'
-  | 'glow'
+  | 'holographic'
   | 'flame'
   | 'shimmer'
   | 'cyber';
+
+export interface LivelinessConfig {
+  particles: boolean;     // floating dots in background
+  cursorGlow: boolean;    // soft light follows the pointer
+  hoverLift: boolean;     // panels/cards lift on hover
+  statusPulse: boolean;   // online status dots breathe
+  ambientHaze: boolean;   // very slow accent-color gradient drift
+}
 
 export interface ThemeConfig {
   mode: 'dark' | 'light' | 'midnight' | 'oled';
@@ -33,6 +41,7 @@ export interface ThemeConfig {
   animationSpeed: 'none' | 'subtle' | 'normal';
   glassEffect: 'none' | 'light' | 'medium';
   visualizer: VisualizerConfig;
+  liveliness: LivelinessConfig;
 }
 
 const THEME_KEY = 'vrcstudio_theme';
@@ -47,6 +56,14 @@ const defaultVisualizer: VisualizerConfig = {
   smoothing: 0.7,
 };
 
+const defaultLiveliness: LivelinessConfig = {
+  particles: false,
+  cursorGlow: false,
+  hoverLift: true,
+  statusPulse: true,
+  ambientHaze: false,
+};
+
 const defaultTheme: ThemeConfig = {
   mode: 'dark',
   accentColor: 'blue',
@@ -59,6 +76,7 @@ const defaultTheme: ThemeConfig = {
   animationSpeed: 'normal',
   glassEffect: 'medium',
   visualizer: defaultVisualizer,
+  liveliness: defaultLiveliness,
 };
 
 function mergeTheme(saved: Partial<ThemeConfig>): ThemeConfig {
@@ -67,15 +85,18 @@ function mergeTheme(saved: Partial<ThemeConfig>): ThemeConfig {
   const migrated = rawStyle === ('plasma' as any) ? 'aurora' : rawStyle;
   const valid: VisualizerConfig['style'][] = ['bars','blocks','wave','radial','dots','aurora'];
   const safeStyle: VisualizerConfig['style'] = valid.includes(migrated as any) ? migrated as VisualizerConfig['style'] : 'bars';
-  const validBorder: BorderStyle[] = ['default','rainbow','neon','pulse','glow','flame','shimmer','cyber'];
-  const safeBorderStyle: BorderStyle = validBorder.includes(saved.borderStyle as any)
-    ? (saved.borderStyle as BorderStyle)
+  const validBorder: BorderStyle[] = ['default','rainbow','neon','pulse','holographic','flame','shimmer','cyber'];
+  // Migrate retired 'glow' → 'pulse' (glow was visually too close to neon)
+  const rawBorder = saved.borderStyle === ('glow' as any) ? 'pulse' : saved.borderStyle;
+  const safeBorderStyle: BorderStyle = validBorder.includes(rawBorder as any)
+    ? (rawBorder as BorderStyle)
     : 'default';
   return {
     ...defaultTheme,
     ...saved,
     borderStyle: safeBorderStyle,
     visualizer: { ...defaultVisualizer, ...(saved.visualizer ?? {}), style: safeStyle },
+    liveliness: { ...defaultLiveliness, ...(saved.liveliness ?? {}) },
   };
 }
 
@@ -171,6 +192,7 @@ interface ThemeState {
   setSidebarWidth: (width: ThemeConfig['sidebarWidth']) => void;
   setBorderRadius: (radius: ThemeConfig['borderRadius']) => void;
   setBorderStyle: (style: ThemeConfig['borderStyle']) => void;
+  setLiveliness: (patch: Partial<LivelinessConfig>) => void;
   setAnimationSpeed: (speed: ThemeConfig['animationSpeed']) => void;
   setGlassEffect: (effect: ThemeConfig['glassEffect']) => void;
   setPremiumTheme: (theme: ThemeConfig['premiumTheme']) => void;
@@ -231,6 +253,13 @@ export const useThemeStore = create<ThemeState>((set, get) => ({
     get().applyTheme();
   },
 
+  setLiveliness: (patch) => {
+    const theme = { ...get().theme, liveliness: { ...get().theme.liveliness, ...patch } };
+    saveTheme(theme);
+    set({ theme });
+    get().applyTheme();
+  },
+
   setAnimationSpeed: (animationSpeed) => {
     const theme = { ...get().theme, animationSpeed };
     saveTheme(theme);
@@ -285,11 +314,19 @@ export const useThemeStore = create<ThemeState>((set, get) => ({
 
     // Border style (animated border themes)
     const allBorderStyles: BorderStyle[] = [
-      'default', 'rainbow', 'neon', 'pulse', 'glow', 'flame', 'shimmer', 'cyber',
+      'default', 'rainbow', 'neon', 'pulse', 'holographic', 'flame', 'shimmer', 'cyber',
     ];
     for (const s of allBorderStyles) root.classList.remove(`border-theme-${s}`);
     const bs: BorderStyle = (theme.borderStyle ?? 'default');
     if (bs !== 'default') root.classList.add(`border-theme-${bs}`);
+
+    // Liveliness toggles — each maps to a single class on <html>
+    const live = theme.liveliness ?? defaultLiveliness;
+    root.classList.toggle('live-particles',   !!live.particles);
+    root.classList.toggle('live-cursor-glow', !!live.cursorGlow);
+    root.classList.toggle('live-hover-lift',  !!live.hoverLift);
+    root.classList.toggle('live-status-pulse', !!live.statusPulse);
+    root.classList.toggle('live-ambient-haze', !!live.ambientHaze);
 
     // Animation speed
     const durationMap: Record<string, string> = { none: '0ms', subtle: '100ms', normal: '200ms' };
