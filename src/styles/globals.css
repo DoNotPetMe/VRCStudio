@@ -797,6 +797,12 @@ html.premium-hacker ::-webkit-scrollbar-thumb:hover {
 .hacker-console-route { color: rgb(100, 255, 220); }
 .hacker-console-event { color: rgb(180, 255, 140); }
 .hacker-console-comment { color: rgba(120, 255, 160, 0.45); font-style: italic; }
+.hacker-console-input  { color: rgb(220, 255, 200); font-weight: 600; }
+.hacker-console-output { color: rgb(140, 255, 180); white-space: pre; }
+.hacker-console-error  { color: rgb(255, 120, 120); }
+
+/* Make the console body cursor look clickable */
+.hacker-console-body { cursor: text; }
 
 /* Audio visualizer — leave alone, but tone it down so the scanlines win */
 html.premium-hacker .audio-visualizer-canvas {
