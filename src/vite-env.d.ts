@@ -72,6 +72,31 @@ interface ElectronAPI {
   logStopTailing: () => Promise<{ success: boolean }>;
   logReadBacklog: (maxLines?: number) => Promise<{ success: boolean; lines?: string[]; path?: string; error?: string }>;
   onVRChatLogLines: (cb: (lines: string[]) => void) => () => void;
+
+  // Auto-updater (source-tree updates from GitHub)
+  updateGetCurrentCommit: () => Promise<{ sha: string | null; source: string }>;
+  updateCheck: () => Promise<{
+    ok: boolean;
+    error?: string;
+    currentCommit: string | null;
+    latestCommit: string;
+    behind: number;
+    upToDate: boolean;
+    unknown?: boolean;
+    latestMessage?: string | null;
+    latestDate?: string | null;
+    commits: Array<{
+      sha: string;
+      shortSha: string;
+      message: string;
+      author: string;
+      date: string;
+      url: string;
+    }>;
+  }>;
+  updateDownloadAndApply: () => Promise<{ ok: boolean; error?: string }>;
+  updateGetLastApplied: () => Promise<{ commit: string; appliedAt: string } | null>;
+  onUpdateProgress: (cb: (msg: { stage: string; received: number; total: number }) => void) => () => void;
 }
 
 interface Window {

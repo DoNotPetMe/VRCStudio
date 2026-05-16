@@ -4,6 +4,7 @@ import Sidebar from './Sidebar';
 import AudioVisualizer from '../AudioVisualizer';
 import PremiumThemeOverlay from '../PremiumThemeOverlay';
 import AsteroidsGame from '../AsteroidsGame';
+import UpdateBanner from '../UpdateBanner';
 import { useAsteroidsGameStore } from '../../stores/asteroidsGameStore';
 
 export default function AppLayout() {
@@ -14,6 +15,7 @@ export default function AppLayout() {
       <AudioVisualizer />
       <div className="flex flex-col flex-1 overflow-hidden relative z-[1]">
         <TitleBar />
+        <UpdateBanner />
         <div className="flex flex-1 overflow-hidden">
           <Sidebar />
           <main className="flex-1 overflow-y-auto">

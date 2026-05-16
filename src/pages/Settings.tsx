@@ -13,6 +13,7 @@ import { useAuthStore } from '../stores/authStore';
 import { useInstanceHistoryStore } from '../stores/instanceHistoryStore';
 import { useFriendStore } from '../stores/friendStore';
 import { useThemeStore } from '../stores/themeStore';
+import { useUpdateStore } from '../stores/updateStore';
 import { useMultiAccountStore } from '../stores/multiAccountStore';
 import { exportAllData, downloadExport, importData, exportFriendsList, downloadCSV } from '../utils/dataExport';
 import { getAvailableLanguages, setLanguage, getLanguage } from '../utils/i18n';
@@ -20,7 +21,7 @@ import { getAvailableLanguages, setLanguage, getLanguage } from '../utils/i18n';
 type SettingsSection =
   | 'account' | 'accounts' | 'notifications' | 'polling'
   | 'display' | 'appearance' | 'discord' | 'vrcdb' | 'general' | 'data'
-  | 'profile' | 'privacy' | 'performance' | 'shortcuts' | 'about';
+  | 'profile' | 'privacy' | 'performance' | 'shortcuts' | 'about' | 'updates';
 
 const sections: Array<{ key: SettingsSection; label: string; icon: typeof SettingsIcon; group: string }> = [
   { key: 'profile',       label: 'Personalization',       icon: Smile,         group: 'Profile' },
@@ -37,6 +38,7 @@ const sections: Array<{ key: SettingsSection; label: string; icon: typeof Settin
   { key: 'performance',   label: 'Performance',           icon: Cpu,           group: 'System' },
   { key: 'shortcuts',     label: 'Keyboard Shortcuts',    icon: Keyboard,      group: 'System' },
   { key: 'data',          label: 'Data & Backup',         icon: Download,      group: 'System' },
+  { key: 'updates',       label: 'Updates',               icon: Download,      group: 'System' },
   { key: 'about',         label: 'About',                 icon: Info,          group: 'System' },
 ];
 
@@ -733,6 +735,8 @@ export default function SettingsPage() {
             </Section>
           )}
 
+          {active === 'updates' && <UpdatesSection />}
+
           {active === 'about' && (
             <Section title="About VRC Studio" icon={Info}>
               <div className="flex items-center gap-4 mb-4">
@@ -866,6 +870,140 @@ function fmtBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+// ─── Updates ────────────────────────────────────────────────────────────────
+function UpdatesSection() {
+  const stage = useUpdateStore(s => s.stage);
+  const info = useUpdateStore(s => s.info);
+  const error = useUpdateStore(s => s.error);
+  const progress = useUpdateStore(s => s.progress);
+  const lastCheckedAt = useUpdateStore(s => s.lastCheckedAt);
+  const check = useUpdateStore(s => s.check);
+  const apply = useUpdateStore(s => s.apply);
+
+  const checking = stage === 'checking';
+  const isUpdating = stage === 'downloading' || stage === 'preparing' || stage === 'restarting';
+  const pct = progress && progress.total > 0 ? Math.round((progress.received / progress.total) * 100) : null;
+
+  return (
+    <Section title="Updates" icon={Download}>
+      <p className="text-xs text-surface-500 mb-3">
+        VRC Studio fetches updates directly from the source branch on GitHub. Clicking <b>Install</b> downloads the latest snapshot,
+        runs <code>npm install</code> for any new dependencies, and restarts the app.
+      </p>
+
+      <div className="grid grid-cols-2 gap-3 mb-3">
+        <div className="rounded-lg border border-surface-700 bg-surface-800/40 p-3">
+          <div className="text-[10px] uppercase tracking-wider text-surface-500 mb-1">Installed</div>
+          <div className="font-mono text-xs text-surface-200 truncate">
+            {info?.currentCommit ? info.currentCommit.slice(0, 12) : '—'}
+          </div>
+        </div>
+        <div className="rounded-lg border border-surface-700 bg-surface-800/40 p-3">
+          <div className="text-[10px] uppercase tracking-wider text-surface-500 mb-1">Latest on GitHub</div>
+          <div className="font-mono text-xs text-surface-200 truncate">
+            {info?.latestCommit ? info.latestCommit.slice(0, 12) : '—'}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2 mb-3">
+        <button
+          onClick={() => check()}
+          disabled={checking || isUpdating}
+          className="btn-secondary text-sm flex items-center gap-1.5 disabled:opacity-40"
+        >
+          <RotateCw size={13} className={checking ? 'animate-spin' : ''} />
+          {checking ? 'Checking...' : 'Check now'}
+        </button>
+
+        {info && !info.upToDate && !isUpdating && (
+          <button onClick={apply} className="btn-primary text-sm flex items-center gap-1.5">
+            <Download size={13} />
+            Install update
+          </button>
+        )}
+
+        {info?.upToDate && (
+          <span className="text-xs text-green-400 flex items-center gap-1">
+            <CheckCircle size={12} /> You're up to date
+          </span>
+        )}
+
+        {lastCheckedAt && !checking && (
+          <span className="text-[10px] text-surface-600 ml-auto">
+            Last checked {new Date(lastCheckedAt).toLocaleTimeString()}
+          </span>
+        )}
+      </div>
+
+      {isUpdating && (
+        <div className="mb-3 p-3 rounded-lg border border-accent-500/30 bg-accent-500/8 text-xs space-y-1.5">
+          <div className="flex items-center gap-2">
+            <RotateCw size={12} className="animate-spin text-accent-300" />
+            <span className="font-medium">
+              {stage === 'downloading' && `Downloading update${pct != null ? ` (${pct}%)` : '...'}`}
+              {stage === 'preparing' && 'Preparing files...'}
+              {stage === 'restarting' && 'Restarting VRC Studio...'}
+            </span>
+          </div>
+          {pct != null && (
+            <div className="h-1 bg-surface-800 rounded-full overflow-hidden">
+              <div className="h-full bg-accent-500 transition-all" style={{ width: `${pct}%` }} />
+            </div>
+          )}
+          {stage === 'restarting' && (
+            <p className="text-surface-500 text-[10px]">A separate CMD window has opened and is taking over. This app will close shortly and the new version will start on its own.</p>
+          )}
+        </div>
+      )}
+
+      {error && stage === 'error' && (
+        <div className="mb-3 p-3 rounded-lg border border-rose-500/30 bg-rose-500/8 text-xs text-rose-300 flex items-start gap-2">
+          <XCircle size={13} className="mt-0.5 flex-shrink-0" />
+          <div>
+            <div className="font-medium">Update failed</div>
+            <div className="text-rose-300/80 mt-0.5 break-words">{error}</div>
+          </div>
+        </div>
+      )}
+
+      {info && info.commits.length > 0 && !info.upToDate && (
+        <div className="rounded-lg border border-surface-700 bg-surface-800/30 overflow-hidden">
+          <div className="px-3 py-2 border-b border-surface-700 text-[11px] uppercase tracking-wider text-surface-500">
+            What's new — {info.behind} commit{info.behind === 1 ? '' : 's'} ahead
+          </div>
+          <ul className="divide-y divide-surface-800/60 max-h-72 overflow-y-auto">
+            {info.commits.slice().reverse().map(c => (
+              <li key={c.sha} className="px-3 py-2 text-xs flex items-start gap-2 hover:bg-surface-800/40">
+                <span className="font-mono text-[10px] text-surface-600 mt-0.5 flex-shrink-0">{c.shortSha}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="text-surface-200 truncate">{c.message}</div>
+                  <div className="text-[10px] text-surface-600">
+                    {c.author} · {new Date(c.date).toLocaleDateString()}
+                  </div>
+                </div>
+                {c.url && (
+                  <button
+                    onClick={() => window.electronAPI?.openExternal(c.url)}
+                    className="text-surface-500 hover:text-accent-400"
+                    title="Open on GitHub"
+                  >
+                    <ExternalLink size={11} />
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <p className="text-[10px] text-surface-600 mt-3">
+        Source: <span className="font-mono">DoNotPetMe/VRCStudio</span> · branch <span className="font-mono">claude/vrchat-companion-app-e7eJL</span>
+      </p>
+    </Section>
+  );
 }
 
 function StorageUsage() {

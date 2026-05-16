@@ -3,6 +3,7 @@ import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { useAuthStore } from './stores/authStore';
 import { useThemeStore, restoreThemeFromDisk } from './stores/themeStore';
 import { useSettingsStore, restoreSettingsFromDisk } from './stores/settingsStore';
+import { checkForUpdatesOnStartup } from './stores/updateStore';
 import { usePolling } from './hooks/usePolling';
 import { useDiscordRPC } from './hooks/useDiscordRPC';
 import { requestNotificationPermission } from './utils/notifications';
@@ -180,6 +181,11 @@ export default function App() {
       window.electronAPI?.setAlwaysOnTop(settings.general.alwaysOnTop);
     });
     restoreSession();
+
+    // Background update check ~10s after launch so it doesn't compete with
+    // login traffic. Result lands in updateStore and the banner picks it up.
+    const t = setTimeout(() => { void checkForUpdatesOnStartup(); }, 10_000);
+    return () => clearTimeout(t);
   }, []);
 
   // Re-apply theme after login so CSS custom properties are always in sync

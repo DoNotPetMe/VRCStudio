@@ -5,6 +5,7 @@ import {
 import path from 'path';
 import fs from 'fs';
 import https from 'https';
+import { spawn } from 'child_process';
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -831,6 +832,252 @@ ipcMain.handle('http:get', async (_e, url: string, headers?: Record<string, stri
   });
 
   return doRequest(url);
+});
+
+// ─── Auto-updater ─────────────────────────────────────────────────────────────
+//
+// The app is run from source (npm start), not as a packaged installer, so we
+// can't use electron-updater. Instead we treat the GitHub branch as the
+// source of truth: check the latest commit, fetch the zip, hand off to a
+// helper script that waits for the app to exit, overlays the new files, runs
+// npm install, and relaunches.
+
+const UPDATE_REPO = 'DoNotPetMe/VRCStudio';
+const UPDATE_BRANCH = 'claude/vrchat-companion-app-e7eJL';
+const INSTALL_ROOT = path.resolve(__dirname, '..');
+const VERSION_FILE = path.join(INSTALL_ROOT, '.vrcstudio-version.json');
+
+// Resolve the locally-installed commit SHA. Three sources tried in order:
+//   1. .vrcstudio-version.json (written after a successful update)
+//   2. .git/refs/heads/<branch> (if user cloned via git)
+//   3. .git/HEAD → resolve the symbolic ref
+function readCurrentCommit(): { sha: string | null; source: string } {
+  try {
+    if (fs.existsSync(VERSION_FILE)) {
+      const v = JSON.parse(fs.readFileSync(VERSION_FILE, 'utf-8'));
+      if (v?.commit) return { sha: v.commit, source: 'version-file' };
+    }
+  } catch {}
+
+  try {
+    const branchRefPath = path.join(INSTALL_ROOT, '.git', 'refs', 'heads', ...UPDATE_BRANCH.split('/'));
+    if (fs.existsSync(branchRefPath)) {
+      const sha = fs.readFileSync(branchRefPath, 'utf-8').trim();
+      if (sha) return { sha, source: 'git-branch-ref' };
+    }
+  } catch {}
+
+  try {
+    const headPath = path.join(INSTALL_ROOT, '.git', 'HEAD');
+    if (fs.existsSync(headPath)) {
+      const head = fs.readFileSync(headPath, 'utf-8').trim();
+      if (head.startsWith('ref:')) {
+        const refPath = path.join(INSTALL_ROOT, '.git', head.replace(/^ref:\s*/, ''));
+        if (fs.existsSync(refPath)) {
+          const sha = fs.readFileSync(refPath, 'utf-8').trim();
+          if (sha) return { sha, source: 'git-head' };
+        }
+      } else if (/^[a-f0-9]{40}$/.test(head)) {
+        return { sha: head, source: 'git-detached' };
+      }
+    }
+  } catch {}
+
+  return { sha: null, source: 'unknown' };
+}
+
+// Minimal GitHub API GET with the User-Agent header GitHub requires.
+function githubGet<T = any>(apiPath: string): Promise<{ ok: boolean; status: number; data: T | string }> {
+  return new Promise((resolve) => {
+    const req = https.request({
+      hostname: 'api.github.com',
+      path: apiPath,
+      method: 'GET',
+      headers: {
+        'User-Agent': 'VRCStudio-Updater/1.0',
+        'Accept': 'application/vnd.github+json',
+      },
+    }, (res) => {
+      let buf = '';
+      res.on('data', (chunk) => buf += chunk);
+      res.on('end', () => {
+        const status = res.statusCode ?? 0;
+        const ok = status >= 200 && status < 300;
+        try { resolve({ ok, status, data: JSON.parse(buf) }); }
+        catch { resolve({ ok, status, data: buf }); }
+      });
+    });
+    req.on('error', () => resolve({ ok: false, status: 0, data: 'network error' }));
+    req.end();
+  });
+}
+
+ipcMain.handle('update:getCurrentCommit', () => readCurrentCommit());
+
+ipcMain.handle('update:check', async () => {
+  const local = readCurrentCommit();
+
+  // Latest commit on the branch
+  const branch = await githubGet<any>(`/repos/${UPDATE_REPO}/branches/${encodeURIComponent(UPDATE_BRANCH)}`);
+  if (!branch.ok) {
+    return { ok: false, error: `Couldn't reach GitHub (${branch.status})` };
+  }
+  const latestSha: string = (branch.data as any).commit?.sha;
+  const latestCommit = (branch.data as any).commit?.commit;
+
+  // No local commit known? Treat as 'up to date is unknown, latest is X'.
+  if (!local.sha) {
+    return {
+      ok: true,
+      currentCommit: null,
+      latestCommit: latestSha,
+      behind: 0,
+      upToDate: false,
+      unknown: true,
+      latestMessage: latestCommit?.message ?? null,
+      latestDate: latestCommit?.author?.date ?? null,
+      commits: [],
+    };
+  }
+
+  if (local.sha === latestSha) {
+    return {
+      ok: true,
+      currentCommit: local.sha,
+      latestCommit: latestSha,
+      behind: 0,
+      upToDate: true,
+      commits: [],
+    };
+  }
+
+  // Get the commits between local and latest
+  const compare = await githubGet<any>(`/repos/${UPDATE_REPO}/compare/${local.sha}...${latestSha}`);
+  if (!compare.ok) {
+    return {
+      ok: true,
+      currentCommit: local.sha,
+      latestCommit: latestSha,
+      behind: -1,
+      upToDate: false,
+      commits: [],
+    };
+  }
+
+  const commits = ((compare.data as any).commits ?? []).map((c: any) => ({
+    sha: c.sha,
+    shortSha: c.sha.slice(0, 7),
+    message: c.commit?.message?.split('\n')[0] ?? '',
+    author: c.commit?.author?.name ?? '',
+    date: c.commit?.author?.date ?? '',
+    url: c.html_url ?? '',
+  }));
+
+  return {
+    ok: true,
+    currentCommit: local.sha,
+    latestCommit: latestSha,
+    behind: commits.length,
+    upToDate: false,
+    commits,
+  };
+});
+
+// Download the source zip for the current branch to a temp file and report
+// progress as we go.
+function downloadFile(url: string, dest: string, onProgress?: (received: number, total: number) => void): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const doRequest = (target: string) => {
+      const u = new URL(target);
+      const req = https.request({
+        hostname: u.hostname,
+        path: u.pathname + u.search,
+        method: 'GET',
+        headers: { 'User-Agent': 'VRCStudio-Updater/1.0' },
+      }, (res) => {
+        // Follow redirects (GitHub zip downloads always redirect to codeload.github.com)
+        if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+          doRequest(res.headers.location.startsWith('http')
+            ? res.headers.location
+            : `https://${u.hostname}${res.headers.location}`);
+          return;
+        }
+        if (res.statusCode !== 200) {
+          reject(new Error(`Download failed: HTTP ${res.statusCode}`));
+          return;
+        }
+        const total = parseInt(res.headers['content-length'] ?? '0', 10);
+        let received = 0;
+        const out = fs.createWriteStream(dest);
+        res.on('data', (chunk) => {
+          received += chunk.length;
+          onProgress?.(received, total);
+        });
+        res.pipe(out);
+        out.on('finish', () => out.close(() => resolve()));
+        out.on('error', (err) => { try { fs.unlinkSync(dest); } catch {} reject(err); });
+      });
+      req.on('error', reject);
+      req.end();
+    };
+    doRequest(url);
+  });
+}
+
+ipcMain.handle('update:downloadAndApply', async (_e) => {
+  try {
+    const zipUrl = `https://github.com/${UPDATE_REPO}/archive/refs/heads/${UPDATE_BRANCH}.zip`;
+    const zipPath = path.join(app.getPath('temp'), `vrcstudio-update-${Date.now()}.zip`);
+
+    if (mainWindow) mainWindow.webContents.send('update:progress', { stage: 'downloading', received: 0, total: 0 });
+    await downloadFile(zipUrl, zipPath, (received, total) => {
+      if (mainWindow) mainWindow.webContents.send('update:progress', { stage: 'downloading', received, total });
+    });
+    if (mainWindow) mainWindow.webContents.send('update:progress', { stage: 'preparing', received: 100, total: 100 });
+
+    // The helper script lives alongside setup.bat in the install root.
+    const helperPath = path.join(INSTALL_ROOT, 'update-helper.bat');
+    if (!fs.existsSync(helperPath)) {
+      throw new Error(`update-helper.bat not found at ${helperPath}`);
+    }
+
+    // Spawn the helper detached so it survives our quit. Args: zip path,
+    // install dir, our PID, the branch ref for the post-update version
+    // marker.
+    const branchInfo = await githubGet<any>(`/repos/${UPDATE_REPO}/branches/${encodeURIComponent(UPDATE_BRANCH)}`);
+    const latestSha = (branchInfo.data as any)?.commit?.sha ?? '';
+
+    const child = spawn('cmd.exe', ['/c', 'start', '', helperPath, zipPath, INSTALL_ROOT, String(process.pid), latestSha], {
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: false,
+    });
+    child.unref();
+
+    if (mainWindow) mainWindow.webContents.send('update:progress', { stage: 'restarting', received: 100, total: 100 });
+
+    // Give the helper a moment to start, then exit so it can take over.
+    setTimeout(() => {
+      isQuitting = true;
+      app.quit();
+    }, 600);
+
+    return { ok: true };
+  } catch (err: any) {
+    return { ok: false, error: err?.message ?? String(err) };
+  }
+});
+
+// Helper for the post-update boot: if the version file was just written
+// (within the last 5 minutes) the renderer can show a "you're now on
+// commit X" banner.
+ipcMain.handle('update:getLastApplied', () => {
+  try {
+    if (!fs.existsSync(VERSION_FILE)) return null;
+    return JSON.parse(fs.readFileSync(VERSION_FILE, 'utf-8'));
+  } catch {
+    return null;
+  }
 });
 
 // ─── App lifecycle ────────────────────────────────────────────────────────────

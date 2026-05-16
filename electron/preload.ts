@@ -96,4 +96,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('vrchat:logLines', handler);
     return () => ipcRenderer.removeListener('vrchat:logLines', handler);
   },
+
+  // Auto-updater (source-tree updates from GitHub)
+  updateGetCurrentCommit: () => ipcRenderer.invoke('update:getCurrentCommit'),
+  updateCheck: () => ipcRenderer.invoke('update:check'),
+  updateDownloadAndApply: () => ipcRenderer.invoke('update:downloadAndApply'),
+  updateGetLastApplied: () => ipcRenderer.invoke('update:getLastApplied'),
+  onUpdateProgress: (cb: (msg: { stage: string; received: number; total: number }) => void) => {
+    const handler = (_e: any, msg: any) => cb(msg);
+    ipcRenderer.on('update:progress', handler);
+    return () => ipcRenderer.removeListener('update:progress', handler);
+  },
 });
