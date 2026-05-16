@@ -49,11 +49,28 @@
     },
     "files": [
       "dist/**/*",
-      "dist-electron/**/*"
+      "dist-electron/**/*",
+      "public/icon.png",
+      "public/tray-icon.png"
     ],
+    "extraResources": [
+      { "from": "public/icon.png", "to": "icon.png" },
+      { "from": "public/tray-icon.png", "to": "tray-icon.png" }
+    ],
+    "npmRebuild": false,
+    "asar": true,
     "win": {
-      "target": "nsis",
-      "icon": "public/icon.png"
+      "target": [
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "public/icon.png",
+      "artifactName": "VRC Studio.exe"
+    },
+    "portable": {
+      "artifactName": "VRC Studio.exe"
     },
     "linux": {
       "target": "AppImage",

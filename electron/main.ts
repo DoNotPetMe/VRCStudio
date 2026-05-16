@@ -1026,6 +1026,16 @@ function downloadFile(url: string, dest: string, onProgress?: (received: number,
 }
 
 ipcMain.handle('update:downloadAndApply', async (_e) => {
+  // Packaged .exe builds can't self-update via the source-tree mechanism
+  // (the source isn't around — everything's inside an asar archive). Point
+  // the user at GitHub so they can re-download and re-build instead.
+  if (app.isPackaged) {
+    return {
+      ok: false,
+      error: 'This is a packaged build. Re-download the source from GitHub and run Start Here.bat again to update.',
+    };
+  }
+
   try {
     const zipUrl = `https://github.com/${UPDATE_REPO}/archive/refs/heads/${UPDATE_BRANCH}.zip`;
     const zipPath = path.join(app.getPath('temp'), `vrcstudio-update-${Date.now()}.zip`);
