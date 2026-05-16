@@ -112,7 +112,17 @@ REM ─── 5. Cleanup + relaunch ──────────────�
 rmdir /s /q "%EXTRACT_DIR%" >NUL 2>NUL
 del "%ZIP_PATH%" >NUL 2>NUL
 
-start "" "%INSTALL_DIR%\setup.bat"
+REM Pick the launcher we actually have. Order of preference:
+REM   1. Launch VRC Studio.bat   - created by Start Here.bat after first setup
+REM   2. Start Here.bat          - still present if user hasn't run setup yet
+REM   3. npm start direct        - fallback if both launchers are missing
+if exist "%INSTALL_DIR%\Launch VRC Studio.bat" (
+  start "" "%INSTALL_DIR%\Launch VRC Studio.bat"
+) else if exist "%INSTALL_DIR%\Start Here.bat" (
+  start "" "%INSTALL_DIR%\Start Here.bat"
+) else (
+  start "" cmd /c "cd /d ""%INSTALL_DIR%"" & call npm start"
+)
 exit /b 0
 
 :CLEANUP_FAIL
