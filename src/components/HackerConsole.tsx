@@ -379,6 +379,27 @@ const COMMANDS: Command[] = [
       return '> process.exit(0)';
     },
   },
+
+  // `made` matches `made`, `made by`, `madeby`, `author`. The argument
+  // tokens after `made` (like `by`) are ignored — the command just prints
+  // its ASCII signature.
+  {
+    name: 'made',
+    aliases: ['madeby', 'author'],
+    description: 'Who made this',
+    exec: () => [
+      ' ____        _   _       _   ',
+      '|  _ \\  ___ | \\ | | ___ | |_ ',
+      '| | | |/ _ \\|  \\| |/ _ \\| __|',
+      '| |_| | (_) | |\\  | (_) | |_ ',
+      '|____/ \\___/|_| \\_|\\___/ \\__|',
+      ' ____       _   __  __      ',
+      '|  _ \\ ___ | |_|  \\/  | ___ ',
+      '| |_) / _ \\| __| |\\/| |/ _ \\',
+      '|  __/  __/| |_| |  | |  __/',
+      '|_|   \\___| \\__|_|  |_|\\___|',
+    ],
+  },
 ];
 
 const COMMAND_MAP = (() => {
