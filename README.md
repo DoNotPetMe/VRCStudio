@@ -89,6 +89,11 @@ source folder by hand if you want.
 - **Unofficial** — third-party app, not affiliated with VRChat Inc.
 - **Local-first** — no telemetry, no remote server.
 - **Open source** — all code in this repo.
+- **A few easter eggs sprinkled here and there.** 🥚
+- **Transparency** — I value transparency, AI was used as an assistant
+  in the making of VRC Studio. I am a one-person operation and tools
+  like these help me search for bugs and squish them. Thank you for
+  understanding.
 
 Made by [@DoNotPetMe](https://github.com/DoNotPetMe)
 (*DoNotResurrect_* in VRChat).
