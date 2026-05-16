@@ -97,6 +97,21 @@ interface ElectronAPI {
   updateDownloadAndApply: () => Promise<{ ok: boolean; error?: string }>;
   updateGetLastApplied: () => Promise<{ commit: string; appliedAt: string } | null>;
   onUpdateProgress: (cb: (msg: { stage: string; received: number; total: number }) => void) => () => void;
+
+  // Discord bot
+  botStart: (token: string) => Promise<{ ok: boolean; error?: string }>;
+  botStop: () => Promise<{ ok: boolean }>;
+  botStatus: () => Promise<{
+    connected: boolean;
+    botTag: string | null;
+    guildCount: number;
+    ping: number | null;
+    lastError: string | null;
+    connectedAt: number | null;
+  }>;
+  botSyncState: (snapshot: any) => Promise<{ ok: boolean }>;
+  botActionResult: (payload: { id: string; ok: boolean; error?: string; data?: any }) => Promise<{ ok: boolean }>;
+  onBotExecuteAction: (cb: (payload: { id: string; action: string; payload: any }) => void) => () => void;
 }
 
 interface Window {

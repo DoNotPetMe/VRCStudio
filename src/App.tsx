@@ -34,6 +34,8 @@ import LoadingSpinner from './components/common/LoadingSpinner';
 import { useLocationTracking } from './hooks/useLocationTracking';
 import { useTrayStatus } from './hooks/useTrayStatus';
 import { useLogIngestion } from './hooks/useLogIngestion';
+import { useDiscordBotBridge } from './hooks/useDiscordBotBridge';
+import { useDiscordBotStore } from './stores/discordBotStore';
 import AvatarSwitcher from './components/AvatarSwitcher';
 import LivelinessEffects from './components/LivelinessEffects';
 import HackerConsole from './components/HackerConsole';
@@ -111,6 +113,7 @@ function AppShell() {
   useLocationTracking();
   useTrayStatus();
   useLogIngestion();
+  useDiscordBotBridge();
 
   // Auto-start OSC if configured
   useEffect(() => {
@@ -175,7 +178,11 @@ export default function App() {
     applyTheme();
     requestNotificationPermission();
     // Restore from persistent disk storage if localStorage is empty (crash recovery)
-    Promise.all([restoreThemeFromDisk(), restoreSettingsFromDisk()]).then(() => {
+    Promise.all([
+      restoreThemeFromDisk(),
+      restoreSettingsFromDisk(),
+      useDiscordBotStore.getState().restoreFromDisk(),
+    ]).then(() => {
       const { settings } = useSettingsStore.getState();
       window.electronAPI?.setMinimizeToTray(settings.general.minimizeToTray);
       window.electronAPI?.setAlwaysOnTop(settings.general.alwaysOnTop);

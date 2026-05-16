@@ -6,6 +6,7 @@ import path from 'path';
 import fs from 'fs';
 import https from 'https';
 import { spawn } from 'child_process';
+import * as discordBot from './discord-bot';
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -1080,6 +1081,33 @@ ipcMain.handle('update:getLastApplied', () => {
   }
 });
 
+// ─── Discord bot bridge ───────────────────────────────────────────────────────
+//
+// All the bot-specific logic lives in electron/discord-bot.ts. Here we just
+// wire its IPC surface and keep its mainWindow ref in sync.
+
+ipcMain.handle('bot:start', async (_e, token: string) => {
+  return discordBot.startBot(token);
+});
+
+ipcMain.handle('bot:stop', async () => {
+  await discordBot.stopBot();
+  return { ok: true };
+});
+
+ipcMain.handle('bot:status', () => discordBot.getStatus());
+
+ipcMain.handle('bot:syncState', (_e, snapshot: any) => {
+  discordBot.updateSnapshot(snapshot ?? {});
+  return { ok: true };
+});
+
+// Renderer reports back the result of a bot:executeAction event.
+ipcMain.handle('bot:actionResult', (_e, payload: { id: string; ok: boolean; error?: string; data?: any }) => {
+  discordBot.resolveAction(payload.id, { ok: payload.ok, error: payload.error, data: payload.data });
+  return { ok: true };
+});
+
 // ─── App lifecycle ────────────────────────────────────────────────────────────
 
 app.whenReady().then(() => {
@@ -1096,6 +1124,9 @@ app.whenReady().then(() => {
 
   createWindow();
   createTray();
+  // Discord bot needs the window ref to dispatch bot:executeAction events
+  // back to the renderer.
+  discordBot.setMainWindow(mainWindow);
 });
 
 app.on('window-all-closed', () => {
@@ -1113,4 +1144,5 @@ app.on('before-quit', () => {
   isQuitting = true;
   disconnectDiscordRPC();
   stopOSC();
+  discordBot.stopBot().catch(() => {});
 });

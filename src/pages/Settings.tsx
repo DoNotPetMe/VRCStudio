@@ -14,13 +14,14 @@ import { useInstanceHistoryStore } from '../stores/instanceHistoryStore';
 import { useFriendStore } from '../stores/friendStore';
 import { useThemeStore } from '../stores/themeStore';
 import { useUpdateStore } from '../stores/updateStore';
+import { useDiscordBotStore } from '../stores/discordBotStore';
 import { useMultiAccountStore } from '../stores/multiAccountStore';
 import { exportAllData, downloadExport, importData, exportFriendsList, downloadCSV } from '../utils/dataExport';
 import { getAvailableLanguages, setLanguage, getLanguage } from '../utils/i18n';
 
 type SettingsSection =
   | 'account' | 'accounts' | 'notifications' | 'polling'
-  | 'display' | 'appearance' | 'discord' | 'vrcdb' | 'general' | 'data'
+  | 'display' | 'appearance' | 'discord' | 'discord-bot' | 'vrcdb' | 'general' | 'data'
   | 'profile' | 'privacy' | 'performance' | 'shortcuts' | 'about' | 'updates';
 
 const sections: Array<{ key: SettingsSection; label: string; icon: typeof SettingsIcon; group: string }> = [
@@ -33,6 +34,7 @@ const sections: Array<{ key: SettingsSection; label: string; icon: typeof Settin
   { key: 'appearance',    label: 'Appearance',            icon: Palette,       group: 'App' },
   { key: 'privacy',       label: 'Privacy',               icon: Lock,          group: 'App' },
   { key: 'discord',       label: 'Discord Rich Presence', icon: Zap,           group: 'Integrations' },
+  { key: 'discord-bot',   label: 'Discord Bot',           icon: Zap,           group: 'Integrations' },
   { key: 'vrcdb',         label: 'Avatar Database',       icon: Database,      group: 'Integrations' },
   { key: 'general',       label: 'General',               icon: SettingsIcon,  group: 'System' },
   { key: 'performance',   label: 'Performance',           icon: Cpu,           group: 'System' },
@@ -735,6 +737,8 @@ export default function SettingsPage() {
             </Section>
           )}
 
+          {active === 'discord-bot' && <DiscordBotSection />}
+
           {active === 'updates' && <UpdatesSection />}
 
           {active === 'about' && (
@@ -870,6 +874,164 @@ function fmtBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+// ─── Discord Bot ────────────────────────────────────────────────────────────
+function DiscordBotSection() {
+  const config = useDiscordBotStore(s => s.config);
+  const status = useDiscordBotStore(s => s.status);
+  const busy = useDiscordBotStore(s => s.busy);
+  const setToken = useDiscordBotStore(s => s.setToken);
+  const setAutoStart = useDiscordBotStore(s => s.setAutoStart);
+  const start = useDiscordBotStore(s => s.start);
+  const stop = useDiscordBotStore(s => s.stop);
+
+  const [tokenInput, setTokenInput] = useState(config.token);
+  const [showToken, setShowToken] = useState(false);
+  const [lastResult, setLastResult] = useState<{ ok: boolean; error?: string } | null>(null);
+
+  useEffect(() => { setTokenInput(config.token); }, [config.token]);
+
+  const onSaveToken = async () => {
+    await setToken(tokenInput);
+    setLastResult({ ok: true });
+    setTimeout(() => setLastResult(null), 2000);
+  };
+
+  const onConnect = async () => {
+    if (tokenInput !== config.token) await setToken(tokenInput);
+    const result = await start();
+    setLastResult(result);
+  };
+
+  const onDisconnect = async () => {
+    await stop();
+    setLastResult({ ok: true });
+  };
+
+  return (
+    <Section title="Discord Bot" icon={Zap}>
+      <p className="text-xs text-surface-500 mb-3">
+        Run a Discord bot from inside VRC Studio that exposes slash commands like{' '}
+        <code>/whoami</code>, <code>/world</code>, <code>/players</code>, <code>/wear</code>, and{' '}
+        <code>/say</code>. Replies come from the live state inside this app — no extra VRChat API spam.
+      </p>
+
+      <div className="space-y-3">
+        <div className="rounded-lg border border-surface-700 bg-surface-800/40 p-3 flex items-center gap-3">
+          <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${status.connected ? 'bg-green-500 animate-pulse' : 'bg-surface-600'}`} />
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-semibold">
+              {status.connected ? `Connected as ${status.botTag ?? 'unknown'}` : 'Not connected'}
+            </div>
+            <div className="text-[11px] text-surface-500">
+              {status.connected
+                ? `${status.guildCount} server${status.guildCount === 1 ? '' : 's'}${status.ping != null ? ` · ${status.ping}ms ping` : ''}`
+                : (status.lastError ? `Last error: ${status.lastError}` : 'Paste your bot token below and click Connect.')}
+            </div>
+          </div>
+          {status.connected ? (
+            <button onClick={onDisconnect} disabled={busy} className="btn-secondary text-sm">
+              Disconnect
+            </button>
+          ) : (
+            <button onClick={onConnect} disabled={busy || !tokenInput} className="btn-primary text-sm">
+              {busy ? 'Connecting...' : 'Connect'}
+            </button>
+          )}
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium mb-1.5">Bot token</label>
+          <div className="flex gap-2">
+            <input
+              type={showToken ? 'text' : 'password'}
+              value={tokenInput}
+              onChange={e => setTokenInput(e.target.value)}
+              placeholder="Paste your bot's token (Developer Portal -> Bot)"
+              className="input-field flex-1 font-mono text-xs"
+              autoComplete="off"
+              spellCheck={false}
+            />
+            <button onClick={() => setShowToken(!showToken)} className="btn-secondary text-xs">
+              {showToken ? 'Hide' : 'Show'}
+            </button>
+            <button onClick={onSaveToken} disabled={tokenInput === config.token} className="btn-secondary text-xs">
+              Save
+            </button>
+          </div>
+          <p className="text-[10px] text-surface-600 mt-1">
+            Stored only on this machine. Treat it like a password.
+          </p>
+        </div>
+
+        <label className="flex items-start gap-3 p-2.5 rounded-lg border border-surface-700 bg-surface-800/40 cursor-pointer hover:bg-surface-800/60 transition-colors">
+          <button
+            type="button"
+            role="switch"
+            aria-checked={config.autoStart}
+            onClick={() => setAutoStart(!config.autoStart)}
+            className={`relative w-9 h-5 rounded-full transition-colors flex-shrink-0 mt-0.5 ${config.autoStart ? 'bg-accent-500' : 'bg-surface-700'}`}
+          >
+            <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${config.autoStart ? 'translate-x-4' : ''}`} />
+          </button>
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-medium">Auto-start on launch</div>
+            <div className="text-xs text-surface-500 leading-snug">
+              Reconnect the bot automatically every time VRC Studio opens.
+            </div>
+          </div>
+        </label>
+
+        {lastResult && !lastResult.ok && (
+          <div className="text-xs text-rose-400 flex items-start gap-2 p-2 rounded bg-rose-500/8 border border-rose-500/30">
+            <XCircle size={12} className="mt-0.5 flex-shrink-0" />
+            <span>{lastResult.error}</span>
+          </div>
+        )}
+
+        <div className="rounded-lg border border-surface-700/60 bg-surface-900/40 p-3 text-xs space-y-1.5">
+          <div className="font-medium text-surface-300">How to get a bot token</div>
+          <ol className="list-decimal pl-5 space-y-1 text-surface-500">
+            <li>
+              Open the{' '}
+              <button
+                className="text-accent-400 hover:underline"
+                onClick={() => window.electronAPI?.openExternal('https://discord.com/developers/applications')}
+              >Discord Developer Portal</button>
+              {' '}and click <b>New Application</b>.
+            </li>
+            <li>Open the new app, go to <b>Bot</b> in the sidebar, click <b>Add Bot</b>.</li>
+            <li>Under <b>Token</b>, click <b>Reset Token</b> and copy the new token.</li>
+            <li>Paste it above and click Connect.</li>
+            <li>
+              To use the bot in a server, go to <b>OAuth2 -&gt; URL Generator</b>, tick <code>bot</code> and{' '}
+              <code>applications.commands</code>, copy the URL and open it to invite.
+            </li>
+          </ol>
+        </div>
+
+        <div className="rounded-lg border border-surface-700/60 bg-surface-900/40 p-3 text-xs">
+          <div className="font-medium text-surface-300 mb-1.5">Available slash commands</div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1 text-surface-400">
+            <div><code className="text-accent-400">/whoami</code> — your VRChat profile</div>
+            <div><code className="text-accent-400">/world</code> — current world</div>
+            <div><code className="text-accent-400">/players</code> — players in instance</div>
+            <div><code className="text-accent-400">/friends</code> — online friends</div>
+            <div><code className="text-accent-400">/videos</code> — recent videos played</div>
+            <div><code className="text-accent-400">/avatar &lt;id&gt;</code> — avatar lookup</div>
+            <div><code className="text-accent-400">/status &lt;state&gt;</code> — change status</div>
+            <div><code className="text-accent-400">/wear &lt;id&gt;</code> — switch avatar</div>
+            <div><code className="text-accent-400">/say &lt;text&gt;</code> — VRChat chatbox via OSC</div>
+          </div>
+          <p className="text-[10px] text-surface-600 mt-2">
+            Slash commands are registered globally and may take up to an hour to appear in
+            Discord the first time you connect.
+          </p>
+        </div>
+      </div>
+    </Section>
+  );
 }
 
 // ─── Updates ────────────────────────────────────────────────────────────────

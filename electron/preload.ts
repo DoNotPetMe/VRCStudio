@@ -107,4 +107,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('update:progress', handler);
     return () => ipcRenderer.removeListener('update:progress', handler);
   },
+
+  // Discord bot
+  botStart:        (token: string) => ipcRenderer.invoke('bot:start', token),
+  botStop:         () => ipcRenderer.invoke('bot:stop'),
+  botStatus:       () => ipcRenderer.invoke('bot:status'),
+  botSyncState:    (snapshot: any) => ipcRenderer.invoke('bot:syncState', snapshot),
+  botActionResult: (payload: { id: string; ok: boolean; error?: string; data?: any }) =>
+    ipcRenderer.invoke('bot:actionResult', payload),
+  onBotExecuteAction: (cb: (payload: { id: string; action: string; payload: any }) => void) => {
+    const handler = (_e: any, p: any) => cb(p);
+    ipcRenderer.on('bot:executeAction', handler);
+    return () => ipcRenderer.removeListener('bot:executeAction', handler);
+  },
 });

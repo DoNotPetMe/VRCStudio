@@ -23,7 +23,11 @@ export default defineConfig(({ command }) => {
                       formats: ['cjs'],
                     },
                     rollupOptions: {
-                      external: ['electron', 'discord-rpc', 'path', 'fs', 'url', 'https', 'http'],
+                      external: [
+                        'electron', 'discord-rpc', 'discord.js', 'osc',
+                        'path', 'fs', 'url', 'https', 'http', 'child_process',
+                        'os', 'crypto', 'stream', 'zlib', 'events', 'util', 'net', 'dgram',
+                      ],
                       output: {
                         entryFileNames: '[name].cjs',
                       },
