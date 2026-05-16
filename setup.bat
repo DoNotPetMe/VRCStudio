@@ -94,8 +94,11 @@ echo  =====================================================
 echo    Setup complete - launching VRC Studio
 echo  =====================================================
 echo.
+echo  [i] `npm start` runs a production build of the app
+echo      (no dev server, no hot-reload). Safe for normal use.
+echo.
 
-call npm run electron:dev
+call npm start
 set "RUN_RC=%errorlevel%"
 if not "%RUN_RC%"=="0" (
   echo.

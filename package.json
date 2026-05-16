@@ -7,6 +7,7 @@
   "author": "VRC Studio Team",
   "license": "MIT",
   "scripts": {
+    "start": "vite build && electron .",
     "dev": "vite",
     "dev:web": "ELECTRON=false vite",
     "build": "vite build && electron-builder",
