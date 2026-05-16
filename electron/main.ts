@@ -13,6 +13,34 @@ let rpcConnected = false;
 let minimizeToTray = true;
 let isQuitting = false;
 
+// ─── Single-instance lock ─────────────────────────────────────────────────────
+//
+// Without this, double-clicking setup.bat or the app shortcut while a previous
+// instance is still alive (very common with our minimize-to-tray behaviour)
+// spawns a second Electron process. Both processes fight over the same
+// Chromium user-data directory, and the loser logs "Unable to move the cache:
+// Access is denied" / "Gpu Cache Creation failed" before crashing. Single-
+// instance lock makes the second launch focus the existing window instead.
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      if (!mainWindow.isVisible()) mainWindow.show();
+      mainWindow.focus();
+    }
+  });
+}
+
+// Belt-and-braces: skip the GPU shader disk cache entirely. Even with the
+// single-instance lock, some users see "Access is denied" on the GPU cache
+// when files from a previous Administrator-elevated run got locked down.
+// Disabling the disk cache costs us a small first-frame compile-shader hit
+// and avoids the whole class of permission errors.
+app.commandLine.appendSwitch('disable-gpu-shader-disk-cache');
+
 // ─── OSC (VRChat) ──────────────────────────────────────────────────────────
 // VRChat OSC convention: app sends to 127.0.0.1:9000, listens on 127.0.0.1:9001
 type OSCArg = { type: string; value: any } | string | number | boolean;
@@ -808,6 +836,17 @@ ipcMain.handle('http:get', async (_e, url: string, headers?: Record<string, stri
 // ─── App lifecycle ────────────────────────────────────────────────────────────
 
 app.whenReady().then(() => {
+  // Stale GPU caches from a previous (crashed or elevated) run sometimes
+  // sit there locked. Try to clear them once before we open windows — if
+  // it fails we silently move on, the disable-gpu-shader-disk-cache flag
+  // above keeps us functional either way.
+  try {
+    const gpuCache = path.join(app.getPath('userData'), 'GPUCache');
+    if (fs.existsSync(gpuCache)) {
+      fs.rmSync(gpuCache, { recursive: true, force: true });
+    }
+  } catch {}
+
   createWindow();
   createTray();
 });
