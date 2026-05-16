@@ -32,6 +32,7 @@ import api from '../api/vrchat';
 import type { FeedEvent, UserStatus } from '../types/vrchat';
 import { getBestAvatarUrl } from '../utils/avatar';
 import WorldAnalyticsPanel from '../components/WorldAnalyticsPanel';
+import VideoPlayerWidget from '../components/VideoPlayerWidget';
 
 const eventIcons: Record<FeedEvent['type'], typeof Activity> = {
   friend_online: UserPlus,
@@ -200,6 +201,8 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+
+      <VideoPlayerWidget />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 glass-panel-solid overflow-hidden">

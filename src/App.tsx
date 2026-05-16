@@ -30,6 +30,7 @@ import OSCPage from './pages/OSC';
 import LoadingSpinner from './components/common/LoadingSpinner';
 import { useLocationTracking } from './hooks/useLocationTracking';
 import { useTrayStatus } from './hooks/useTrayStatus';
+import { useVideoPlayerTracking } from './hooks/useVideoPlayerTracking';
 import AvatarSwitcher from './components/AvatarSwitcher';
 import LivelinessEffects from './components/LivelinessEffects';
 import { useAvatarSwitcherStore } from './stores/avatarSwitcherStore';
@@ -105,6 +106,7 @@ function AppShell() {
   useDiscordRPC();
   useLocationTracking();
   useTrayStatus();
+  useVideoPlayerTracking();
 
   // Auto-start OSC if configured
   useEffect(() => {

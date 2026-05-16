@@ -86,4 +86,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('tray:setStatus', handler);
     return () => ipcRenderer.removeListener('tray:setStatus', handler);
   },
+
+  // VRChat log tailing (for live video-player tracking, etc.)
+  logStartTailing: () => ipcRenderer.invoke('log:startTailing'),
+  logStopTailing:  () => ipcRenderer.invoke('log:stopTailing'),
+  logReadBacklog:  (maxLines?: number) => ipcRenderer.invoke('log:readBacklog', maxLines),
+  onVRChatLogLines: (cb: (lines: string[]) => void) => {
+    const handler = (_e: any, lines: string[]) => cb(lines);
+    ipcRenderer.on('vrchat:logLines', handler);
+    return () => ipcRenderer.removeListener('vrchat:logLines', handler);
+  },
 });

@@ -66,6 +66,12 @@ interface ElectronAPI {
 
   // Tray quick-status
   onTraySetStatus: (cb: (status: string) => void) => () => void;
+
+  // VRChat log tailing
+  logStartTailing: () => Promise<{ success: boolean; path?: string; error?: string }>;
+  logStopTailing: () => Promise<{ success: boolean }>;
+  logReadBacklog: (maxLines?: number) => Promise<{ success: boolean; lines?: string[]; path?: string; error?: string }>;
+  onVRChatLogLines: (cb: (lines: string[]) => void) => () => void;
 }
 
 interface Window {

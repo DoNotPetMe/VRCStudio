@@ -372,6 +372,130 @@ ipcMain.handle('fs:getVRChatLogPath', () => {
   }
 });
 
+// ─── VRChat log tail (live) ──────────────────────────────────────────────
+//
+// We tail the most recent output_log_*.txt file in VRChat's log directory and
+// stream new lines to the renderer. The renderer parses video URLs, joins,
+// world transitions, etc. from those lines and pins them to the current
+// instance. Cheap: fs.watch + size-delta read, no full re-parse on every
+// poll.
+
+let logTailWatcher: fs.FSWatcher | null = null;
+let logTailFilePath: string | null = null;
+let logTailPosition = 0;
+let logTailDebounce: NodeJS.Timeout | null = null;
+let logTailLeftover = '';
+
+function findLatestVRChatLogFile(): string | null {
+  try {
+    let dir: string;
+    if (process.platform === 'win32') {
+      dir = path.join(app.getPath('home'), 'AppData', 'LocalLow', 'VRChat', 'VRChat');
+    } else if (process.platform === 'darwin') {
+      dir = path.join(app.getPath('home'), 'Library', 'Logs', 'VRChat');
+    } else {
+      dir = path.join(app.getPath('home'), '.steam', 'steam', 'steamapps', 'compatdata', '438100', 'pfx', 'drive_c', 'users', 'steamuser', 'AppData', 'LocalLow', 'VRChat', 'VRChat');
+    }
+    if (!fs.existsSync(dir)) return null;
+    const files = fs.readdirSync(dir)
+      .filter(f => f.startsWith('output_log_') && f.endsWith('.txt'))
+      .map(f => {
+        const full = path.join(dir, f);
+        return { full, mtime: fs.statSync(full).mtimeMs };
+      })
+      .sort((a, b) => b.mtime - a.mtime);
+    return files.length > 0 ? files[0].full : null;
+  } catch {
+    return null;
+  }
+}
+
+function readNewLogLines() {
+  if (!logTailFilePath || !mainWindow) return;
+  try {
+    const stat = fs.statSync(logTailFilePath);
+    // File rotated / truncated → start over from 0
+    if (stat.size < logTailPosition) {
+      logTailPosition = 0;
+      logTailLeftover = '';
+    }
+    if (stat.size === logTailPosition) return;
+
+    const fd = fs.openSync(logTailFilePath, 'r');
+    const length = stat.size - logTailPosition;
+    const buffer = Buffer.alloc(length);
+    fs.readSync(fd, buffer, 0, length, logTailPosition);
+    fs.closeSync(fd);
+    logTailPosition = stat.size;
+
+    const text = logTailLeftover + buffer.toString('utf-8');
+    const lines = text.split(/\r?\n/);
+    // Last fragment may be a partial line — hold it until next read
+    logTailLeftover = lines.pop() ?? '';
+    const clean = lines.filter(l => l.length > 0);
+    if (clean.length > 0) {
+      mainWindow.webContents.send('vrchat:logLines', clean);
+    }
+  } catch (err) {
+    console.error('[Log tail] read error:', err);
+  }
+}
+
+function startLogTail(): { success: boolean; path?: string; error?: string } {
+  const latest = findLatestVRChatLogFile();
+  if (!latest) return { success: false, error: 'No VRChat log file found' };
+
+  if (logTailWatcher) {
+    try { logTailWatcher.close(); } catch {}
+    logTailWatcher = null;
+  }
+
+  logTailFilePath = latest;
+  // Start from end of file — we only care about NEW lines from now on.
+  // Backlog (videos already played this session) is fetched via log:readBacklog.
+  logTailPosition = fs.statSync(latest).size;
+  logTailLeftover = '';
+
+  try {
+    logTailWatcher = fs.watch(latest, () => {
+      if (logTailDebounce) clearTimeout(logTailDebounce);
+      logTailDebounce = setTimeout(readNewLogLines, 150);
+    });
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+
+  return { success: true, path: latest };
+}
+
+function stopLogTail() {
+  if (logTailWatcher) {
+    try { logTailWatcher.close(); } catch {}
+    logTailWatcher = null;
+  }
+  if (logTailDebounce) {
+    clearTimeout(logTailDebounce);
+    logTailDebounce = null;
+  }
+  logTailFilePath = null;
+  logTailPosition = 0;
+  logTailLeftover = '';
+}
+
+ipcMain.handle('log:startTailing', () => startLogTail());
+ipcMain.handle('log:stopTailing', () => { stopLogTail(); return { success: true }; });
+ipcMain.handle('log:readBacklog', (_e, maxLines: number = 2000) => {
+  const target = logTailFilePath ?? findLatestVRChatLogFile();
+  if (!target) return { success: false, error: 'No log file' };
+  try {
+    const content = fs.readFileSync(target, 'utf-8');
+    const all = content.split(/\r?\n/).filter(l => l.length > 0);
+    return { success: true, lines: all.slice(-maxLines), path: target };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+});
+
 ipcMain.handle('fs:getVRChatScreenshotPath', () => {
   const platform = process.platform;
   if (platform === 'win32') {
