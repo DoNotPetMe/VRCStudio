@@ -17,31 +17,34 @@ import api from '../../api/vrchat';
 import { getBestAvatarUrl } from '../../utils/avatar';
 import { hasVRCPlus } from '../../utils/avatarImage';
 
+// hackerLabel = the code-style alias shown when the Hacker premium theme is
+// active. Each one matches a believable JS/TS expression a dev would use to
+// reach that view, leaning into the "I'm browsing source" feel.
 const mainNavItems = [
-  { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
-  { to: '/search', icon: Search, label: 'Search' },
-  { to: '/friends', icon: Users, label: 'Friends', badge: 'friends' as const },
-  { to: '/friend-log', icon: History, label: 'Friend Log' },
+  { to: '/',           icon: LayoutDashboard, label: 'Dashboard',  hackerLabel: '<Dashboard />' },
+  { to: '/search',     icon: Search,          label: 'Search',     hackerLabel: 'world.search()' },
+  { to: '/friends',    icon: Users,           label: 'Friends',    badge: 'friends' as const, hackerLabel: 'friends.list()' },
+  { to: '/friend-log', icon: History,         label: 'Friend Log', hackerLabel: 'friends.log[]' },
 ];
 
 const browseNavItems = [
-  { to: '/worlds', icon: Globe, label: 'Worlds' },
-  { to: '/groups', icon: UsersRound, label: 'Groups' },
-  { to: '/favorites', icon: Star, label: 'Favorites' },
-  { to: '/notifications', icon: Bell, label: 'Notifications' },
-  { to: '/instance-avatars', icon: UserCheck, label: 'Live Avatars' },
+  { to: '/worlds',            icon: Globe,     label: 'Worlds',        hackerLabel: 'world.fetch()' },
+  { to: '/groups',            icon: UsersRound, label: 'Groups',       hackerLabel: 'groups.list()' },
+  { to: '/favorites',         icon: Star,      label: 'Favorites',     hackerLabel: '~/favorites' },
+  { to: '/notifications',     icon: Bell,      label: 'Notifications', hackerLabel: 'inbox.unread' },
+  { to: '/instance-avatars',  icon: UserCheck, label: 'Live Avatars',  hackerLabel: 'instance.players' },
 ];
 
 const toolsNavItems = [
-  { to: '/osc', icon: Radio, label: 'OSC' },
-  { to: '/avatar-editor', icon: Paintbrush, label: 'Avatar Editor' },
-  { to: '/emoji-maker', icon: Smile, label: 'Emoji Maker' },
-  { to: '/activity', icon: Flame, label: 'Activity Map' },
-  { to: '/friend-analytics', icon: BarChart3, label: 'Analytics' },
-  { to: '/events', icon: CalendarPlus, label: 'Events' },
-  { to: '/game-log', icon: FileText, label: 'Game Log' },
-  { to: '/screenshots', icon: Camera, label: 'Screenshots' },
-  { to: '/reports', icon: Flag, label: 'History & Reports' },
+  { to: '/osc',              icon: Radio,        label: 'OSC',               hackerLabel: 'osc.listen(9001)' },
+  { to: '/avatar-editor',    icon: Paintbrush,   label: 'Avatar Editor',     hackerLabel: 'avatar.edit()' },
+  { to: '/emoji-maker',      icon: Smile,        label: 'Emoji Maker',       hackerLabel: 'emoji.build()' },
+  { to: '/activity',         icon: Flame,        label: 'Activity Map',      hackerLabel: 'metrics.heatmap' },
+  { to: '/friend-analytics', icon: BarChart3,    label: 'Analytics',         hackerLabel: 'metrics.compute()' },
+  { to: '/events',           icon: CalendarPlus, label: 'Events',            hackerLabel: 'cron.schedule' },
+  { to: '/game-log',         icon: FileText,     label: 'Game Log',          hackerLabel: 'tail -f vrchat.log' },
+  { to: '/screenshots',      icon: Camera,       label: 'Screenshots',       hackerLabel: '~/screenshots' },
+  { to: '/reports',          icon: Flag,         label: 'History & Reports', hackerLabel: 'audit.log' },
 ];
 
 const statusDotColors: Record<string, string> = {
@@ -80,10 +83,13 @@ export default function Sidebar() {
 
   const sidebarW = theme.sidebarWidth === 'compact' ? 'w-52' : theme.sidebarWidth === 'wide' ? 'w-72' : 'w-60';
 
-  const renderNavItem = ({ to, icon: Icon, label, badge }: {
-    to: string; icon: typeof LayoutDashboard; label: string; badge?: 'friends';
+  const isHacker = theme.premiumTheme === 'hacker';
+
+  const renderNavItem = ({ to, icon: Icon, label, badge, hackerLabel }: {
+    to: string; icon: typeof LayoutDashboard; label: string; badge?: 'friends'; hackerLabel?: string;
   }) => {
     const isTourActive = tourActiveRoute === to;
+    const displayLabel = isHacker && hackerLabel ? hackerLabel : label;
     return (
       <NavLink
         key={to}
@@ -94,7 +100,7 @@ export default function Sidebar() {
         }
       >
         <Icon size={16} strokeWidth={1.8} />
-        <span className="truncate flex-1">{label}</span>
+        <span className="truncate flex-1" title={isHacker ? label : undefined}>{displayLabel}</span>
         {isTourActive && (
           <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-accent-500/30 text-accent-300 font-semibold flex-shrink-0">
             ←
@@ -178,7 +184,7 @@ export default function Sidebar() {
 
         <div>
           <div className="px-3 py-1.5 text-[10px] font-semibold text-surface-600 uppercase tracking-widest">
-            Browse
+            {isHacker ? '// modules/browse' : 'Browse'}
           </div>
           <div className="space-y-0.5">
             {browseNavItems.map(renderNavItem)}
@@ -187,7 +193,7 @@ export default function Sidebar() {
 
         <div>
           <div className="px-3 py-1.5 text-[10px] font-semibold text-surface-600 uppercase tracking-widest">
-            Tools
+            {isHacker ? '// modules/tools' : 'Tools'}
           </div>
           <div className="space-y-0.5">
             {toolsNavItems.map(renderNavItem)}

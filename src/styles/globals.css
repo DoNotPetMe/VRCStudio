@@ -512,6 +512,299 @@ html.live-ambient-haze::before {
 }
 
 /* ───────────────────────────────────────────────────────────────────────
+   Hacker premium theme — full TUI / terminal skin.
+   Different from the other premium themes (which are just background
+   overlays). This one rewrites the entire palette to green-on-black,
+   forces monospace, turns labels into code-like text via pseudo-elements,
+   and overlays CRT scanlines + a subtle phosphor glow.
+   ─────────────────────────────────────────────────────────────────── */
+
+html.premium-hacker {
+  /* Override the surface + accent palettes wholesale. The rest of the
+     app reads from these vars so the entire shell shifts colour. */
+  --surface-50:  170 255 200;
+  --surface-100: 130 240 160;
+  --surface-200:  90 220 130;
+  --surface-300:  60 200 110;
+  --surface-400:  40 180  90;
+  --surface-500:  30 140  70;
+  --surface-600:  20 100  50;
+  --surface-700:  15  70  35;
+  --surface-800:  10  40  20;
+  --surface-850:   8  30  16;
+  --surface-900:   3  15   8;
+  --surface-950:   0   8   3;
+
+  --accent-50:  220 255 230;
+  --accent-100: 180 255 200;
+  --accent-200: 130 255 170;
+  --accent-300:  90 255 140;
+  --accent-400:  50 255 110;
+  --accent-500:   0 255  80;
+  --accent-600:   0 220  60;
+  --accent-700:   0 180  40;
+  --accent-800:   0 140  30;
+  --accent-900:   0 100  20;
+
+  /* Kill glass blur entirely — TUIs are flat. */
+  --glass-opacity: 1;
+  --glass-opacity-solid: 1;
+}
+
+html.premium-hacker body {
+  font-family: 'JetBrains Mono', 'Cascadia Mono', 'Fira Code', 'Consolas',
+               'Courier New', ui-monospace, monospace !important;
+  background: #000 !important;
+  color: rgb(0, 255, 100) !important;
+  letter-spacing: 0.01em;
+}
+
+/* CRT scanlines — a fixed full-screen overlay above everything. */
+html.premium-hacker::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9998;
+  background:
+    repeating-linear-gradient(
+      0deg,
+      transparent 0,
+      transparent 2px,
+      rgba(0, 255, 100, 0.035) 2px,
+      rgba(0, 255, 100, 0.035) 3px
+    );
+  mix-blend-mode: screen;
+}
+
+/* Subtle vignette + phosphor afterglow */
+html.premium-hacker::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9997;
+  background:
+    radial-gradient(ellipse at center, transparent 55%, rgba(0, 0, 0, 0.55) 100%),
+    radial-gradient(ellipse 90% 70% at 50% 50%, rgba(0, 255, 100, 0.06) 0%, transparent 70%);
+}
+
+/* Flatten panels — kill backdrop blur, swap to ASCII-style border */
+html.premium-hacker .glass-panel,
+html.premium-hacker .glass-panel-solid,
+html.premium-hacker .stat-card {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  background: rgba(0, 8, 3, 0.85) !important;
+  border: 1px solid rgb(0, 255, 100, 0.4) !important;
+  border-radius: 0 !important;
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 255, 100, 0.05),
+    0 0 12px rgba(0, 255, 100, 0.08);
+}
+
+/* Square everything off — no rounded corners in TUIs */
+html.premium-hacker .btn-primary,
+html.premium-hacker .btn-secondary,
+html.premium-hacker .btn-ghost,
+html.premium-hacker .btn-danger,
+html.premium-hacker .btn-success,
+html.premium-hacker .btn-accent,
+html.premium-hacker .input-field,
+html.premium-hacker .osc-input,
+html.premium-hacker .sidebar-link,
+html.premium-hacker .badge,
+html.premium-hacker .tooltip {
+  border-radius: 0 !important;
+}
+
+/* Buttons get [ Brackets ] around their text via a wrapper trick. */
+html.premium-hacker .btn-primary,
+html.premium-hacker .btn-secondary,
+html.premium-hacker .btn-accent,
+html.premium-hacker .btn-success,
+html.premium-hacker .btn-danger {
+  background: transparent !important;
+  border: 1px solid rgb(0, 255, 100, 0.5) !important;
+  color: rgb(50, 255, 110) !important;
+  text-shadow: 0 0 6px rgba(0, 255, 100, 0.45);
+  transition: background-color 100ms, box-shadow 100ms;
+}
+html.premium-hacker .btn-primary:hover,
+html.premium-hacker .btn-secondary:hover,
+html.premium-hacker .btn-accent:hover,
+html.premium-hacker .btn-success:hover,
+html.premium-hacker .btn-danger:hover {
+  background: rgba(0, 255, 100, 0.12) !important;
+  box-shadow: 0 0 14px rgba(0, 255, 100, 0.35);
+}
+html.premium-hacker .btn-danger {
+  border-color: rgb(255, 80, 80, 0.55) !important;
+  color: rgb(255, 110, 110) !important;
+  text-shadow: 0 0 6px rgba(255, 60, 60, 0.45);
+}
+html.premium-hacker .btn-primary::before,
+html.premium-hacker .btn-secondary::before,
+html.premium-hacker .btn-accent::before,
+html.premium-hacker .btn-success::before,
+html.premium-hacker .btn-danger::before { content: '[ '; opacity: 0.6; }
+html.premium-hacker .btn-primary::after,
+html.premium-hacker .btn-secondary::after,
+html.premium-hacker .btn-accent::after,
+html.premium-hacker .btn-success::after,
+html.premium-hacker .btn-danger::after { content: ' ]'; opacity: 0.6; }
+
+/* Headings get terminal-style prefixes */
+html.premium-hacker h1::before {
+  content: '> ';
+  color: rgb(50, 255, 110);
+  opacity: 0.7;
+}
+html.premium-hacker h2::before { content: '// '; opacity: 0.55; color: rgb(100, 200, 130); }
+html.premium-hacker h3::before { content: '## '; opacity: 0.5;  color: rgb(100, 200, 130); }
+
+/* Glow on prominent text */
+html.premium-hacker h1,
+html.premium-hacker h2 {
+  color: rgb(120, 255, 160) !important;
+  text-shadow: 0 0 6px rgba(0, 255, 100, 0.5);
+  font-weight: normal !important;
+}
+
+/* Inputs: caret + selection match the theme */
+html.premium-hacker .input-field,
+html.premium-hacker .osc-input,
+html.premium-hacker input,
+html.premium-hacker textarea {
+  background: rgba(0, 15, 5, 0.9) !important;
+  border: 1px solid rgb(0, 255, 100, 0.35) !important;
+  color: rgb(50, 255, 110) !important;
+  caret-color: rgb(0, 255, 80);
+  font-family: inherit !important;
+}
+html.premium-hacker ::selection {
+  background: rgba(0, 255, 100, 0.35);
+  color: #000;
+}
+
+/* Sidebar — looks like a directory tree */
+html.premium-hacker aside,
+html.premium-hacker .sidebar-link {
+  background: rgba(0, 5, 2, 0.95) !important;
+}
+html.premium-hacker .sidebar-link {
+  color: rgb(90, 220, 130) !important;
+}
+html.premium-hacker .sidebar-link.active {
+  color: rgb(120, 255, 160) !important;
+  background: rgba(0, 255, 100, 0.12) !important;
+  text-shadow: 0 0 6px rgba(0, 255, 100, 0.4);
+}
+html.premium-hacker .sidebar-link.active::before {
+  content: '* ';
+  opacity: 0.8;
+  margin-right: -2px;
+}
+
+/* Status dots — repurposed as bracket tags */
+html.premium-hacker .status-dot {
+  border-radius: 0 !important;
+  width: auto !important;
+  height: auto !important;
+  padding: 0;
+  ring: 0;
+}
+
+/* Badges look like tags */
+html.premium-hacker .badge {
+  border: 1px solid currentColor !important;
+  background: transparent !important;
+}
+
+/* Tabs */
+html.premium-hacker .tab-active {
+  color: rgb(120, 255, 160) !important;
+  border-bottom-color: rgb(0, 255, 100) !important;
+  text-shadow: 0 0 6px rgba(0, 255, 100, 0.4);
+}
+html.premium-hacker .tab-inactive {
+  color: rgb(70, 160, 100) !important;
+}
+
+/* Links */
+html.premium-hacker a {
+  color: rgb(100, 255, 220) !important;
+  text-decoration: underline;
+  text-decoration-color: rgba(100, 255, 220, 0.4);
+}
+
+/* Scrollbar — terminal look */
+html.premium-hacker ::-webkit-scrollbar-thumb {
+  background: rgba(0, 255, 100, 0.3) !important;
+  border-radius: 0 !important;
+}
+html.premium-hacker ::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 255, 100, 0.5) !important;
+}
+
+/* Blinking cursor decoration for the hacker console overlay */
+@keyframes hacker-blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+.hacker-cursor::after {
+  content: '█';
+  display: inline-block;
+  margin-left: 2px;
+  color: rgb(0, 255, 100);
+  animation: hacker-blink 1s steps(1, end) infinite;
+}
+
+/* The floating console window that <HackerConsole /> renders */
+.hacker-console {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  width: 360px;
+  max-height: 280px;
+  z-index: 9000;
+  background: rgba(0, 5, 2, 0.92);
+  border: 1px solid rgb(0, 255, 100, 0.4);
+  font-family: 'JetBrains Mono', 'Consolas', monospace;
+  font-size: 11px;
+  color: rgb(120, 255, 160);
+  box-shadow: 0 0 24px rgba(0, 255, 100, 0.18),
+              inset 0 0 0 1px rgba(0, 255, 100, 0.05);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.hacker-console-header {
+  padding: 4px 8px;
+  background: rgba(0, 255, 100, 0.12);
+  border-bottom: 1px solid rgba(0, 255, 100, 0.3);
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.hacker-console-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px 8px;
+  font-size: 10.5px;
+  line-height: 1.45;
+}
+.hacker-console-row { display: flex; gap: 6px; white-space: pre-wrap; word-break: break-word; }
+.hacker-console-time { color: rgba(120, 255, 160, 0.5); flex-shrink: 0; }
+.hacker-console-route { color: rgb(100, 255, 220); }
+.hacker-console-event { color: rgb(180, 255, 140); }
+.hacker-console-comment { color: rgba(120, 255, 160, 0.45); font-style: italic; }
+
+/* Audio visualizer — leave alone, but tone it down so the scanlines win */
+html.premium-hacker .audio-visualizer-canvas {
+  opacity: 0.18;
+  filter: hue-rotate(110deg) saturate(2);
+}
+
+/* ───────────────────────────────────────────────────────────────────────
    Audio visualizer — fixed full-screen canvas behind the app shell.
    ─────────────────────────────────────────────────────────────────── */
 .audio-visualizer-canvas {

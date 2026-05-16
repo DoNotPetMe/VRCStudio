@@ -487,9 +487,14 @@ export default function SettingsPage() {
                     { key: 'aurora',       label: 'Aurora',       preview: 'bg-gradient-to-br from-emerald-500 via-blue-500 to-purple-500' },
                     { key: 'cosmic',       label: 'Cosmic',       preview: 'bg-gradient-to-br from-indigo-900 via-purple-900 to-black' },
                     { key: 'asteroids',    label: 'Asteroids',    preview: 'bg-gradient-to-br from-[#050812] via-[#0d1836] to-[#050812] border border-accent-800/40' },
+                    { key: 'hacker',       label: 'Hacker',       preview: 'bg-black border border-green-500/60 shadow-[inset_0_0_12px_rgba(0,255,100,0.3)] text-green-400 font-mono text-[8px] flex items-center justify-center' },
                   ] as const).map(({ key, label, preview }) => (
                     <button key={key} onClick={() => setPremiumTheme(key)} className={`p-2 rounded-lg border transition-all ${theme.premiumTheme === key ? 'border-accent-500 bg-accent-500/10' : 'border-surface-700 hover:border-surface-600'}`}>
-                      <div className={`w-full h-12 rounded mb-1.5 ${preview}`} />
+                      <div className={`w-full h-12 rounded mb-1.5 ${preview}`}>
+                        {key === 'hacker' && (
+                          <span className="text-green-400 font-mono text-[9px] tracking-tight">{'>_ vrc.run()'}</span>
+                        )}
+                      </div>
                       <div className="text-xs font-medium">{label}</div>
                     </button>
                   ))}

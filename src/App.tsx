@@ -35,6 +35,7 @@ import { useTrayStatus } from './hooks/useTrayStatus';
 import { useLogIngestion } from './hooks/useLogIngestion';
 import AvatarSwitcher from './components/AvatarSwitcher';
 import LivelinessEffects from './components/LivelinessEffects';
+import HackerConsole from './components/HackerConsole';
 import { useAvatarSwitcherStore } from './stores/avatarSwitcherStore';
 import { useOSCStore } from './stores/oscStore';
 
@@ -134,6 +135,7 @@ function AppShell() {
   return (
     <>
     <LivelinessEffects />
+    <HackerConsole />
     <AvatarSwitcher open={switcherOpen} onClose={closeSwitcher} />
     <Routes>
       <Route element={<AppLayout />}>
