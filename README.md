@@ -1,0 +1,94 @@
+# VRC Studio
+
+A desktop companion app for VRChat. Friends, worlds, avatars, OSC, a
+Discord bot, video player tracking, themes, and a lot more — all local,
+all yours.
+
+Built with Electron + React + TypeScript. Best on Windows 10/11.
+
+---
+
+## 📥 Installation
+
+1. **[Download the ZIP](https://github.com/DoNotPetMe/VRCStudio/archive/refs/heads/claude/vrchat-companion-app-e7eJL.zip)** and extract it anywhere.
+2. **Double-click `Start Here.bat`.**
+
+It checks for Node.js (installs it for you if missing), asks if you want
+`VRC Studio.exe` on your Desktop, builds the app, and launches it.
+
+> **If the build fails with a "symbolic link / privilege not held" error,**
+> enable Developer Mode in *Settings → For developers → Developer Mode*
+> and re-run, or run `Start Here.bat` as Administrator.
+
+---
+
+## ✨ Features
+
+### 👥 Friends & social
+Friend list with live status • Friend Log timeline • Friend Analytics •
+Live activity feed • Notifications inbox • Starred friends
+
+### 🌍 Worlds & instances
+World search and browser • Instance picker • One-click Rejoin for
+private/friends/group instances • Activity heatmap • World analytics
+
+### 👤 Avatars
+Quick Switch Avatar (Ctrl+Shift+A) • avtrdb.com search by name or tag •
+Live Avatars page showing every player + their perf rank + triangle
+counts, with "Wear" button if indexed on avtrdb • Avatar Editor
+
+### 📺 Video player tracking
+What's playing right now in your VRChat instance • Per-instance history •
+Cross-instance history • Auto-detected YouTube / Twitch / Vimeo
+
+### 🎭 Emoji maker
+Drag-drop one image (static) or many (animated) • Auto sprite-sheet
+generation in valid VRChat grid sizes • FPS / loop / ping-pong / once •
+Live preview • Upload directly or download the PNG
+
+### 🎛️ OSC control
+Chatbox • Live parameter monitor • Presets • Virtual D-pad and gesture
+grid • Real-time message log
+
+### 🤖 Discord
+**Rich Presence** showing your current world. **Discord bot** with your
+own token exposing slash commands: `/whoami`, `/world`, `/players`,
+`/friends`, `/videos`, `/wear`, `/status`, `/say`, `/avatar`.
+
+### 🎨 Personalization
+4 colour modes • 6 accent colours • 6 premium themes including a full
+**Hacker** TUI skin with interactive in-app terminal • 7 animated border
+styles • Liveliness effects (particles, cursor glow, hover lift) • Audio
+visualizer • Custom CSS
+
+### 🛠️ Tools
+Game Log parser • Screenshots viewer • Event Planner • Material/Shader
+tools • Multi-account support • Tray icon with quick status • In-app
+auto-updater
+
+---
+
+## 🔄 Updating
+
+The app checks GitHub on launch. When updates exist a banner appears —
+click *Install*. For packaged `.exe` builds, re-download and re-run
+`Start Here.bat`.
+
+---
+
+## 🧹 Uninstalling
+
+Run **`Uninstall VRC Studio.bat`**. It closes the app, wipes
+`%APPDATA%\vrc-studio`, and removes the Desktop `.exe`. Then delete the
+source folder by hand if you want.
+
+---
+
+## 📝 Notes
+
+- **Unofficial** — third-party app, not affiliated with VRChat Inc.
+- **Local-first** — no telemetry, no remote server.
+- **Open source** — all code in this repo.
+
+Made by [@DoNotPetMe](https://github.com/DoNotPetMe)
+(*DoNotResurrect_* in VRChat).
