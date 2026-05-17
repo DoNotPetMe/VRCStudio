@@ -6,6 +6,10 @@ all yours.
 
 Built with Electron + React + TypeScript. Best on Windows 10/11.
 
+> ⚠️ **Heads up — VRC Studio is still in its testing phase.** Expect bugs
+> and things that don't behave as intended. Everything gets fixed over
+> time. Thanks for your patience!
+
 ---
 
 ## 📥 Installation
