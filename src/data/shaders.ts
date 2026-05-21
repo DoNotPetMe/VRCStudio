@@ -690,31 +690,74 @@ export const builtInShaders: ShaderInfo[] = [
   {
     id: 'glass',
     name: 'VRC Glass',
-    description: 'Transparent fresnel glass — nearly clear face-on, opaque and bright at the edges, with an HDR rim. Lit base samples light probes so the tint reads correctly.',
+    description: 'Deluxe glass shader — real GrabPass refraction with chromatic aberration, cubemap reflections, normal-mapped surface, specular glint, thin-film iridescence, rim, inner glow and an animated wobble. 26 properties to dial in anything from clear crystal to oil-slick frost.',
     category: 'transparent',
     color: '#67e8f9',
     code: `Shader "VRCStudio/Glass"
 {
     Properties
     {
+        [Header(Surface)]
         _MainTex ("Main Texture", 2D) = "white" {}
-        _Color ("Glass Tint", Color) = (0.7, 0.85, 1, 1)
-        [HDR] _RimColor ("Rim Colour", Color) = (1, 1, 1, 1)
-        _FresnelPower ("Fresnel Power", Range(0.5, 8)) = 3.0
-        _MinAlpha ("Base Opacity", Range(0, 1)) = 0.15
-        _MaxAlpha ("Edge Opacity", Range(0, 1)) = 0.9
+        _Color ("Glass Tint (A = strength)", Color) = (0.85, 0.92, 1, 0.35)
+        _BumpMap ("Normal Map", 2D) = "bump" {}
+        _BumpScale ("Normal Strength", Range(0, 3)) = 1.0
+
+        [Header(Transparency)]
+        _MinAlpha ("Face Opacity", Range(0, 1)) = 0.25
+        _MaxAlpha ("Edge Opacity", Range(0, 1)) = 1.0
+
+        [Header(Fresnel)]
+        _FresnelPower ("Fresnel Power", Range(0.5, 12)) = 4.0
+        _FresnelBias ("Fresnel Bias", Range(0, 1)) = 0.04
+
+        [Header(Refraction)]
+        _RefractionStrength ("Refraction Strength", Range(0, 0.3)) = 0.08
+        _ChromaticAberration ("Chromatic Aberration", Range(0, 1)) = 0.25
+        _Saturation ("Refraction Saturation", Range(0, 2)) = 1.0
+
+        [Header(Reflection)]
+        _ReflectionStrength ("Reflection Strength", Range(0, 1)) = 0.5
+        _ReflectionTint ("Reflection Tint", Color) = (1, 1, 1, 1)
+
+        [Header(Specular)]
+        [HDR] _SpecularColor ("Specular Colour", Color) = (1, 1, 1, 1)
+        _SpecPower ("Specular Sharpness", Range(1, 256)) = 64.0
+        _SpecIntensity ("Specular Intensity", Range(0, 4)) = 1.5
+
+        [Header(Iridescence)]
+        [HDR] _IridA ("Iridescence A", Color) = (0.4, 0.1, 1.0, 1)
+        [HDR] _IridB ("Iridescence B", Color) = (0.1, 1.0, 0.7, 1)
+        _IridStrength ("Iridescence Strength", Range(0, 2)) = 0.3
+        _IridScale ("Iridescence Scale", Range(0.5, 8)) = 3.0
+
+        [Header(Rim)]
+        [HDR] _RimColor ("Rim Colour", Color) = (0.8, 0.95, 1.2, 1)
+        _RimIntensity ("Rim Intensity", Range(0, 4)) = 0.6
+
+        [Header(Inner Glow)]
+        [HDR] _GlowColor ("Inner Glow Colour", Color) = (0, 0, 0, 1)
+        _GlowIntensity ("Inner Glow", Range(0, 4)) = 0.0
+
+        [Header(Animated Wobble)]
+        _WobbleSpeed ("Wobble Speed", Range(0, 10)) = 0.0
+        _WobbleAmount ("Wobble Amount", Range(0, 0.1)) = 0.0
     }
 
     SubShader
     {
         Tags { "RenderType"="Transparent" "Queue"="Transparent" }
-        Blend SrcAlpha OneMinusSrcAlpha
-        ZWrite Off
-        Cull Back
+
+        // Grab the screen behind the glass for true refraction. Shared
+        // name => grabbed once per frame for every glass object.
+        GrabPass { "_VRCGlassGrab" }
 
         Pass
         {
             Tags { "LightMode"="ForwardBase" }
+            Blend SrcAlpha OneMinusSrcAlpha
+            ZWrite Off
+            Cull Back
 
             CGPROGRAM
             #pragma vertex vert
@@ -725,16 +768,38 @@ export const builtInShaders: ShaderInfo[] = [
 
             sampler2D _MainTex;
             float4 _MainTex_ST;
+            sampler2D _BumpMap;
+            sampler2D _VRCGlassGrab;
             fixed4 _Color;
-            fixed4 _RimColor;
-            float _FresnelPower;
+            float _BumpScale;
             float _MinAlpha;
             float _MaxAlpha;
+            float _FresnelPower;
+            float _FresnelBias;
+            float _RefractionStrength;
+            float _ChromaticAberration;
+            float _Saturation;
+            float _ReflectionStrength;
+            fixed4 _ReflectionTint;
+            fixed4 _SpecularColor;
+            float _SpecPower;
+            float _SpecIntensity;
+            fixed4 _IridA;
+            fixed4 _IridB;
+            float _IridStrength;
+            float _IridScale;
+            fixed4 _RimColor;
+            float _RimIntensity;
+            fixed4 _GlowColor;
+            float _GlowIntensity;
+            float _WobbleSpeed;
+            float _WobbleAmount;
 
             struct appdata
             {
                 float4 vertex : POSITION;
                 float3 normal : NORMAL;
+                float4 tangent : TANGENT;
                 float2 uv : TEXCOORD0;
             };
 
@@ -744,34 +809,92 @@ export const builtInShaders: ShaderInfo[] = [
                 float2 uv : TEXCOORD0;
                 float3 worldNormal : TEXCOORD1;
                 float3 worldPos : TEXCOORD2;
+                float3 worldTangent : TEXCOORD3;
+                float3 worldBitangent : TEXCOORD4;
+                float4 grabPos : TEXCOORD5;
             };
 
             v2f vert(appdata v)
             {
                 v2f o;
-                o.pos = UnityObjectToClipPos(v.vertex);
+
+                // Animated wobble — displace along the surface normal.
+                float4 pos = v.vertex;
+                float wob = sin(_Time.y * _WobbleSpeed
+                                + v.vertex.x * 8.0 + v.vertex.y * 6.0) * _WobbleAmount;
+                pos.xyz += v.normal * wob;
+
+                o.pos = UnityObjectToClipPos(pos);
                 o.uv = TRANSFORM_TEX(v.uv, _MainTex);
+                o.worldPos = mul(unity_ObjectToWorld, pos).xyz;
                 o.worldNormal = UnityObjectToWorldNormal(v.normal);
-                o.worldPos = mul(unity_ObjectToWorld, v.vertex).xyz;
+                o.worldTangent = normalize(mul((float3x3)unity_ObjectToWorld, v.tangent.xyz));
+                o.worldBitangent = cross(o.worldNormal, o.worldTangent) * v.tangent.w;
+                o.grabPos = ComputeGrabScreenPos(o.pos);
                 return o;
             }
 
             fixed4 frag(v2f i) : SV_Target
             {
-                float3 N = normalize(i.worldNormal);
+                // --- Normal mapping ---
+                float3 nTS = UnpackNormal(tex2D(_BumpMap, i.uv));
+                nTS.xy *= _BumpScale;
+                nTS = normalize(nTS);
+                float3 N = normalize(
+                    i.worldTangent   * nTS.x +
+                    i.worldBitangent * nTS.y +
+                    i.worldNormal    * nTS.z);
+
                 float3 V = normalize(_WorldSpaceCameraPos - i.worldPos);
-                float fres = pow(1.0 - saturate(dot(N, V)), _FresnelPower);
+                float ndv = saturate(dot(N, V));
 
+                // --- Fresnel ---
+                float fres = saturate(_FresnelBias
+                    + (1.0 - _FresnelBias) * pow(1.0 - ndv, _FresnelPower));
+
+                // --- Refraction (GrabPass) with chromatic aberration ---
+                float4 gp = i.grabPos;
+                gp.xy += N.xy * _RefractionStrength * gp.w;
+                float ca = _ChromaticAberration * 0.03;
+                float4 gpR = gp; gpR.xy += N.xy * ca * gp.w;
+                float4 gpB = gp; gpB.xy -= N.xy * ca * gp.w;
+                float3 refracted = float3(
+                    tex2Dproj(_VRCGlassGrab, UNITY_PROJ_COORD(gpR)).r,
+                    tex2Dproj(_VRCGlassGrab, UNITY_PROJ_COORD(gp)).g,
+                    tex2Dproj(_VRCGlassGrab, UNITY_PROJ_COORD(gpB)).b);
+
+                // Saturation of what's seen through the glass.
+                float lum = dot(refracted, float3(0.299, 0.587, 0.114));
+                refracted = lerp(float3(lum, lum, lum), refracted, _Saturation);
+
+                // --- Tint ---
                 fixed4 tex = tex2D(_MainTex, i.uv) * _Color;
+                float3 col = refracted * lerp(float3(1, 1, 1), tex.rgb, _Color.a);
 
+                // --- Cubemap reflection (world reflection probe) ---
+                float3 refl = reflect(-V, N);
+                float4 envRaw = UNITY_SAMPLE_TEXCUBE(unity_SpecCube0, refl);
+                float3 env = DecodeHDR(envRaw, unity_SpecCube0_HDR);
+                col += env * _ReflectionTint.rgb * _ReflectionStrength * fres;
+
+                // --- Specular glint (Blinn-Phong) ---
                 float3 L = _WorldSpaceLightPos0.xyz;
                 float Llen = length(L);
                 L = Llen > 1e-4 ? L / Llen : float3(0, 1, 0);
-                float ndl = max(0.0, dot(N, L));
-                float3 ambient = ShadeSH9(float4(N, 1.0));
-                float3 lit = tex.rgb * (ambient + _LightColor0.rgb * ndl);
+                float3 H = normalize(L + V);
+                float spec = pow(saturate(dot(N, H)), _SpecPower);
+                col += _SpecularColor.rgb * spec * _SpecIntensity * _LightColor0.rgb;
 
-                float3 col = lit + _RimColor.rgb * fres;
+                // --- Thin-film iridescence ---
+                float irMix = sin(ndv * _IridScale + _Time.y * 0.5) * 0.5 + 0.5;
+                col += lerp(_IridA.rgb, _IridB.rgb, irMix) * _IridStrength * fres;
+
+                // --- Rim ---
+                col += _RimColor.rgb * pow(1.0 - ndv, _FresnelPower) * _RimIntensity;
+
+                // --- Inner glow (strongest face-on) ---
+                col += _GlowColor.rgb * _GlowIntensity * (1.0 - fres);
+
                 float alpha = lerp(_MinAlpha, _MaxAlpha, fres);
                 return fixed4(col, alpha);
             }
