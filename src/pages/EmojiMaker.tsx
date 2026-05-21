@@ -39,7 +39,9 @@ export default function EmojiMaker() {
   const [gridDim, setGridDim] = useState(2);
   const [fps, setFps] = useState(12);
   const [loopStyle, setLoopStyle] = useState<LoopStyle>('loop');
-  const [fitMode, setFitMode] = useState<FitMode>('contain');
+  // Default to 'cover' — VRChat plays each grid cell as a frame, and
+  // letterbox padding from 'contain' shows up as empty/black bands.
+  const [fitMode, setFitMode] = useState<FitMode>('cover');
   const [emojiName, setEmojiName] = useState('');
 
   const [loading, setLoading] = useState(false);
@@ -506,6 +508,35 @@ export default function EmojiMaker() {
                 />
               </div>
 
+              {/* VRChat upload cheat-sheet — the numbers to type into
+                  VRChat's own "Upload A New Emoji" dialog. If these don't
+                  match the sheet, VRChat slices it wrong and the emoji
+                  plays as one garbled image. */}
+              <div className="rounded-lg border border-accent-500/30 bg-accent-500/8 p-3">
+                <div className="text-xs font-semibold text-accent-300 mb-2">
+                  Uploading via vrchat.com? Set its sliders to exactly:
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="flex items-center justify-between bg-surface-900/70 rounded px-2.5 py-1.5">
+                    <span className="text-xs text-surface-400">Frames</span>
+                    <span className="text-sm font-bold tabular-nums">
+                      {mode === 'animated' ? cellCount : 1}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between bg-surface-900/70 rounded px-2.5 py-1.5">
+                    <span className="text-xs text-surface-400">FPS</span>
+                    <span className="text-sm font-bold tabular-nums">
+                      {mode === 'animated' ? fps : '—'}
+                    </span>
+                  </div>
+                </div>
+                <p className="text-[10px] text-surface-500 mt-1.5 leading-snug">
+                  VRChat reads the sheet as a {effectiveDim}×{effectiveDim} grid. If its
+                  Frames slider doesn't match {mode === 'animated' ? cellCount : 1}, the
+                  animation will be sliced incorrectly.
+                </p>
+              </div>
+
               <div className="flex flex-wrap gap-2 pt-2 border-t border-surface-800/50">
                 <button
                   onClick={handleUpload}
@@ -602,7 +633,7 @@ export default function EmojiMaker() {
               />
               <p className="text-[10px] text-surface-600 mt-1">
                 {mode === 'animated'
-                  ? `${effectiveDim}×${effectiveDim} grid, left-to-right top-to-bottom`
+                  ? `${effectiveDim}×${effectiveDim} grid · ${cellCount} frames · left-to-right, top-to-bottom`
                   : 'Single 1024² image'}
               </p>
             </div>
