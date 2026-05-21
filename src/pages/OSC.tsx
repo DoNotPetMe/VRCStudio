@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Radio, MessageSquare, Sliders, Zap, Send, Power, Settings as SettingsIcon,
-  AlertCircle, Trash2, ArrowDownToLine, MicOff, Mic, ArrowUp, ArrowDown,
-  ArrowLeft, ArrowRight, Hand, Copy, Check, RotateCw, ChevronDown, ChevronRight,
+  AlertCircle, Trash2, ArrowDownToLine, Copy, Check, RotateCw, ChevronDown,
+  ChevronRight, Clock, Activity, Plus, Minus,
 } from 'lucide-react';
-import { useOSCStore, OSCMessage } from '../stores/oscStore';
+import { useOSCStore, composeChatboxStatus, OSCMessage } from '../stores/oscStore';
 
-type Tab = 'chatbox' | 'params' | 'presets' | 'input' | 'monitor' | 'config';
+type Tab = 'chatbox' | 'params' | 'presets' | 'monitor' | 'config';
 
 export default function OSCPage() {
   const { connected, config, parameters, log, start, stop, send, setConfig, clearLog, clearParameters } = useOSCStore();
@@ -74,12 +74,11 @@ export default function OSCPage() {
 
       <div className="flex gap-1 border-b border-surface-800 pb-px overflow-x-auto">
         {([
-          { key: 'chatbox' as Tab,  icon: MessageSquare, label: 'Chatbox' },
-          { key: 'params' as Tab,   icon: Sliders,       label: 'Parameters' },
-          { key: 'presets' as Tab,  icon: Zap,           label: 'Presets' },
-          { key: 'input' as Tab,    icon: Hand,          label: 'Input' },
+          { key: 'chatbox' as Tab,  icon: MessageSquare,   label: 'Chatbox' },
+          { key: 'params' as Tab,   icon: Sliders,         label: 'Parameters' },
+          { key: 'presets' as Tab,  icon: Zap,             label: 'Triggers' },
           { key: 'monitor' as Tab,  icon: ArrowDownToLine, label: `Monitor${log.length > 0 ? ` (${log.length})` : ''}` },
-          { key: 'config' as Tab,   icon: SettingsIcon,  label: 'Config' },
+          { key: 'config' as Tab,   icon: SettingsIcon,    label: 'Config' },
         ]).map(({ key, icon: Icon, label }) => (
           <button
             key={key}
@@ -96,10 +95,34 @@ export default function OSCPage() {
       {tab === 'chatbox' && <ChatboxTab connected={connected} send={send} />}
       {tab === 'params' && <ParametersTab parameters={parameters} send={send} clear={clearParameters} />}
       {tab === 'presets' && <PresetsTab connected={connected} send={send} />}
-      {tab === 'input' && <InputTab connected={connected} send={send} />}
       {tab === 'monitor' && <MonitorTab log={log} clear={clearLog} send={send} />}
       {tab === 'config' && <ConfigTab config={config} setConfig={setConfig} connected={connected} restart={async () => { await stop(); await start(); }} />}
     </div>
+  );
+}
+
+// ─── Shared bits ─────────────────────────────────────────────────────────────
+
+function Switch({ checked, onChange, disabled }: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className={`relative w-9 h-5 rounded-full transition-colors flex-shrink-0 ${
+        checked ? 'bg-accent-500' : 'bg-surface-700'
+      } ${disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
+    >
+      <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
+        checked ? 'translate-x-4' : ''
+      }`} />
+    </button>
   );
 }
 
@@ -111,18 +134,27 @@ function ChatboxTab({ connected, send }: { connected: boolean; send: (a: string,
   const [showTyping, setShowTyping] = useState(false);
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const cb = useOSCStore(s => s.chatboxStatus);
+  const setChatboxStatus = useOSCStore(s => s.setChatboxStatus);
+
+  // Tick once a second so the live preview clock stays current.
+  const [, forceTick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => forceTick(n => n + 1), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const preview = composeChatboxStatus(cb);
+
   const sendMsg = async (asTyping = false) => {
     if (!asTyping && !text.trim()) return;
     if (asTyping) {
-      // /chatbox/typing : true  → show typing indicator
       await send('/chatbox/typing', [{ type: 'T', value: true }]);
       return;
     }
-    // /chatbox/input : <string>, <bypass keyboard>, <play notification>
     await send('/chatbox/input', [
       { type: 's', value: text.trim() },
       { type: 'T', value: true },                  // bypass keyboard (send immediately)
-      { type: silent ? 'F' : 'T', value: !silent } // sfx
+      { type: silent ? 'F' : 'T', value: !silent }, // sfx
     ]);
     setText('');
   };
@@ -149,65 +181,138 @@ function ChatboxTab({ connected, send }: { connected: boolean; send: (a: string,
   const QUICK = ['👋 Hi!', 'AFK', 'BRB', 'gn ✨', '🎉', 'lol', '💜', '✨ here'];
 
   return (
-    <div className="glass-panel-solid p-5 space-y-4">
-      <div>
-        <label className="text-xs font-semibold text-surface-400 uppercase tracking-wider">Send to in-world chatbox</label>
-        <p className="text-[11px] text-surface-500 mt-1">Goes through VRChat's avatar chat bubble at /chatbox/input.</p>
+    <div className="space-y-4">
+      <div className="glass-panel-solid p-5 space-y-4">
+        <div>
+          <label className="text-xs font-semibold text-surface-400 uppercase tracking-wider">Send to in-world chatbox</label>
+          <p className="text-[11px] text-surface-500 mt-1">Goes through VRChat's avatar chat bubble at /chatbox/input.</p>
+        </div>
+
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={text}
+            onChange={e => onChange(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMsg(); } }}
+            maxLength={144}
+            placeholder="Type a message... (max 144 chars)"
+            className="flex-1 bg-surface-900 border border-surface-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent-500"
+            disabled={!connected}
+          />
+          <button onClick={() => sendMsg()} disabled={!connected || !text.trim()} className="btn-primary text-sm flex items-center gap-1.5">
+            <Send size={14} /> Send
+          </button>
+        </div>
+
+        <div className="flex items-center justify-between flex-wrap gap-3 text-xs">
+          <div className="flex items-center gap-3">
+            <label className="flex items-center gap-2 text-surface-400 cursor-pointer">
+              <input type="checkbox" checked={silent} onChange={e => setSilent(e.target.checked)} className="accent-accent-500" />
+              Silent (no SFX)
+            </label>
+            <label className="flex items-center gap-2 text-surface-400 cursor-pointer">
+              <input type="checkbox" checked={showTyping} onChange={e => setShowTyping(e.target.checked)} className="accent-accent-500" />
+              Show typing indicator
+            </label>
+          </div>
+          <span className="text-surface-500 tabular-nums">{text.length} / 144</span>
+          <button onClick={clear} disabled={!connected} className="btn-ghost text-xs flex items-center gap-1">
+            <Trash2 size={11} /> Clear chatbox
+          </button>
+        </div>
+
+        <div>
+          <div className="text-[10px] font-semibold text-surface-500 uppercase tracking-wider mb-2">Quick send</div>
+          <div className="flex flex-wrap gap-1.5">
+            {QUICK.map(q => (
+              <button
+                key={q}
+                onClick={() => { setText(q); setTimeout(() => sendMsg(), 0); }}
+                disabled={!connected}
+                className="px-2.5 py-1 text-xs bg-surface-800 hover:bg-surface-700 rounded transition-colors"
+              >
+                {q}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
-      <div className="flex gap-2">
-        <input
-          type="text"
-          value={text}
-          onChange={e => onChange(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMsg(); } }}
-          maxLength={144}
-          placeholder="Type a message... (max 144 chars)"
-          className="flex-1 bg-surface-900 border border-surface-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent-500"
-          disabled={!connected}
-        />
-        <button onClick={() => sendMsg()} disabled={!connected || !text.trim()} className="btn-primary text-sm flex items-center gap-1.5">
-          <Send size={14} /> Send
-        </button>
-      </div>
+      {/* ── Live status auto-sender ── */}
+      <div className="glass-panel-solid p-5 space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <Clock size={15} className="text-accent-400" />
+            <span className="text-sm font-semibold">Live status</span>
+            {cb.enabled && (
+              <span className="text-[10px] text-green-400 bg-green-500/10 px-1.5 py-0.5 rounded-full">
+                every {cb.intervalSec}s
+              </span>
+            )}
+          </div>
+          <Switch checked={cb.enabled} onChange={v => setChatboxStatus({ enabled: v })} />
+        </div>
+        <p className="text-[11px] text-surface-500">
+          Keeps your chatbox updated on a timer — a live clock, the date, your session
+          uptime, or a custom note. Runs the whole time VRC Studio is open, even on other pages.
+        </p>
 
-      <div className="flex items-center justify-between flex-wrap gap-3 text-xs">
-        <div className="flex items-center gap-3">
-          <label className="flex items-center gap-2 text-surface-400 cursor-pointer">
-            <input type="checkbox" checked={silent} onChange={e => setSilent(e.target.checked)} className="accent-accent-500" />
-            Silent (no SFX)
+        <div className="bg-surface-900 border border-surface-800 rounded-lg px-3 py-2">
+          <div className="text-[10px] text-surface-500 uppercase tracking-wider mb-0.5">Preview</div>
+          <div className="text-sm text-surface-100 break-words min-h-[1.25rem]">
+            {preview || <span className="text-surface-600">(nothing enabled)</span>}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+          <label className="flex items-center gap-2 text-xs text-surface-300 cursor-pointer">
+            <input type="checkbox" checked={cb.showClock} onChange={e => setChatboxStatus({ showClock: e.target.checked })} className="accent-accent-500" />
+            Clock
           </label>
-          <label className="flex items-center gap-2 text-surface-400 cursor-pointer">
-            <input type="checkbox" checked={showTyping} onChange={e => setShowTyping(e.target.checked)} className="accent-accent-500" />
-            Show typing indicator
+          <label className={`flex items-center gap-2 text-xs cursor-pointer ${cb.showClock ? 'text-surface-300' : 'text-surface-600'}`}>
+            <input type="checkbox" checked={cb.clock24h} disabled={!cb.showClock} onChange={e => setChatboxStatus({ clock24h: e.target.checked })} className="accent-accent-500" />
+            24-hour time
+          </label>
+          <label className="flex items-center gap-2 text-xs text-surface-300 cursor-pointer">
+            <input type="checkbox" checked={cb.showDate} onChange={e => setChatboxStatus({ showDate: e.target.checked })} className="accent-accent-500" />
+            Date
+          </label>
+          <label className="flex items-center gap-2 text-xs text-surface-300 cursor-pointer">
+            <input type="checkbox" checked={cb.showUptime} onChange={e => setChatboxStatus({ showUptime: e.target.checked })} className="accent-accent-500" />
+            Session uptime
           </label>
         </div>
-        <span className="text-surface-500 tabular-nums">{text.length} / 144</span>
-        <button onClick={clear} disabled={!connected} className="btn-ghost text-xs flex items-center gap-1">
-          <Trash2 size={11} /> Clear chatbox
-        </button>
-      </div>
 
-      <div>
-        <div className="text-[10px] font-semibold text-surface-500 uppercase tracking-wider mb-2">Quick send</div>
-        <div className="flex flex-wrap gap-1.5">
-          {QUICK.map(q => (
-            <button
-              key={q}
-              onClick={() => { setText(q); setTimeout(() => sendMsg(), 0); }}
-              disabled={!connected}
-              className="px-2.5 py-1 text-xs bg-surface-800 hover:bg-surface-700 rounded transition-colors"
-            >
-              {q}
-            </button>
-          ))}
+        <div className="flex gap-2 flex-wrap">
+          <input
+            value={cb.customText}
+            onChange={e => setChatboxStatus({ customText: e.target.value })}
+            maxLength={80}
+            placeholder="Custom message (optional)"
+            className="flex-1 min-w-[200px] bg-surface-900 border border-surface-700 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-accent-500"
+          />
+          <label className="flex items-center gap-1.5 text-xs text-surface-400">
+            Every
+            <input
+              type="number" min={3} max={60}
+              value={cb.intervalSec}
+              onChange={e => setChatboxStatus({ intervalSec: parseInt(e.target.value, 10) || 5 })}
+              className="w-14 bg-surface-900 border border-surface-700 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:border-accent-500"
+            />
+            s
+          </label>
         </div>
+        {cb.enabled && !connected && (
+          <p className="text-[11px] text-amber-400">OSC is stopped — status will start sending once you connect.</p>
+        )}
       </div>
     </div>
   );
 }
 
 // ─── Parameters ──────────────────────────────────────────────────────────────
+
+const BUILTIN_RE = /^(VRMode|TrackingType|MuteSelf|InStation|Seated|AFK|Earmuffs|IsLocal|Upright|Grounded|Voice|Viseme|Velocity[XYZ]|GestureLeft|GestureRight|GestureLeftWeight|GestureRightWeight|AngularY|AvatarVersion|ScaleModified|ScaleFactor|EyeHeightAsMeters|EyeHeightAsPercent)$/;
 
 function ParametersTab({ parameters, send, clear }: {
   parameters: Record<string, any>;
@@ -222,34 +327,15 @@ function ParametersTab({ parameters, send, clear }: {
     const entries = Object.entries(parameters).filter(([addr]) =>
       !q || addr.toLowerCase().includes(q)
     );
-    const out: Record<string, [string, any][]> = { 'Built-in': [], 'Custom': [] };
+    const out: Record<string, [string, any][]> = { 'Custom': [], 'Built-in': [] };
     for (const [addr, val] of entries) {
       const name = addr.replace('/avatar/parameters/', '');
-      const isBuiltin = /^(VRMode|TrackingType|MuteSelf|InStation|Seated|AFK|Earmuffs|IsLocal|Upright|Grounded|Voice|Viseme|Velocity[XYZ]|GestureLeft|GestureRight|GestureLeftWeight|GestureRightWeight|AngularY|AvatarVersion)$/.test(name);
-      out[isBuiltin ? 'Built-in' : 'Custom'].push([addr, val]);
+      out[BUILTIN_RE.test(name) ? 'Built-in' : 'Custom'].push([addr, val]);
     }
     out['Built-in'].sort();
     out['Custom'].sort();
     return out;
   }, [parameters, filter]);
-
-  const sendValue = async (addr: string, current: any, newValue?: any) => {
-    if (newValue !== undefined) {
-      await send(addr, [newValue]);
-      return;
-    }
-    if (typeof current === 'boolean') return send(addr, [!current]);
-    if (typeof current === 'number') {
-      const input = window.prompt(`Set ${addr.replace('/avatar/parameters/', '')}`, String(current));
-      if (input === null) return;
-      const num = parseFloat(input);
-      if (Number.isNaN(num)) return;
-      return send(addr, [num]);
-    }
-    const input = window.prompt(`Set ${addr.replace('/avatar/parameters/', '')}`, String(current ?? ''));
-    if (input === null) return;
-    return send(addr, [input]);
-  };
 
   const totalCount = Object.keys(parameters).length;
 
@@ -273,6 +359,13 @@ function ParametersTab({ parameters, send, clear }: {
         </div>
       )}
 
+      {totalCount > 0 && (
+        <p className="text-[11px] text-surface-500 -mt-1">
+          Live values from your avatar. Flip a switch, drag a slider or step an int to drive
+          the parameter back into VRChat in real time.
+        </p>
+      )}
+
       {Object.entries(grouped).map(([group, entries]) => entries.length > 0 && (
         <div key={group} className="glass-panel-solid overflow-hidden">
           <button
@@ -287,21 +380,14 @@ function ParametersTab({ parameters, send, clear }: {
           </button>
           {!collapsed[group] && (
             <div className="divide-y divide-surface-800/40">
-              {entries.map(([addr, val]) => {
-                const name = addr.replace('/avatar/parameters/', '');
-                return (
-                  <div key={addr} className="px-4 py-2 flex items-center gap-3 hover:bg-surface-800/30 transition-colors group">
-                    <code className="text-xs text-surface-300 flex-1 truncate" title={addr}>{name}</code>
-                    <ParamValueDisplay value={val} />
-                    <button
-                      onClick={() => sendValue(addr, val)}
-                      className="opacity-0 group-hover:opacity-100 text-[10px] px-2 py-0.5 rounded bg-accent-500/15 text-accent-400 hover:bg-accent-500/25 transition-all"
-                    >
-                      Set
-                    </button>
-                  </div>
-                );
-              })}
+              {entries.map(([addr, val]) => (
+                <div key={addr} className="px-4 py-2 flex items-center gap-3 hover:bg-surface-800/30 transition-colors">
+                  <code className="text-xs text-surface-300 flex-1 truncate min-w-0" title={addr}>
+                    {addr.replace('/avatar/parameters/', '')}
+                  </code>
+                  <ParamControl addr={addr} value={val} send={send} />
+                </div>
+              ))}
             </div>
           )}
         </div>
@@ -310,30 +396,87 @@ function ParametersTab({ parameters, send, clear }: {
   );
 }
 
-function ParamValueDisplay({ value }: { value: any }) {
-  if (typeof value === 'boolean') {
-    return <span className={`text-xs px-2 py-0.5 rounded ${value ? 'bg-green-500/15 text-green-400' : 'bg-surface-800 text-surface-500'}`}>{value ? 'true' : 'false'}</span>;
+function ParamControl({ addr, value, send }: {
+  addr: string;
+  value: any;
+  send: (a: string, args?: any[]) => Promise<void>;
+}) {
+  if (value === null || value === undefined) {
+    return <span className="text-xs text-surface-600">—</span>;
   }
-  if (typeof value === 'number') {
-    const isFloat = !Number.isInteger(value);
+
+  if (typeof value === 'boolean') {
     return (
-      <div className="flex items-center gap-2 min-w-[120px]">
-        {isFloat && Math.abs(value) <= 1 && (
-          <div className="w-16 h-1 bg-surface-800 rounded-full overflow-hidden">
-            <div
-              className={`h-full ${value < 0 ? 'bg-rose-400' : 'bg-accent-400'}`}
-              style={{ width: `${Math.min(100, Math.abs(value) * 100)}%` }}
-            />
-          </div>
-        )}
-        <code className="text-xs text-surface-300 tabular-nums">{isFloat ? value.toFixed(3) : value}</code>
+      <div className="flex items-center gap-2">
+        <span className={`text-[10px] tabular-nums w-7 text-right ${value ? 'text-green-400' : 'text-surface-500'}`}>
+          {value ? 'on' : 'off'}
+        </span>
+        <Switch checked={value} onChange={v => send(addr, [v])} />
       </div>
     );
   }
-  return <code className="text-xs text-surface-400 truncate max-w-[150px]">{String(value)}</code>;
+
+  if (typeof value === 'number') {
+    if (Number.isInteger(value)) {
+      return (
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={() => send(addr, [value - 1])}
+            className="w-6 h-6 rounded bg-surface-800 hover:bg-surface-700 flex items-center justify-center transition-colors"
+          >
+            <Minus size={12} />
+          </button>
+          <code className="text-xs text-surface-100 tabular-nums w-10 text-center">{value}</code>
+          <button
+            onClick={() => send(addr, [value + 1])}
+            className="w-6 h-6 rounded bg-surface-800 hover:bg-surface-700 flex items-center justify-center transition-colors"
+          >
+            <Plus size={12} />
+          </button>
+        </div>
+      );
+    }
+    if (Math.abs(value) <= 1) {
+      const min = value < 0 ? -1 : 0;
+      return (
+        <div className="flex items-center gap-2">
+          <input
+            type="range"
+            min={min} max={1} step={0.01}
+            value={value}
+            onChange={e => send(addr, [parseFloat(e.target.value)])}
+            className="w-28 accent-accent-500 cursor-pointer"
+          />
+          <code className="text-xs text-surface-200 tabular-nums w-12 text-right">{value.toFixed(2)}</code>
+        </div>
+      );
+    }
+    // Out-of-range floats (Velocity etc.) are telemetry — show value only.
+    return <code className="text-xs text-surface-300 tabular-nums">{value.toFixed(3)}</code>;
+  }
+
+  return <ParamStringControl addr={addr} value={String(value)} send={send} />;
 }
 
-// ─── Presets ────────────────────────────────────────────────────────────────
+function ParamStringControl({ addr, value, send }: {
+  addr: string;
+  value: string;
+  send: (a: string, args?: any[]) => Promise<void>;
+}) {
+  const [draft, setDraft] = useState(value);
+  useEffect(() => { setDraft(value); }, [value]);
+  return (
+    <input
+      value={draft}
+      onChange={e => setDraft(e.target.value)}
+      onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); send(addr, [draft]); } }}
+      onBlur={() => { if (draft !== value) send(addr, [draft]); }}
+      className="bg-surface-900 border border-surface-700 rounded px-2 py-0.5 text-xs w-40 focus:outline-none focus:border-accent-500"
+    />
+  );
+}
+
+// ─── Triggers (presets) ─────────────────────────────────────────────────────
 
 interface Preset {
   id: string;
@@ -352,12 +495,12 @@ function loadPresets(): Preset[] {
     if (raw) return JSON.parse(raw);
   } catch {}
   return [
-    { id: 'wave',   label: 'Wave',           address: '/avatar/parameters/Wave',  args: [true],  offArgs: [false], hold: 1500 },
-    { id: 'sit',    label: 'Toggle Sit',     address: '/avatar/parameters/Sit',   args: [true] },
-    { id: 'dance',  label: 'Dance',          address: '/avatar/parameters/Dance', args: [1] },
-    { id: 'voice0', label: 'Mute Voice',     address: '/input/Voice',             args: [0] },
-    { id: 'voice1', label: 'Unmute Voice',   address: '/input/Voice',             args: [1] },
-    { id: 'jump',   label: 'Jump',           address: '/input/Jump',              args: [1],     offArgs: [0], hold: 100 },
+    { id: 'wave',   label: 'Wave',         address: '/avatar/parameters/Wave',  args: [true], offArgs: [false], hold: 1500 },
+    { id: 'sit',    label: 'Toggle Sit',   address: '/avatar/parameters/Sit',   args: [true] },
+    { id: 'dance',  label: 'Dance',        address: '/avatar/parameters/Dance', args: [1] },
+    { id: 'voice0', label: 'Mute Voice',   address: '/input/Voice',             args: [0] },
+    { id: 'voice1', label: 'Unmute Voice', address: '/input/Voice',             args: [1] },
+    { id: 'jump',   label: 'Jump',         address: '/input/Jump',              args: [1], offArgs: [0], hold: 100 },
   ];
 }
 
@@ -383,6 +526,10 @@ function PresetsTab({ connected, send }: { connected: boolean; send: (a: string,
 
   return (
     <div className="space-y-4">
+      <p className="text-[11px] text-surface-500">
+        One-click OSC triggers — toggle avatar parameters or fire actions. Use "hold" to
+        auto-release after a delay (great for emotes).
+      </p>
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
         {presets.map(p => (
           <div key={p.id} className="glass-panel-solid p-3 flex flex-col gap-2">
@@ -414,10 +561,10 @@ function PresetsTab({ connected, send }: { connected: boolean; send: (a: string,
           </div>
         ))}
         <button
-          onClick={() => setEditing({ id: `p_${Date.now()}`, label: 'New preset', address: '/avatar/parameters/', args: [true] })}
+          onClick={() => setEditing({ id: `p_${Date.now()}`, label: 'New trigger', address: '/avatar/parameters/', args: [true] })}
           className="glass-panel border-dashed border-surface-700 p-3 text-sm text-surface-500 hover:text-surface-300 hover:border-accent-500/40 transition-colors"
         >
-          + New preset
+          + New trigger
         </button>
       </div>
 
@@ -458,7 +605,7 @@ function PresetEditor({ preset, onClose, onSave }: { preset: Preset; onClose: ()
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
       <div className="glass-panel-solid w-full max-w-md mx-4 p-5 space-y-3" onClick={e => e.stopPropagation()}>
-        <h3 className="text-base font-semibold">Edit preset</h3>
+        <h3 className="text-base font-semibold">Edit trigger</h3>
         <Field label="Label">
           <input value={label} onChange={e => setLabel(e.target.value)} className="osc-input" />
         </Field>
@@ -494,124 +641,6 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
   );
 }
 
-// ─── Input (movement, voice) ────────────────────────────────────────────────
-
-function InputTab({ connected, send }: { connected: boolean; send: (a: string, args?: any[]) => Promise<void> }) {
-  const [voiceMuted, setVoiceMuted] = useState(false);
-
-  const tap = async (addr: string) => {
-    await send(addr, [1]);
-    setTimeout(() => send(addr, [0]), 80);
-  };
-
-  const hold = async (addr: string, value: number) => send(addr, [value]);
-
-  const toggleVoice = async () => {
-    const next = !voiceMuted;
-    setVoiceMuted(next);
-    await send('/input/Voice', [next ? 0 : 1]);
-  };
-
-  return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-      <div className="glass-panel-solid p-5 space-y-4">
-        <h3 className="text-sm font-semibold flex items-center gap-2">
-          <Hand size={14} className="text-accent-400" /> Movement
-        </h3>
-        <div className="grid grid-cols-3 gap-2 max-w-[240px] mx-auto">
-          <div></div>
-          <HoldButton label={<ArrowUp size={16} />} onDown={() => hold('/input/MoveForward', 1)} onUp={() => hold('/input/MoveForward', 0)} disabled={!connected} />
-          <div></div>
-          <HoldButton label={<ArrowLeft size={16} />} onDown={() => hold('/input/MoveLeft', 1)} onUp={() => hold('/input/MoveLeft', 0)} disabled={!connected} />
-          <button onClick={() => tap('/input/Jump')} disabled={!connected} className="btn-secondary text-xs h-12">Jump</button>
-          <HoldButton label={<ArrowRight size={16} />} onDown={() => hold('/input/MoveRight', 1)} onUp={() => hold('/input/MoveRight', 0)} disabled={!connected} />
-          <div></div>
-          <HoldButton label={<ArrowDown size={16} />} onDown={() => hold('/input/MoveBackward', 1)} onUp={() => hold('/input/MoveBackward', 0)} disabled={!connected} />
-          <div></div>
-        </div>
-        <p className="text-[10px] text-surface-500 text-center">Press &amp; hold buttons to walk · taps for jump</p>
-
-        <div className="border-t border-surface-800 pt-3 space-y-2">
-          <div className="text-xs font-semibold text-surface-400">Look</div>
-          <div className="grid grid-cols-2 gap-2">
-            <HoldButton label="← Look Left" onDown={() => hold('/input/LookLeft', 1)} onUp={() => hold('/input/LookLeft', 0)} disabled={!connected} small />
-            <HoldButton label="Look Right →" onDown={() => hold('/input/LookRight', 1)} onUp={() => hold('/input/LookRight', 0)} disabled={!connected} small />
-          </div>
-        </div>
-      </div>
-
-      <div className="glass-panel-solid p-5 space-y-4">
-        <h3 className="text-sm font-semibold flex items-center gap-2">
-          <Mic size={14} className="text-accent-400" /> Voice / actions
-        </h3>
-        <button
-          onClick={toggleVoice}
-          disabled={!connected}
-          className={`w-full text-sm py-3 rounded-lg flex items-center justify-center gap-2 transition-colors ${
-            voiceMuted ? 'bg-rose-500/15 text-rose-400 hover:bg-rose-500/25' : 'bg-green-500/15 text-green-400 hover:bg-green-500/25'
-          }`}
-        >
-          {voiceMuted ? <MicOff size={16} /> : <Mic size={16} />}
-          {voiceMuted ? 'Voice MUTED · click to unmute' : 'Voice ON · click to mute'}
-        </button>
-
-        <div className="grid grid-cols-2 gap-2 text-xs">
-          <button onClick={() => send('/input/PanicButton', [1])} disabled={!connected} className="btn-secondary py-2">
-            Panic / Safety
-          </button>
-          <button onClick={() => send('/input/QuickMenuToggleLeft', [1])} disabled={!connected} className="btn-secondary py-2">
-            Quick Menu (L)
-          </button>
-          <button onClick={() => send('/input/QuickMenuToggleRight', [1])} disabled={!connected} className="btn-secondary py-2">
-            Quick Menu (R)
-          </button>
-          <button onClick={() => send('/input/Run', [1])} disabled={!connected} className="btn-secondary py-2">
-            Toggle Run
-          </button>
-        </div>
-
-        <div className="border-t border-surface-800 pt-3 space-y-2">
-          <div className="text-xs font-semibold text-surface-400">Gesture (left hand)</div>
-          <div className="grid grid-cols-4 gap-1.5 text-[10px]">
-            {['Idle', 'Fist', 'Open', 'Point', 'Peace', 'RnR', 'Gun', 'ThumbsUp'].map((g, i) => (
-              <button
-                key={g}
-                onClick={() => send('/avatar/parameters/GestureLeft', [i])}
-                disabled={!connected}
-                className="btn-ghost py-1"
-              >
-                {g}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function HoldButton({ label, onDown, onUp, disabled, small }: {
-  label: React.ReactNode;
-  onDown: () => void;
-  onUp: () => void;
-  disabled?: boolean;
-  small?: boolean;
-}) {
-  return (
-    <button
-      disabled={disabled}
-      onMouseDown={onDown}
-      onMouseUp={onUp}
-      onMouseLeave={onUp}
-      onTouchStart={onDown}
-      onTouchEnd={onUp}
-      className={`btn-secondary flex items-center justify-center select-none ${small ? 'text-xs py-1.5' : 'h-12'}`}
-    >
-      {label}
-    </button>
-  );
-}
-
 // ─── Monitor (raw log) ──────────────────────────────────────────────────────
 
 function MonitorTab({ log, clear, send }: { log: OSCMessage[]; clear: () => void; send: (a: string, args?: any[]) => Promise<void> }) {
@@ -621,6 +650,12 @@ function MonitorTab({ log, clear, send }: { log: OSCMessage[]; clear: () => void
   const [rawAddr, setRawAddr] = useState('');
   const [rawArgs, setRawArgs] = useState('');
   const [copied, setCopied] = useState(false);
+
+  const stats = useMemo(() => {
+    let sent = 0, recv = 0;
+    for (const m of log) { if (m.outgoing) sent++; else recv++; }
+    return { sent, recv };
+  }, [log]);
 
   const filtered = useMemo(() => {
     return log.filter(m => {
@@ -689,6 +724,12 @@ function MonitorTab({ log, clear, send }: { log: OSCMessage[]; clear: () => void
         <button onClick={clear} className="btn-ghost text-xs flex items-center gap-1 text-rose-400 hover:text-rose-300">
           <Trash2 size={11} /> Clear
         </button>
+      </div>
+
+      <div className="flex items-center gap-4 text-xs text-surface-500 px-1">
+        <span className="flex items-center gap-1"><Activity size={12} className="text-accent-400" /> {log.length} buffered</span>
+        <span className="text-accent-400">↑ {stats.sent} sent</span>
+        <span className="text-green-400">↓ {stats.recv} received</span>
       </div>
 
       <div className="glass-panel-solid overflow-hidden">
