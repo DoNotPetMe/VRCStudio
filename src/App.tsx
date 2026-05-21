@@ -36,7 +36,6 @@ import { useLogIngestion } from './hooks/useLogIngestion';
 import { useDiscordBotBridge } from './hooks/useDiscordBotBridge';
 import { useDiscordBotStore } from './stores/discordBotStore';
 import AvatarSwitcher from './components/AvatarSwitcher';
-import LivelinessEffects from './components/LivelinessEffects';
 import HackerConsole from './components/HackerConsole';
 import { useAvatarSwitcherStore } from './stores/avatarSwitcherStore';
 import { useOSCStore } from './stores/oscStore';
@@ -137,7 +136,6 @@ function AppShell() {
 
   return (
     <>
-    <LivelinessEffects />
     <HackerConsole />
     <AvatarSwitcher open={switcherOpen} onClose={closeSwitcher} />
     <Routes>

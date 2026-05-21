@@ -481,34 +481,35 @@ html.live-cursor-glow::after {
 }
 
 /* Ambient-haze: very slow accent-color radial drift behind the shell.
-   Single keyframe on a single fixed pseudo-element — cheap. */
+   Rendered by <LivelinessEffects /> as a real element so it sits between
+   the opaque app background and the (transparent) content — a pseudo-
+   element on <html> would be painted behind the shell and never seen. */
 @keyframes live-haze-drift {
   0%, 100% { transform: translate(0, 0) scale(1); opacity: 0.6; }
   50%      { transform: translate(2%, -1%) scale(1.05); opacity: 0.85; }
 }
-html.live-ambient-haze::before {
-  content: '';
-  position: fixed;
+.live-haze-layer {
+  position: absolute;
   inset: -10%;
   pointer-events: none;
   z-index: 0;
   background:
-    radial-gradient(ellipse 70% 60% at 20% 30%, rgb(var(--accent-500) / 0.18) 0%, transparent 60%),
-    radial-gradient(ellipse 60% 50% at 80% 70%, rgb(var(--accent-300) / 0.14) 0%, transparent 60%);
+    radial-gradient(ellipse 70% 60% at 20% 30%, rgb(var(--accent-500) / 0.22) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 50% at 80% 70%, rgb(var(--accent-300) / 0.18) 0%, transparent 60%);
   filter: blur(40px);
   animation: live-haze-drift 18s ease-in-out infinite;
 }
 
-/* Particles canvas is mounted by <LivelinessEffects /> — these styles
-   just pin it behind the UI. */
+/* Particles canvas is mounted by <LivelinessEffects /> inside the app
+   shell so it sits above the opaque background and below the content. */
 .live-particles-canvas {
-  position: fixed;
+  position: absolute;
   inset: 0;
-  width: 100vw; height: 100vh;
+  width: 100%; height: 100%;
   z-index: 0;
   pointer-events: none;
   mix-blend-mode: screen;
-  opacity: 0.55;
+  opacity: 0.7;
 }
 
 /* ───────────────────────────────────────────────────────────────────────

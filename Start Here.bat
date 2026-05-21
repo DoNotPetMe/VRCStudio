@@ -113,7 +113,11 @@ echo  [*] Built: !EXE_PATH!
 REM --- 7. Copy to Desktop if requested ------------------------------
 set "DESKTOP_EXE="
 if /i not "!PLACE_DESKTOP!"=="yes" goto DESKTOP_DONE
-set "DESKTOP_EXE=%USERPROFILE%\Desktop\VRC Studio.exe"
+REM Resolve the REAL Desktop folder. %USERPROFILE%\Desktop is wrong when
+REM OneDrive has redirected the Desktop known-folder.
+set "DESKTOP_DIR=%USERPROFILE%\Desktop"
+for /f "usebackq delims=" %%D in (`powershell -NoProfile -Command "[Environment]::GetFolderPath('Desktop')"`) do set "DESKTOP_DIR=%%D"
+set "DESKTOP_EXE=!DESKTOP_DIR!\VRC Studio.exe"
 copy /Y "!EXE_PATH!" "!DESKTOP_EXE!" >nul
 if !errorlevel! neq 0 goto DESKTOP_COPY_FAILED
 echo  [*] Copied to: !DESKTOP_EXE!

@@ -5,6 +5,7 @@ import AudioVisualizer from '../AudioVisualizer';
 import PremiumThemeOverlay from '../PremiumThemeOverlay';
 import AsteroidsGame from '../AsteroidsGame';
 import UpdateBanner from '../UpdateBanner';
+import LivelinessEffects from '../LivelinessEffects';
 import { useAsteroidsGameStore } from '../../stores/asteroidsGameStore';
 
 export default function AppLayout() {
@@ -13,6 +14,7 @@ export default function AppLayout() {
     <div className="h-screen flex flex-col overflow-hidden bg-surface-950 text-surface-200 relative">
       <PremiumThemeOverlay />
       <AudioVisualizer />
+      <LivelinessEffects />
       <div className="flex flex-col flex-1 overflow-hidden relative z-[1]">
         <TitleBar />
         <UpdateBanner />

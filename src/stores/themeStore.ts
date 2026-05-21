@@ -322,11 +322,11 @@ export const useThemeStore = create<ThemeState>((set, get) => ({
 
     // Liveliness toggles — each maps to a single class on <html>
     const live = theme.liveliness ?? defaultLiveliness;
-    root.classList.toggle('live-particles',   !!live.particles);
+    // particles + ambientHaze are rendered as real elements by
+    // <LivelinessEffects />; the rest are pure-CSS classes on <html>.
     root.classList.toggle('live-cursor-glow', !!live.cursorGlow);
     root.classList.toggle('live-hover-lift',  !!live.hoverLift);
     root.classList.toggle('live-status-pulse', !!live.statusPulse);
-    root.classList.toggle('live-ambient-haze', !!live.ambientHaze);
 
     // Animation speed
     const durationMap: Record<string, string> = { none: '0ms', subtle: '100ms', normal: '200ms' };

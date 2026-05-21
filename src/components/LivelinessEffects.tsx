@@ -117,7 +117,12 @@ export default function LivelinessEffects() {
     };
   }, [liveliness.particles, accentColor]);
 
-  return liveliness.particles
-    ? <canvas ref={canvasRef} className="live-particles-canvas" aria-hidden />
-    : null;
+  return (
+    <>
+      {liveliness.ambientHaze && <div className="live-haze-layer" aria-hidden />}
+      {liveliness.particles && (
+        <canvas ref={canvasRef} className="live-particles-canvas" aria-hidden />
+      )}
+    </>
+  );
 }
