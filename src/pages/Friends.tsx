@@ -17,6 +17,7 @@ import type { VRCUser, UserStatus } from '../types/vrchat';
 import api from '../api/vrchat';
 import { getBestAvatarUrl } from '../utils/avatar';
 import { getTrustRank, RANK_COLORS } from '../utils/trustRank';
+import { tagBadgeClass, tagDotClass, cyclePaletteColor } from '../utils/tagColors';
 
 type FriendTab = 'online' | 'offline' | 'all' | 'starred' | 'gps';
 type SortBy = 'name' | 'status';
@@ -61,7 +62,8 @@ function useDetailPanel() {
 }
 
 export default function FriendsPage() {
-  const { onlineFriends, offlineFriends, notes, setNote, isLoading, fetchAllFriends } = useFriendStore();
+  const { onlineFriends, offlineFriends, notes, setNote, isLoading, fetchAllFriends,
+          tagColors, setTagColor, getAllTags } = useFriendStore();
   const { worldCache, getWorld } = useWorldStore();
   const { starredIds, toggleStar, isStarred } = useStarredFriendsStore();
   const currentInstance = useInstanceHistoryStore(s => s.currentInstance);
@@ -76,6 +78,9 @@ export default function FriendsPage() {
   const [noteTags, setNoteTags] = useState<string[]>([]);
   const [instanceModal, setInstanceModal] = useState<{ worldId: string; instanceId: string } | null>(null);
   const [inviteSent, setInviteSent] = useState<string | null>(null);
+  const [tagFilter, setTagFilter] = useState<string[]>([]);
+
+  const allTags = useMemo(() => getAllTags(), [notes, tagColors]);
 
   // GPS: group online friends by world
   const worldGroups = useMemo(() => {
@@ -109,6 +114,14 @@ export default function FriendsPage() {
 
     if (statusFilter !== 'all') list = list.filter(f => f.status === statusFilter);
 
+    // Tag filter — keep friends whose tags intersect any selected tag.
+    if (tagFilter.length > 0) {
+      list = list.filter(f => {
+        const ft = notes[f.id]?.tags;
+        return ft && ft.some(t => tagFilter.includes(t));
+      });
+    }
+
     if (search) {
       const q = search.toLowerCase();
       list = list.filter(f =>
@@ -135,7 +148,7 @@ export default function FriendsPage() {
       });
     }
     return list;
-  }, [tab, onlineFriends, offlineFriends, allFriends, search, sortBy, statusFilter, notes, starredIds]);
+  }, [tab, onlineFriends, offlineFriends, allFriends, search, sortBy, statusFilter, notes, starredIds, tagFilter]);
 
   const openNoteEditor = (u: VRCUser) => {
     const n = notes[u.id];
@@ -208,6 +221,40 @@ export default function FriendsPage() {
             <option value="ask me">Ask Me</option>
             <option value="busy">Busy</option>
           </select>
+        </div>
+      )}
+
+      {/* Tag filter bar */}
+      {tab !== 'gps' && allTags.length > 0 && (
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {allTags.map(({ tag, color, count }) => {
+            const active = tagFilter.includes(tag);
+            return (
+              <button
+                key={tag}
+                onClick={() => setTagFilter(prev =>
+                  prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
+                )}
+                className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium border transition-colors ${
+                  active
+                    ? `${tagBadgeClass(color)} border-transparent`
+                    : 'text-surface-400 border-surface-700 hover:border-surface-600'
+                }`}
+              >
+                <span className={`w-2 h-2 rounded-full ${tagDotClass(color)}`} />
+                {tag}
+                <span className="opacity-60 tabular-nums">{count}</span>
+              </button>
+            );
+          })}
+          {tagFilter.length > 0 && (
+            <button
+              onClick={() => setTagFilter([])}
+              className="text-[11px] text-surface-500 hover:text-surface-300 px-1.5"
+            >
+              Clear
+            </button>
+          )}
         </div>
       )}
 
@@ -312,7 +359,7 @@ export default function FriendsPage() {
                     <div className="flex items-center gap-2">
                       <span className="font-medium text-sm">{friend.displayName}</span>
                       {note?.tags?.map(tag => (
-                        <span key={tag} className="badge bg-accent-600/20 text-accent-400 text-[10px]">{tag}</span>
+                        <span key={tag} className={`badge text-[10px] ${tagBadgeClass(tagColors[tag])}`}>{tag}</span>
                       ))}
                     </div>
                     <div className="text-xs text-surface-500 truncate mt-0.5">
@@ -494,10 +541,36 @@ export default function FriendsPage() {
                     />
                     <button onClick={addTag} className="btn-secondary text-xs px-2">+</button>
                   </div>
+                  {/* Autocomplete — existing tags not yet on this friend, matching input */}
+                  {(() => {
+                    const q = noteTagInput.trim().toLowerCase();
+                    const suggestions = allTags
+                      .filter(({ tag }) => !noteTags.includes(tag) && (!q || tag.toLowerCase().includes(q)))
+                      .slice(0, 8);
+                    if (suggestions.length === 0) return null;
+                    return (
+                      <div className="flex flex-wrap gap-1">
+                        {suggestions.map(({ tag, color }) => (
+                          <button
+                            key={tag}
+                            onClick={() => { setNoteTags(prev => [...prev, tag]); setNoteTagInput(''); }}
+                            className={`badge text-[10px] opacity-60 hover:opacity-100 transition-opacity ${tagBadgeClass(color)}`}
+                          >
+                            + {tag}
+                          </button>
+                        ))}
+                      </div>
+                    );
+                  })()}
                   {noteTags.length > 0 && (
                     <div className="flex flex-wrap gap-1">
                       {noteTags.map(t => (
-                        <span key={t} className="badge bg-accent-600/20 text-accent-400 text-[10px] flex items-center gap-1">
+                        <span key={t} className={`badge text-[10px] flex items-center gap-1 ${tagBadgeClass(tagColors[t])}`}>
+                          <button
+                            onClick={() => setTagColor(t, cyclePaletteColor(tagColors[t]))}
+                            title="Change colour"
+                            className={`w-2 h-2 rounded-full ${tagDotClass(tagColors[t])} ring-1 ring-white/30`}
+                          />
                           {t}
                           <button onClick={() => setNoteTags(prev => prev.filter(x => x !== t))}><X size={8} /></button>
                         </span>
@@ -518,7 +591,7 @@ export default function FriendsPage() {
                       {notes[detail.user.id].tags?.length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-2">
                           {notes[detail.user.id].tags.map(t => (
-                            <span key={t} className="badge bg-accent-600/20 text-accent-400 text-[10px]">{t}</span>
+                            <span key={t} className={`badge text-[10px] ${tagBadgeClass(tagColors[t])}`}>{t}</span>
                           ))}
                         </div>
                       )}

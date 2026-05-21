@@ -24,24 +24,26 @@ type SettingsSection =
   | 'display' | 'appearance' | 'discord' | 'discord-bot' | 'vrcdb' | 'general' | 'data'
   | 'profile' | 'privacy' | 'performance' | 'shortcuts' | 'about' | 'updates';
 
-const sections: Array<{ key: SettingsSection; label: string; icon: typeof SettingsIcon; group: string }> = [
-  { key: 'profile',       label: 'Personalization',       icon: Smile,         group: 'Profile' },
-  { key: 'account',       label: 'Account',               icon: UserCircle,    group: 'Profile' },
-  { key: 'accounts',      label: 'Multiple Accounts',     icon: Shield,        group: 'Profile' },
-  { key: 'notifications', label: 'Notifications',         icon: Bell,          group: 'App' },
-  { key: 'polling',       label: 'Update Intervals',      icon: Clock,         group: 'App' },
-  { key: 'display',       label: 'Display',               icon: Monitor,       group: 'App' },
-  { key: 'appearance',    label: 'Appearance',            icon: Palette,       group: 'App' },
-  { key: 'privacy',       label: 'Privacy',               icon: Lock,          group: 'App' },
-  { key: 'discord',       label: 'Discord Rich Presence', icon: Zap,           group: 'Integrations' },
-  { key: 'discord-bot',   label: 'Discord Bot',           icon: Zap,           group: 'Integrations' },
-  { key: 'vrcdb',         label: 'Avatar Database',       icon: Database,      group: 'Integrations' },
-  { key: 'general',       label: 'General',               icon: SettingsIcon,  group: 'System' },
-  { key: 'performance',   label: 'Performance',           icon: Cpu,           group: 'System' },
-  { key: 'shortcuts',     label: 'Keyboard Shortcuts',    icon: Keyboard,      group: 'System' },
-  { key: 'data',          label: 'Data & Backup',         icon: Download,      group: 'System' },
-  { key: 'updates',       label: 'Updates',               icon: Download,      group: 'System' },
-  { key: 'about',         label: 'About',                 icon: Info,          group: 'System' },
+// `keywords` are concept words used only by the settings search box, so a
+// section can be found by terms that don't appear in its visible label.
+const sections: Array<{ key: SettingsSection; label: string; icon: typeof SettingsIcon; group: string; keywords?: string }> = [
+  { key: 'profile',       label: 'Personalization',       icon: Smile,         group: 'Profile',      keywords: 'nickname greeting name preferred' },
+  { key: 'account',       label: 'Account',               icon: UserCircle,    group: 'Profile',      keywords: 'login user bio profile picture sign out' },
+  { key: 'accounts',      label: 'Multiple Accounts',     icon: Shield,        group: 'Profile',      keywords: 'switch alt accounts saved login' },
+  { key: 'notifications', label: 'Notifications',         icon: Bell,          group: 'App',          keywords: 'alerts desktop popup sound toast' },
+  { key: 'polling',       label: 'Update Intervals',      icon: Clock,         group: 'App',          keywords: 'refresh rate polling frequency friends' },
+  { key: 'display',       label: 'Display',               icon: Monitor,       group: 'App',          keywords: 'window layout screen' },
+  { key: 'appearance',    label: 'Appearance',            icon: Palette,       group: 'App',          keywords: 'theme colour color border font dark light oled midnight accent visualizer liveliness particles hacker premium' },
+  { key: 'privacy',       label: 'Privacy',               icon: Lock,          group: 'App',          keywords: 'security hide blur sensitive' },
+  { key: 'discord',       label: 'Discord Rich Presence', icon: Zap,           group: 'Integrations', keywords: 'discord rpc status presence activity' },
+  { key: 'discord-bot',   label: 'Discord Bot',           icon: Zap,           group: 'Integrations', keywords: 'discord bot slash commands token' },
+  { key: 'vrcdb',         label: 'Avatar Database',       icon: Database,      group: 'Integrations', keywords: 'avatar database avtrdb search provider' },
+  { key: 'general',       label: 'General',               icon: SettingsIcon,  group: 'System',       keywords: 'misc startup tray launch minimize' },
+  { key: 'performance',   label: 'Performance',           icon: Cpu,           group: 'System',       keywords: 'fps cpu memory gpu speed' },
+  { key: 'shortcuts',     label: 'Keyboard Shortcuts',    icon: Keyboard,      group: 'System',       keywords: 'hotkeys keys bindings ctrl' },
+  { key: 'data',          label: 'Data & Backup',         icon: Download,      group: 'System',       keywords: 'export import csv storage backup restore' },
+  { key: 'updates',       label: 'Updates',               icon: Download,      group: 'System',       keywords: 'version github upgrade changelog' },
+  { key: 'about',         label: 'About',                 icon: Info,          group: 'System',       keywords: 'version credits author license' },
 ];
 
 const SHORTCUT_LIST: Array<{ description: string; keys: string[] }> = [
@@ -109,6 +111,7 @@ export default function SettingsPage() {
   const { accounts, removeAccount } = useMultiAccountStore();
   const openAsteroidsGame = useAsteroidsGameStore(s => s.open);
   const [active, setActive] = useState<SettingsSection>('account');
+  const [settingsQuery, setSettingsQuery] = useState('');
   const [importStatus, setImportStatus] = useState<string | null>(null);
   const [vrcdbProvider, setVrcdbProviderState] = useState<ProviderId>(getProviderId());
   const [lang, setLang] = useState(getLanguage());
@@ -160,7 +163,16 @@ export default function SettingsPage() {
   const handleLangChange = (code: string) => { setLanguage(code); setLang(code); window.location.reload(); };
   const handleAutoLaunch = (v: boolean) => { setAutoLaunch(v); window.electronAPI?.setAutoLaunch(v); updateGeneral({ launchOnStartup: v }); };
 
-  const groups = sections.reduce<Record<string, typeof sections>>((acc, s) => {
+  const q = settingsQuery.trim().toLowerCase();
+  const visibleSections = q
+    ? sections.filter(s =>
+        s.label.toLowerCase().includes(q) ||
+        s.group.toLowerCase().includes(q) ||
+        (s.keywords ?? '').toLowerCase().includes(q)
+      )
+    : sections;
+
+  const groups = visibleSections.reduce<Record<string, typeof sections>>((acc, s) => {
     const g = s.group ?? 'Other';
     (acc[g] = acc[g] || []).push(s);
     return acc;
@@ -175,7 +187,27 @@ export default function SettingsPage() {
 
       <div className="flex gap-6">
         <nav className="w-52 flex-shrink-0">
+          <div className="relative mb-2">
+            <input
+              value={settingsQuery}
+              onChange={e => setSettingsQuery(e.target.value)}
+              placeholder="Search settings..."
+              className="w-full bg-surface-800 text-sm pl-3 pr-7 py-1.5 rounded-lg border border-surface-700/40 focus:outline-none focus:border-accent-500/50 placeholder-surface-600"
+            />
+            {settingsQuery && (
+              <button
+                onClick={() => setSettingsQuery('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-surface-500 hover:text-surface-200"
+                title="Clear"
+              >
+                <X size={13} />
+              </button>
+            )}
+          </div>
           <div className="glass-panel-solid p-2 space-y-3">
+            {Object.keys(groups).length === 0 && (
+              <div className="px-3 py-2 text-xs text-surface-500">No settings match "{settingsQuery}"</div>
+            )}
             {Object.entries(groups).map(([groupName, items]) => (
               <div key={groupName}>
                 <div className="px-3 py-1 text-xs font-semibold uppercase tracking-wider text-surface-600">{groupName}</div>
