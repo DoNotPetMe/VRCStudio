@@ -10,35 +10,59 @@ export interface ShaderInfo {
 // ─────────────────────────────────────────────────────────────────────────────
 // Curated VRChat avatar shader set.
 //
-// Every lit shader samples baked light probes via ShadeSH9() for its ambient
-// term. This is the critical detail most hand-written avatar shaders get
-// wrong: VRChat worlds light avatars almost entirely through light probes
-// (spherical harmonics), NOT the legacy UNITY_LIGHTMODEL_AMBIENT. A shader
-// that only reads _LightColor0 / _WorldSpaceLightPos0 renders pure black in
-// any world without a realtime directional light. ShadeSH9 fixes that, and
-// the main-light direction is length-guarded so a world with no directional
-// light can't produce a NaN.
+// Two design rules every shader here follows:
+//
+// 1. Light-probe ambient. Every lit shader samples baked light probes via
+//    ShadeSH9(). VRChat worlds light avatars almost entirely through probes
+//    (spherical harmonics) — a shader that only reads _LightColor0 renders
+//    pure black in any world without a realtime directional light. The main
+//    light direction is also length-guarded so a no-light world can't make a
+//    NaN from normalize(0,0,0).
+//
+// 2. Creative Toolkit. Every shader carries the SAME bolt-on toolkit under a
+//    [Header(Creative Toolkit)] group: UV scroll, full colour grading (hue /
+//    saturation / brightness / contrast), posterize, and an animated vertex
+//    wobble. The toolkit HLSL block (vrcRgb2Hsv / vrcHsv2Rgb / vrcColorGrade /
+//    vrcScroll / vrcWobble) is byte-identical in every shader — verified once,
+//    reused everywhere. All toolkit values default to a no-op so the
+//    out-of-the-box look of each shader is unchanged until you reach for it.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const builtInShaders: ShaderInfo[] = [
   {
     id: 'toon',
     name: 'VRC Toon',
-    description: 'Clean cel-shaded toon shader. Controllable shadow ramp, tinted shadow colour, and an HDR rim light. Samples light probes so it stays lit in any world.',
+    description: 'Clean cel-shaded toon shader — tinted shadow ramp, HDR rim light, light-probe ambient. Carries the full Creative Toolkit (scroll, colour grading, posterize, wobble).',
     category: 'toon',
     color: '#f472b6',
     code: `Shader "VRCStudio/Toon"
 {
     Properties
     {
+        [Header(Surface)]
         _MainTex ("Main Texture", 2D) = "white" {}
         _Color ("Tint", Color) = (1, 1, 1, 1)
+
+        [Header(Toon Shading)]
         _ShadowColor ("Shadow Colour", Color) = (0.55, 0.5, 0.65, 1)
         _ShadowThreshold ("Shadow Threshold", Range(0, 1)) = 0.5
         _ShadowSoftness ("Shadow Softness", Range(0.001, 0.5)) = 0.08
+
+        [Header(Rim Light)]
         [HDR] _RimColor ("Rim Colour", Color) = (1, 1, 1, 1)
         _RimPower ("Rim Power", Range(0.5, 12)) = 4.0
         _RimIntensity ("Rim Intensity", Range(0, 2)) = 0.4
+
+        [Header(Creative Toolkit)]
+        _ScrollX ("Texture Scroll X", Range(-2, 2)) = 0
+        _ScrollY ("Texture Scroll Y", Range(-2, 2)) = 0
+        _Hue ("Hue Shift", Range(0, 1)) = 0
+        _Saturation ("Saturation", Range(0, 2)) = 1
+        _Brightness ("Brightness", Range(0, 2)) = 1
+        _Contrast ("Contrast", Range(0, 2)) = 1
+        _Posterize ("Posterize", Range(0, 1)) = 0
+        _WobbleSpeed ("Wobble Speed", Range(0, 10)) = 0
+        _WobbleAmount ("Wobble Amount", Range(0, 0.08)) = 0
     }
 
     SubShader
@@ -67,6 +91,48 @@ export const builtInShaders: ShaderInfo[] = [
             float _RimPower;
             float _RimIntensity;
 
+            // ── VRC Studio Creative Toolkit ──
+            float _ScrollX, _ScrollY;
+            float _Hue, _Saturation, _Brightness, _Contrast, _Posterize;
+            float _WobbleSpeed, _WobbleAmount;
+
+            float3 vrcRgb2Hsv(float3 c)
+            {
+                float4 K = float4(0.0, -1.0/3.0, 2.0/3.0, -1.0);
+                float4 p = lerp(float4(c.bg, K.wz), float4(c.gb, K.xy), step(c.b, c.g));
+                float4 q = lerp(float4(p.xyw, c.r), float4(c.r, p.yzx), step(p.x, c.r));
+                float d = q.x - min(q.w, q.y);
+                return float3(abs(q.z + (q.w - q.y) / (6.0 * d + 1e-10)),
+                              d / (q.x + 1e-10), q.x);
+            }
+            float3 vrcHsv2Rgb(float3 c)
+            {
+                float4 K = float4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
+                float3 p = abs(frac(c.xxx + K.xyz) * 6.0 - K.www);
+                return c.z * lerp(K.xxx, saturate(p - K.xxx), c.y);
+            }
+            float3 vrcColorGrade(float3 c)
+            {
+                c *= _Brightness;
+                c = (c - 0.5) * _Contrast + 0.5;
+                float3 hsv = vrcRgb2Hsv(max(c, 0.0));
+                hsv.x = frac(hsv.x + _Hue);
+                hsv.y = saturate(hsv.y * _Saturation);
+                c = vrcHsv2Rgb(hsv);
+                if (_Posterize > 0.001)
+                {
+                    float steps = lerp(64.0, 3.0, _Posterize);
+                    c = floor(c * steps + 0.5) / steps;
+                }
+                return c;
+            }
+            float2 vrcScroll(float2 uv) { return uv + _Time.y * float2(_ScrollX, _ScrollY); }
+            float3 vrcWobble(float3 posOS, float3 normalOS)
+            {
+                float w = sin(_Time.y * _WobbleSpeed + posOS.x * 8.0 + posOS.y * 6.0) * _WobbleAmount;
+                return posOS + normalOS * w;
+            }
+
             struct appdata
             {
                 float4 vertex : POSITION;
@@ -85,10 +151,11 @@ export const builtInShaders: ShaderInfo[] = [
             v2f vert(appdata v)
             {
                 v2f o;
-                o.pos = UnityObjectToClipPos(v.vertex);
-                o.uv = TRANSFORM_TEX(v.uv, _MainTex);
+                float4 vp = float4(vrcWobble(v.vertex.xyz, v.normal), 1.0);
+                o.pos = UnityObjectToClipPos(vp);
+                o.uv = vrcScroll(TRANSFORM_TEX(v.uv, _MainTex));
                 o.worldNormal = UnityObjectToWorldNormal(v.normal);
-                o.worldPos = mul(unity_ObjectToWorld, v.vertex).xyz;
+                o.worldPos = mul(unity_ObjectToWorld, vp).xyz;
                 return o;
             }
 
@@ -96,24 +163,22 @@ export const builtInShaders: ShaderInfo[] = [
             {
                 float3 N = normalize(i.worldNormal);
 
-                // Main directional light, guarded against no-light worlds.
                 float3 L = _WorldSpaceLightPos0.xyz;
                 float Llen = length(L);
                 L = Llen > 1e-4 ? L / Llen : float3(0, 1, 0);
 
-                // Half-Lambert so the terminator is easy to place.
                 float ndl = dot(N, L) * 0.5 + 0.5;
                 float toon = smoothstep(_ShadowThreshold - _ShadowSoftness,
                                         _ShadowThreshold + _ShadowSoftness, ndl);
 
                 fixed4 tex = tex2D(_MainTex, i.uv) * _Color;
+                tex.rgb = vrcColorGrade(tex.rgb);
 
                 float3 ramp    = lerp(_ShadowColor.rgb, fixed3(1, 1, 1), toon);
                 float3 direct  = ramp * _LightColor0.rgb;
-                float3 ambient = ShadeSH9(float4(N, 1.0));   // light probes
+                float3 ambient = ShadeSH9(float4(N, 1.0));
                 float3 lit     = tex.rgb * (direct + ambient);
 
-                // Fresnel rim light.
                 float3 V = normalize(_WorldSpaceCameraPos - i.worldPos);
                 float rim = pow(1.0 - saturate(dot(V, N)), _RimPower);
                 lit += _RimColor.rgb * rim * _RimIntensity;
@@ -130,20 +195,36 @@ export const builtInShaders: ShaderInfo[] = [
   {
     id: 'outline',
     name: 'VRC Outline',
-    description: 'Toon shader with a clean inverted-hull outline. Adjustable outline width and colour, tinted shadow ramp on the lit base pass.',
+    description: 'Toon shader with a clean inverted-hull outline — the outline follows the Creative Toolkit wobble so it never separates from the mesh.',
     category: 'toon',
     color: '#818cf8',
     code: `Shader "VRCStudio/Outline"
 {
     Properties
     {
+        [Header(Surface)]
         _MainTex ("Main Texture", 2D) = "white" {}
         _Color ("Tint", Color) = (1, 1, 1, 1)
+
+        [Header(Outline)]
         _OutlineColor ("Outline Colour", Color) = (0.05, 0.05, 0.07, 1)
         _OutlineWidth ("Outline Width", Range(0, 0.03)) = 0.004
+
+        [Header(Toon Shading)]
         _ShadowColor ("Shadow Colour", Color) = (0.55, 0.5, 0.65, 1)
         _ShadowThreshold ("Shadow Threshold", Range(0, 1)) = 0.5
         _ShadowSoftness ("Shadow Softness", Range(0.001, 0.5)) = 0.1
+
+        [Header(Creative Toolkit)]
+        _ScrollX ("Texture Scroll X", Range(-2, 2)) = 0
+        _ScrollY ("Texture Scroll Y", Range(-2, 2)) = 0
+        _Hue ("Hue Shift", Range(0, 1)) = 0
+        _Saturation ("Saturation", Range(0, 2)) = 1
+        _Brightness ("Brightness", Range(0, 2)) = 1
+        _Contrast ("Contrast", Range(0, 2)) = 1
+        _Posterize ("Posterize", Range(0, 1)) = 0
+        _WobbleSpeed ("Wobble Speed", Range(0, 10)) = 0
+        _WobbleAmount ("Wobble Amount", Range(0, 0.08)) = 0
     }
 
     SubShader
@@ -164,6 +245,13 @@ export const builtInShaders: ShaderInfo[] = [
 
             float _OutlineWidth;
             fixed4 _OutlineColor;
+            float _WobbleSpeed, _WobbleAmount;
+
+            float3 vrcWobble(float3 posOS, float3 normalOS)
+            {
+                float w = sin(_Time.y * _WobbleSpeed + posOS.x * 8.0 + posOS.y * 6.0) * _WobbleAmount;
+                return posOS + normalOS * w;
+            }
 
             struct appdata { float4 vertex : POSITION; float3 normal : NORMAL; };
             struct v2f { float4 pos : SV_POSITION; };
@@ -172,9 +260,8 @@ export const builtInShaders: ShaderInfo[] = [
             {
                 v2f o;
                 float3 n = normalize(v.normal);
-                float4 p = v.vertex;
-                p.xyz += n * _OutlineWidth;
-                o.pos = UnityObjectToClipPos(p);
+                float3 p = vrcWobble(v.vertex.xyz, v.normal) + n * _OutlineWidth;
+                o.pos = UnityObjectToClipPos(float4(p, 1.0));
                 return o;
             }
 
@@ -203,6 +290,48 @@ export const builtInShaders: ShaderInfo[] = [
             float _ShadowThreshold;
             float _ShadowSoftness;
 
+            // ── VRC Studio Creative Toolkit ──
+            float _ScrollX, _ScrollY;
+            float _Hue, _Saturation, _Brightness, _Contrast, _Posterize;
+            float _WobbleSpeed, _WobbleAmount;
+
+            float3 vrcRgb2Hsv(float3 c)
+            {
+                float4 K = float4(0.0, -1.0/3.0, 2.0/3.0, -1.0);
+                float4 p = lerp(float4(c.bg, K.wz), float4(c.gb, K.xy), step(c.b, c.g));
+                float4 q = lerp(float4(p.xyw, c.r), float4(c.r, p.yzx), step(p.x, c.r));
+                float d = q.x - min(q.w, q.y);
+                return float3(abs(q.z + (q.w - q.y) / (6.0 * d + 1e-10)),
+                              d / (q.x + 1e-10), q.x);
+            }
+            float3 vrcHsv2Rgb(float3 c)
+            {
+                float4 K = float4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
+                float3 p = abs(frac(c.xxx + K.xyz) * 6.0 - K.www);
+                return c.z * lerp(K.xxx, saturate(p - K.xxx), c.y);
+            }
+            float3 vrcColorGrade(float3 c)
+            {
+                c *= _Brightness;
+                c = (c - 0.5) * _Contrast + 0.5;
+                float3 hsv = vrcRgb2Hsv(max(c, 0.0));
+                hsv.x = frac(hsv.x + _Hue);
+                hsv.y = saturate(hsv.y * _Saturation);
+                c = vrcHsv2Rgb(hsv);
+                if (_Posterize > 0.001)
+                {
+                    float steps = lerp(64.0, 3.0, _Posterize);
+                    c = floor(c * steps + 0.5) / steps;
+                }
+                return c;
+            }
+            float2 vrcScroll(float2 uv) { return uv + _Time.y * float2(_ScrollX, _ScrollY); }
+            float3 vrcWobble(float3 posOS, float3 normalOS)
+            {
+                float w = sin(_Time.y * _WobbleSpeed + posOS.x * 8.0 + posOS.y * 6.0) * _WobbleAmount;
+                return posOS + normalOS * w;
+            }
+
             struct appdata
             {
                 float4 vertex : POSITION;
@@ -220,8 +349,9 @@ export const builtInShaders: ShaderInfo[] = [
             v2f vert(appdata v)
             {
                 v2f o;
-                o.pos = UnityObjectToClipPos(v.vertex);
-                o.uv = TRANSFORM_TEX(v.uv, _MainTex);
+                float4 vp = float4(vrcWobble(v.vertex.xyz, v.normal), 1.0);
+                o.pos = UnityObjectToClipPos(vp);
+                o.uv = vrcScroll(TRANSFORM_TEX(v.uv, _MainTex));
                 o.worldNormal = UnityObjectToWorldNormal(v.normal);
                 return o;
             }
@@ -238,6 +368,8 @@ export const builtInShaders: ShaderInfo[] = [
                                         _ShadowThreshold + _ShadowSoftness, ndl);
 
                 fixed4 tex = tex2D(_MainTex, i.uv) * _Color;
+                tex.rgb = vrcColorGrade(tex.rgb);
+
                 float3 direct  = lerp(_ShadowColor.rgb, fixed3(1, 1, 1), toon) * _LightColor0.rgb;
                 float3 ambient = ShadeSH9(float4(N, 1.0));
                 return fixed4(tex.rgb * (direct + ambient), tex.a);
@@ -252,16 +384,27 @@ export const builtInShaders: ShaderInfo[] = [
   {
     id: 'flat',
     name: 'VRC Flat Color',
-    description: 'Pure unlit shader — shows the albedo texture and tint exactly the same in every world, with no lighting. Bulletproof and never goes dark.',
+    description: 'Pure unlit shader — shows albedo and tint identically in every world, never goes dark. The Creative Toolkit adds scroll, colour grading, posterize and wobble.',
     category: 'utility',
     color: '#4ade80',
     code: `Shader "VRCStudio/FlatColor"
 {
     Properties
     {
+        [Header(Surface)]
         _MainTex ("Main Texture", 2D) = "white" {}
         _Color ("Colour", Color) = (1, 1, 1, 1)
-        _Brightness ("Brightness", Range(0, 2)) = 1.0
+
+        [Header(Creative Toolkit)]
+        _ScrollX ("Texture Scroll X", Range(-2, 2)) = 0
+        _ScrollY ("Texture Scroll Y", Range(-2, 2)) = 0
+        _Hue ("Hue Shift", Range(0, 1)) = 0
+        _Saturation ("Saturation", Range(0, 2)) = 1
+        _Brightness ("Brightness", Range(0, 2)) = 1
+        _Contrast ("Contrast", Range(0, 2)) = 1
+        _Posterize ("Posterize", Range(0, 1)) = 0
+        _WobbleSpeed ("Wobble Speed", Range(0, 10)) = 0
+        _WobbleAmount ("Wobble Amount", Range(0, 0.08)) = 0
     }
 
     SubShader
@@ -280,11 +423,53 @@ export const builtInShaders: ShaderInfo[] = [
             sampler2D _MainTex;
             float4 _MainTex_ST;
             fixed4 _Color;
-            float _Brightness;
+
+            // ── VRC Studio Creative Toolkit ──
+            float _ScrollX, _ScrollY;
+            float _Hue, _Saturation, _Brightness, _Contrast, _Posterize;
+            float _WobbleSpeed, _WobbleAmount;
+
+            float3 vrcRgb2Hsv(float3 c)
+            {
+                float4 K = float4(0.0, -1.0/3.0, 2.0/3.0, -1.0);
+                float4 p = lerp(float4(c.bg, K.wz), float4(c.gb, K.xy), step(c.b, c.g));
+                float4 q = lerp(float4(p.xyw, c.r), float4(c.r, p.yzx), step(p.x, c.r));
+                float d = q.x - min(q.w, q.y);
+                return float3(abs(q.z + (q.w - q.y) / (6.0 * d + 1e-10)),
+                              d / (q.x + 1e-10), q.x);
+            }
+            float3 vrcHsv2Rgb(float3 c)
+            {
+                float4 K = float4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
+                float3 p = abs(frac(c.xxx + K.xyz) * 6.0 - K.www);
+                return c.z * lerp(K.xxx, saturate(p - K.xxx), c.y);
+            }
+            float3 vrcColorGrade(float3 c)
+            {
+                c *= _Brightness;
+                c = (c - 0.5) * _Contrast + 0.5;
+                float3 hsv = vrcRgb2Hsv(max(c, 0.0));
+                hsv.x = frac(hsv.x + _Hue);
+                hsv.y = saturate(hsv.y * _Saturation);
+                c = vrcHsv2Rgb(hsv);
+                if (_Posterize > 0.001)
+                {
+                    float steps = lerp(64.0, 3.0, _Posterize);
+                    c = floor(c * steps + 0.5) / steps;
+                }
+                return c;
+            }
+            float2 vrcScroll(float2 uv) { return uv + _Time.y * float2(_ScrollX, _ScrollY); }
+            float3 vrcWobble(float3 posOS, float3 normalOS)
+            {
+                float w = sin(_Time.y * _WobbleSpeed + posOS.x * 8.0 + posOS.y * 6.0) * _WobbleAmount;
+                return posOS + normalOS * w;
+            }
 
             struct appdata
             {
                 float4 vertex : POSITION;
+                float3 normal : NORMAL;
                 float2 uv : TEXCOORD0;
             };
 
@@ -297,15 +482,16 @@ export const builtInShaders: ShaderInfo[] = [
             v2f vert(appdata v)
             {
                 v2f o;
-                o.pos = UnityObjectToClipPos(v.vertex);
-                o.uv = TRANSFORM_TEX(v.uv, _MainTex);
+                float4 vp = float4(vrcWobble(v.vertex.xyz, v.normal), 1.0);
+                o.pos = UnityObjectToClipPos(vp);
+                o.uv = vrcScroll(TRANSFORM_TEX(v.uv, _MainTex));
                 return o;
             }
 
             fixed4 frag(v2f i) : SV_Target
             {
                 fixed4 c = tex2D(_MainTex, i.uv) * _Color;
-                c.rgb *= _Brightness;
+                c.rgb = vrcColorGrade(c.rgb);
                 return c;
             }
             ENDCG
@@ -317,18 +503,32 @@ export const builtInShaders: ShaderInfo[] = [
   {
     id: 'matcap',
     name: 'VRC Matcap',
-    description: 'Material-capture shading — bakes lighting and material into a sphere texture. Looks identical in every world and is a VRChat staple for chrome, gloss, and stylised looks.',
+    description: 'Material-capture sphere shading — looks identical in every world. A VRChat staple for chrome and stylised looks, with the full Creative Toolkit.',
     category: 'utility',
     color: '#38bdf8',
     code: `Shader "VRCStudio/Matcap"
 {
     Properties
     {
+        [Header(Surface)]
         _MainTex ("Main Texture", 2D) = "white" {}
         _Color ("Tint", Color) = (1, 1, 1, 1)
+
+        [Header(MatCap)]
         _MatCap ("MatCap (Sphere)", 2D) = "white" {}
         _MatCapStrength ("MatCap Strength", Range(0, 1)) = 1.0
         [HDR] _MatCapAdd ("MatCap Additive", Color) = (0, 0, 0, 1)
+
+        [Header(Creative Toolkit)]
+        _ScrollX ("Texture Scroll X", Range(-2, 2)) = 0
+        _ScrollY ("Texture Scroll Y", Range(-2, 2)) = 0
+        _Hue ("Hue Shift", Range(0, 1)) = 0
+        _Saturation ("Saturation", Range(0, 2)) = 1
+        _Brightness ("Brightness", Range(0, 2)) = 1
+        _Contrast ("Contrast", Range(0, 2)) = 1
+        _Posterize ("Posterize", Range(0, 1)) = 0
+        _WobbleSpeed ("Wobble Speed", Range(0, 10)) = 0
+        _WobbleAmount ("Wobble Amount", Range(0, 0.08)) = 0
     }
 
     SubShader
@@ -351,6 +551,48 @@ export const builtInShaders: ShaderInfo[] = [
             float _MatCapStrength;
             fixed4 _MatCapAdd;
 
+            // ── VRC Studio Creative Toolkit ──
+            float _ScrollX, _ScrollY;
+            float _Hue, _Saturation, _Brightness, _Contrast, _Posterize;
+            float _WobbleSpeed, _WobbleAmount;
+
+            float3 vrcRgb2Hsv(float3 c)
+            {
+                float4 K = float4(0.0, -1.0/3.0, 2.0/3.0, -1.0);
+                float4 p = lerp(float4(c.bg, K.wz), float4(c.gb, K.xy), step(c.b, c.g));
+                float4 q = lerp(float4(p.xyw, c.r), float4(c.r, p.yzx), step(p.x, c.r));
+                float d = q.x - min(q.w, q.y);
+                return float3(abs(q.z + (q.w - q.y) / (6.0 * d + 1e-10)),
+                              d / (q.x + 1e-10), q.x);
+            }
+            float3 vrcHsv2Rgb(float3 c)
+            {
+                float4 K = float4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
+                float3 p = abs(frac(c.xxx + K.xyz) * 6.0 - K.www);
+                return c.z * lerp(K.xxx, saturate(p - K.xxx), c.y);
+            }
+            float3 vrcColorGrade(float3 c)
+            {
+                c *= _Brightness;
+                c = (c - 0.5) * _Contrast + 0.5;
+                float3 hsv = vrcRgb2Hsv(max(c, 0.0));
+                hsv.x = frac(hsv.x + _Hue);
+                hsv.y = saturate(hsv.y * _Saturation);
+                c = vrcHsv2Rgb(hsv);
+                if (_Posterize > 0.001)
+                {
+                    float steps = lerp(64.0, 3.0, _Posterize);
+                    c = floor(c * steps + 0.5) / steps;
+                }
+                return c;
+            }
+            float2 vrcScroll(float2 uv) { return uv + _Time.y * float2(_ScrollX, _ScrollY); }
+            float3 vrcWobble(float3 posOS, float3 normalOS)
+            {
+                float w = sin(_Time.y * _WobbleSpeed + posOS.x * 8.0 + posOS.y * 6.0) * _WobbleAmount;
+                return posOS + normalOS * w;
+            }
+
             struct appdata
             {
                 float4 vertex : POSITION;
@@ -368,8 +610,9 @@ export const builtInShaders: ShaderInfo[] = [
             v2f vert(appdata v)
             {
                 v2f o;
-                o.pos = UnityObjectToClipPos(v.vertex);
-                o.uv = TRANSFORM_TEX(v.uv, _MainTex);
+                float4 vp = float4(vrcWobble(v.vertex.xyz, v.normal), 1.0);
+                o.pos = UnityObjectToClipPos(vp);
+                o.uv = vrcScroll(TRANSFORM_TEX(v.uv, _MainTex));
                 float3 worldN = UnityObjectToWorldNormal(v.normal);
                 o.viewNormal = mul((float3x3)UNITY_MATRIX_V, worldN);
                 return o;
@@ -378,8 +621,8 @@ export const builtInShaders: ShaderInfo[] = [
             fixed4 frag(v2f i) : SV_Target
             {
                 fixed4 tex = tex2D(_MainTex, i.uv) * _Color;
+                tex.rgb = vrcColorGrade(tex.rgb);
 
-                // MatCap UV from the view-space normal.
                 float2 capUV = normalize(i.viewNormal).xy * 0.5 + 0.5;
                 fixed3 cap = tex2D(_MatCap, capUV).rgb;
 
@@ -396,19 +639,33 @@ export const builtInShaders: ShaderInfo[] = [
   {
     id: 'rim-glow',
     name: 'VRC Rim Glow',
-    description: 'Lit shader with a strong HDR fresnel rim light and optional pulsing. Great for energy beings, ghosts, and sci-fi avatars. Bloom-friendly.',
+    description: 'Lit shader with a strong HDR fresnel rim and optional pulse — energy beings, ghosts, sci-fi avatars. Bloom-friendly, with the full Creative Toolkit.',
     category: 'effect',
     color: '#34d399',
     code: `Shader "VRCStudio/RimGlow"
 {
     Properties
     {
+        [Header(Surface)]
         _MainTex ("Main Texture", 2D) = "white" {}
         _Color ("Tint", Color) = (1, 1, 1, 1)
+
+        [Header(Rim Glow)]
         [HDR] _RimColor ("Rim Colour", Color) = (0.3, 1.4, 1.8, 1)
         _RimPower ("Rim Power", Range(0.5, 16)) = 5.0
         _RimIntensity ("Rim Intensity", Range(0, 4)) = 1.5
         _RimSpeed ("Rim Pulse Speed", Range(0, 8)) = 0.0
+
+        [Header(Creative Toolkit)]
+        _ScrollX ("Texture Scroll X", Range(-2, 2)) = 0
+        _ScrollY ("Texture Scroll Y", Range(-2, 2)) = 0
+        _Hue ("Hue Shift", Range(0, 1)) = 0
+        _Saturation ("Saturation", Range(0, 2)) = 1
+        _Brightness ("Brightness", Range(0, 2)) = 1
+        _Contrast ("Contrast", Range(0, 2)) = 1
+        _Posterize ("Posterize", Range(0, 1)) = 0
+        _WobbleSpeed ("Wobble Speed", Range(0, 10)) = 0
+        _WobbleAmount ("Wobble Amount", Range(0, 0.08)) = 0
     }
 
     SubShader
@@ -435,6 +692,48 @@ export const builtInShaders: ShaderInfo[] = [
             float _RimIntensity;
             float _RimSpeed;
 
+            // ── VRC Studio Creative Toolkit ──
+            float _ScrollX, _ScrollY;
+            float _Hue, _Saturation, _Brightness, _Contrast, _Posterize;
+            float _WobbleSpeed, _WobbleAmount;
+
+            float3 vrcRgb2Hsv(float3 c)
+            {
+                float4 K = float4(0.0, -1.0/3.0, 2.0/3.0, -1.0);
+                float4 p = lerp(float4(c.bg, K.wz), float4(c.gb, K.xy), step(c.b, c.g));
+                float4 q = lerp(float4(p.xyw, c.r), float4(c.r, p.yzx), step(p.x, c.r));
+                float d = q.x - min(q.w, q.y);
+                return float3(abs(q.z + (q.w - q.y) / (6.0 * d + 1e-10)),
+                              d / (q.x + 1e-10), q.x);
+            }
+            float3 vrcHsv2Rgb(float3 c)
+            {
+                float4 K = float4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
+                float3 p = abs(frac(c.xxx + K.xyz) * 6.0 - K.www);
+                return c.z * lerp(K.xxx, saturate(p - K.xxx), c.y);
+            }
+            float3 vrcColorGrade(float3 c)
+            {
+                c *= _Brightness;
+                c = (c - 0.5) * _Contrast + 0.5;
+                float3 hsv = vrcRgb2Hsv(max(c, 0.0));
+                hsv.x = frac(hsv.x + _Hue);
+                hsv.y = saturate(hsv.y * _Saturation);
+                c = vrcHsv2Rgb(hsv);
+                if (_Posterize > 0.001)
+                {
+                    float steps = lerp(64.0, 3.0, _Posterize);
+                    c = floor(c * steps + 0.5) / steps;
+                }
+                return c;
+            }
+            float2 vrcScroll(float2 uv) { return uv + _Time.y * float2(_ScrollX, _ScrollY); }
+            float3 vrcWobble(float3 posOS, float3 normalOS)
+            {
+                float w = sin(_Time.y * _WobbleSpeed + posOS.x * 8.0 + posOS.y * 6.0) * _WobbleAmount;
+                return posOS + normalOS * w;
+            }
+
             struct appdata
             {
                 float4 vertex : POSITION;
@@ -453,10 +752,11 @@ export const builtInShaders: ShaderInfo[] = [
             v2f vert(appdata v)
             {
                 v2f o;
-                o.pos = UnityObjectToClipPos(v.vertex);
-                o.uv = TRANSFORM_TEX(v.uv, _MainTex);
+                float4 vp = float4(vrcWobble(v.vertex.xyz, v.normal), 1.0);
+                o.pos = UnityObjectToClipPos(vp);
+                o.uv = vrcScroll(TRANSFORM_TEX(v.uv, _MainTex));
                 o.worldNormal = UnityObjectToWorldNormal(v.normal);
-                o.worldPos = mul(unity_ObjectToWorld, v.vertex).xyz;
+                o.worldPos = mul(unity_ObjectToWorld, vp).xyz;
                 return o;
             }
 
@@ -469,6 +769,8 @@ export const builtInShaders: ShaderInfo[] = [
                 float ndl = max(0.0, dot(N, L));
 
                 fixed4 tex = tex2D(_MainTex, i.uv) * _Color;
+                tex.rgb = vrcColorGrade(tex.rgb);
+
                 float3 direct  = _LightColor0.rgb * ndl;
                 float3 ambient = ShadeSH9(float4(N, 1.0));
                 float3 col = tex.rgb * (direct + ambient);
@@ -490,20 +792,34 @@ export const builtInShaders: ShaderInfo[] = [
   {
     id: 'emission',
     name: 'VRC Emission',
-    description: 'Lit shader with an emission map, HDR emission colour and optional pulse. The lit base samples light probes; the emission adds on top for bloom.',
+    description: 'Lit shader with an emission map, HDR colour and optional pulse — the lit base samples light probes, emission adds on top for bloom. Full Creative Toolkit.',
     category: 'effect',
     color: '#fbbf24',
     code: `Shader "VRCStudio/Emission"
 {
     Properties
     {
+        [Header(Surface)]
         _MainTex ("Main Texture", 2D) = "white" {}
         _Color ("Tint", Color) = (1, 1, 1, 1)
+
+        [Header(Emission)]
         _EmissionMap ("Emission Map", 2D) = "white" {}
         [HDR] _EmissionColor ("Emission Colour", Color) = (1, 0.6, 0.1, 1)
         _EmissionStrength ("Emission Strength", Range(0, 8)) = 2.0
         _PulseSpeed ("Pulse Speed", Range(0, 8)) = 0.0
         _PulseMin ("Pulse Minimum", Range(0, 1)) = 0.4
+
+        [Header(Creative Toolkit)]
+        _ScrollX ("Texture Scroll X", Range(-2, 2)) = 0
+        _ScrollY ("Texture Scroll Y", Range(-2, 2)) = 0
+        _Hue ("Hue Shift", Range(0, 1)) = 0
+        _Saturation ("Saturation", Range(0, 2)) = 1
+        _Brightness ("Brightness", Range(0, 2)) = 1
+        _Contrast ("Contrast", Range(0, 2)) = 1
+        _Posterize ("Posterize", Range(0, 1)) = 0
+        _WobbleSpeed ("Wobble Speed", Range(0, 10)) = 0
+        _WobbleAmount ("Wobble Amount", Range(0, 0.08)) = 0
     }
 
     SubShader
@@ -531,6 +847,48 @@ export const builtInShaders: ShaderInfo[] = [
             float _PulseSpeed;
             float _PulseMin;
 
+            // ── VRC Studio Creative Toolkit ──
+            float _ScrollX, _ScrollY;
+            float _Hue, _Saturation, _Brightness, _Contrast, _Posterize;
+            float _WobbleSpeed, _WobbleAmount;
+
+            float3 vrcRgb2Hsv(float3 c)
+            {
+                float4 K = float4(0.0, -1.0/3.0, 2.0/3.0, -1.0);
+                float4 p = lerp(float4(c.bg, K.wz), float4(c.gb, K.xy), step(c.b, c.g));
+                float4 q = lerp(float4(p.xyw, c.r), float4(c.r, p.yzx), step(p.x, c.r));
+                float d = q.x - min(q.w, q.y);
+                return float3(abs(q.z + (q.w - q.y) / (6.0 * d + 1e-10)),
+                              d / (q.x + 1e-10), q.x);
+            }
+            float3 vrcHsv2Rgb(float3 c)
+            {
+                float4 K = float4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
+                float3 p = abs(frac(c.xxx + K.xyz) * 6.0 - K.www);
+                return c.z * lerp(K.xxx, saturate(p - K.xxx), c.y);
+            }
+            float3 vrcColorGrade(float3 c)
+            {
+                c *= _Brightness;
+                c = (c - 0.5) * _Contrast + 0.5;
+                float3 hsv = vrcRgb2Hsv(max(c, 0.0));
+                hsv.x = frac(hsv.x + _Hue);
+                hsv.y = saturate(hsv.y * _Saturation);
+                c = vrcHsv2Rgb(hsv);
+                if (_Posterize > 0.001)
+                {
+                    float steps = lerp(64.0, 3.0, _Posterize);
+                    c = floor(c * steps + 0.5) / steps;
+                }
+                return c;
+            }
+            float2 vrcScroll(float2 uv) { return uv + _Time.y * float2(_ScrollX, _ScrollY); }
+            float3 vrcWobble(float3 posOS, float3 normalOS)
+            {
+                float w = sin(_Time.y * _WobbleSpeed + posOS.x * 8.0 + posOS.y * 6.0) * _WobbleAmount;
+                return posOS + normalOS * w;
+            }
+
             struct appdata
             {
                 float4 vertex : POSITION;
@@ -548,8 +906,9 @@ export const builtInShaders: ShaderInfo[] = [
             v2f vert(appdata v)
             {
                 v2f o;
-                o.pos = UnityObjectToClipPos(v.vertex);
-                o.uv = TRANSFORM_TEX(v.uv, _MainTex);
+                float4 vp = float4(vrcWobble(v.vertex.xyz, v.normal), 1.0);
+                o.pos = UnityObjectToClipPos(vp);
+                o.uv = vrcScroll(TRANSFORM_TEX(v.uv, _MainTex));
                 o.worldNormal = UnityObjectToWorldNormal(v.normal);
                 return o;
             }
@@ -563,6 +922,8 @@ export const builtInShaders: ShaderInfo[] = [
                 float ndl = max(0.0, dot(N, L));
 
                 fixed4 tex = tex2D(_MainTex, i.uv) * _Color;
+                tex.rgb = vrcColorGrade(tex.rgb);
+
                 float3 direct  = _LightColor0.rgb * ndl;
                 float3 ambient = ShadeSH9(float4(N, 1.0));
                 float3 col = tex.rgb * (direct + ambient);
@@ -586,14 +947,17 @@ export const builtInShaders: ShaderInfo[] = [
   {
     id: 'holographic',
     name: 'VRC Holographic',
-    description: 'Transparent hologram with a full-surface colour wash, glancing-angle edge boost and animated scanlines. Additive blend so it always glows — never goes dark.',
+    description: 'Transparent hologram — full-surface colour wash, glancing-angle edge boost, animated scanlines. Additive blend so it always glows. Full Creative Toolkit.',
     category: 'effect',
     color: '#c084fc',
     code: `Shader "VRCStudio/Holographic"
 {
     Properties
     {
+        [Header(Surface)]
         _MainTex ("Tint Texture", 2D) = "white" {}
+
+        [Header(Hologram)]
         [HDR] _ColorA ("Holo Colour A", Color) = (0.1, 1.2, 1.6, 1)
         [HDR] _ColorB ("Holo Colour B", Color) = (1.4, 0.2, 1.4, 1)
         _ShiftSpeed ("Colour Shift Speed", Range(0, 5)) = 1.0
@@ -603,6 +967,17 @@ export const builtInShaders: ShaderInfo[] = [
         _ScanSpeed ("Scanline Speed", Range(0, 12)) = 3.0
         _ScanDepth ("Scanline Depth", Range(0, 1)) = 0.35
         _Opacity ("Opacity", Range(0, 1)) = 0.75
+
+        [Header(Creative Toolkit)]
+        _ScrollX ("Texture Scroll X", Range(-2, 2)) = 0
+        _ScrollY ("Texture Scroll Y", Range(-2, 2)) = 0
+        _Hue ("Hue Shift", Range(0, 1)) = 0
+        _Saturation ("Saturation", Range(0, 2)) = 1
+        _Brightness ("Brightness", Range(0, 2)) = 1
+        _Contrast ("Contrast", Range(0, 2)) = 1
+        _Posterize ("Posterize", Range(0, 1)) = 0
+        _WobbleSpeed ("Wobble Speed", Range(0, 10)) = 0
+        _WobbleAmount ("Wobble Amount", Range(0, 0.08)) = 0
     }
 
     SubShader
@@ -631,6 +1006,48 @@ export const builtInShaders: ShaderInfo[] = [
             float _ScanDepth;
             float _Opacity;
 
+            // ── VRC Studio Creative Toolkit ──
+            float _ScrollX, _ScrollY;
+            float _Hue, _Saturation, _Brightness, _Contrast, _Posterize;
+            float _WobbleSpeed, _WobbleAmount;
+
+            float3 vrcRgb2Hsv(float3 c)
+            {
+                float4 K = float4(0.0, -1.0/3.0, 2.0/3.0, -1.0);
+                float4 p = lerp(float4(c.bg, K.wz), float4(c.gb, K.xy), step(c.b, c.g));
+                float4 q = lerp(float4(p.xyw, c.r), float4(c.r, p.yzx), step(p.x, c.r));
+                float d = q.x - min(q.w, q.y);
+                return float3(abs(q.z + (q.w - q.y) / (6.0 * d + 1e-10)),
+                              d / (q.x + 1e-10), q.x);
+            }
+            float3 vrcHsv2Rgb(float3 c)
+            {
+                float4 K = float4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
+                float3 p = abs(frac(c.xxx + K.xyz) * 6.0 - K.www);
+                return c.z * lerp(K.xxx, saturate(p - K.xxx), c.y);
+            }
+            float3 vrcColorGrade(float3 c)
+            {
+                c *= _Brightness;
+                c = (c - 0.5) * _Contrast + 0.5;
+                float3 hsv = vrcRgb2Hsv(max(c, 0.0));
+                hsv.x = frac(hsv.x + _Hue);
+                hsv.y = saturate(hsv.y * _Saturation);
+                c = vrcHsv2Rgb(hsv);
+                if (_Posterize > 0.001)
+                {
+                    float steps = lerp(64.0, 3.0, _Posterize);
+                    c = floor(c * steps + 0.5) / steps;
+                }
+                return c;
+            }
+            float2 vrcScroll(float2 uv) { return uv + _Time.y * float2(_ScrollX, _ScrollY); }
+            float3 vrcWobble(float3 posOS, float3 normalOS)
+            {
+                float w = sin(_Time.y * _WobbleSpeed + posOS.x * 8.0 + posOS.y * 6.0) * _WobbleAmount;
+                return posOS + normalOS * w;
+            }
+
             struct appdata
             {
                 float4 vertex : POSITION;
@@ -649,10 +1066,11 @@ export const builtInShaders: ShaderInfo[] = [
             v2f vert(appdata v)
             {
                 v2f o;
-                o.pos = UnityObjectToClipPos(v.vertex);
-                o.uv = TRANSFORM_TEX(v.uv, _MainTex);
+                float4 vp = float4(vrcWobble(v.vertex.xyz, v.normal), 1.0);
+                o.pos = UnityObjectToClipPos(vp);
+                o.uv = vrcScroll(TRANSFORM_TEX(v.uv, _MainTex));
                 o.worldNormal = UnityObjectToWorldNormal(v.normal);
-                o.worldPos = mul(unity_ObjectToWorld, v.vertex).xyz;
+                o.worldPos = mul(unity_ObjectToWorld, vp).xyz;
                 return o;
             }
 
@@ -662,21 +1080,18 @@ export const builtInShaders: ShaderInfo[] = [
                 float3 V = normalize(_WorldSpaceCameraPos - i.worldPos);
                 float ndv = saturate(dot(N, V));
 
-                // Colour wash across the whole surface, not just the rim.
                 float t = ndv + _Time.y * _ShiftSpeed * 0.2;
                 float mixv = sin(t * 3.14159) * 0.5 + 0.5;
                 float3 holo = lerp(_ColorA.rgb, _ColorB.rgb, mixv);
 
-                // Brighter at glancing angles.
                 float fres = pow(1.0 - ndv, _FresnelPower);
                 holo += holo * fres * _EdgeBoost;
 
-                // Animated scanlines.
                 float scan = sin(i.worldPos.y * _ScanScale - _Time.y * _ScanSpeed) * 0.5 + 0.5;
                 holo *= lerp(1.0, scan, _ScanDepth);
 
-                // Optional tint texture (white by default = no change).
                 holo *= tex2D(_MainTex, i.uv).rgb;
+                holo = vrcColorGrade(holo);
 
                 float alpha = saturate(_Opacity * (0.5 + fres));
                 return fixed4(holo, alpha);
@@ -690,7 +1105,7 @@ export const builtInShaders: ShaderInfo[] = [
   {
     id: 'glass',
     name: 'VRC Glass',
-    description: 'Deluxe glass shader — real GrabPass refraction with chromatic aberration, cubemap reflections, normal-mapped surface, specular glint, thin-film iridescence, rim, inner glow and an animated wobble. 26 properties to dial in anything from clear crystal to oil-slick frost.',
+    description: 'Deluxe glass — GrabPass refraction with chromatic aberration, cubemap reflections, normal-mapped surface, specular glint, thin-film iridescence, rim and inner glow, plus the full Creative Toolkit. 30+ properties.',
     category: 'transparent',
     color: '#67e8f9',
     code: `Shader "VRCStudio/Glass"
@@ -714,7 +1129,7 @@ export const builtInShaders: ShaderInfo[] = [
         [Header(Refraction)]
         _RefractionStrength ("Refraction Strength", Range(0, 0.3)) = 0.08
         _ChromaticAberration ("Chromatic Aberration", Range(0, 1)) = 0.25
-        _Saturation ("Refraction Saturation", Range(0, 2)) = 1.0
+        _RefractSaturation ("Refraction Saturation", Range(0, 2)) = 1.0
 
         [Header(Reflection)]
         _ReflectionStrength ("Reflection Strength", Range(0, 1)) = 0.5
@@ -739,17 +1154,23 @@ export const builtInShaders: ShaderInfo[] = [
         [HDR] _GlowColor ("Inner Glow Colour", Color) = (0, 0, 0, 1)
         _GlowIntensity ("Inner Glow", Range(0, 4)) = 0.0
 
-        [Header(Animated Wobble)]
-        _WobbleSpeed ("Wobble Speed", Range(0, 10)) = 0.0
-        _WobbleAmount ("Wobble Amount", Range(0, 0.1)) = 0.0
+        [Header(Creative Toolkit)]
+        _ScrollX ("Texture Scroll X", Range(-2, 2)) = 0
+        _ScrollY ("Texture Scroll Y", Range(-2, 2)) = 0
+        _Hue ("Hue Shift", Range(0, 1)) = 0
+        _Saturation ("Saturation", Range(0, 2)) = 1
+        _Brightness ("Brightness", Range(0, 2)) = 1
+        _Contrast ("Contrast", Range(0, 2)) = 1
+        _Posterize ("Posterize", Range(0, 1)) = 0
+        _WobbleSpeed ("Wobble Speed", Range(0, 10)) = 0
+        _WobbleAmount ("Wobble Amount", Range(0, 0.08)) = 0
     }
 
     SubShader
     {
         Tags { "RenderType"="Transparent" "Queue"="Transparent" }
 
-        // Grab the screen behind the glass for true refraction. Shared
-        // name => grabbed once per frame for every glass object.
+        // Grab the screen behind the glass for true refraction.
         GrabPass { "_VRCGlassGrab" }
 
         Pass
@@ -778,7 +1199,7 @@ export const builtInShaders: ShaderInfo[] = [
             float _FresnelBias;
             float _RefractionStrength;
             float _ChromaticAberration;
-            float _Saturation;
+            float _RefractSaturation;
             float _ReflectionStrength;
             fixed4 _ReflectionTint;
             fixed4 _SpecularColor;
@@ -792,8 +1213,48 @@ export const builtInShaders: ShaderInfo[] = [
             float _RimIntensity;
             fixed4 _GlowColor;
             float _GlowIntensity;
-            float _WobbleSpeed;
-            float _WobbleAmount;
+
+            // ── VRC Studio Creative Toolkit ──
+            float _ScrollX, _ScrollY;
+            float _Hue, _Saturation, _Brightness, _Contrast, _Posterize;
+            float _WobbleSpeed, _WobbleAmount;
+
+            float3 vrcRgb2Hsv(float3 c)
+            {
+                float4 K = float4(0.0, -1.0/3.0, 2.0/3.0, -1.0);
+                float4 p = lerp(float4(c.bg, K.wz), float4(c.gb, K.xy), step(c.b, c.g));
+                float4 q = lerp(float4(p.xyw, c.r), float4(c.r, p.yzx), step(p.x, c.r));
+                float d = q.x - min(q.w, q.y);
+                return float3(abs(q.z + (q.w - q.y) / (6.0 * d + 1e-10)),
+                              d / (q.x + 1e-10), q.x);
+            }
+            float3 vrcHsv2Rgb(float3 c)
+            {
+                float4 K = float4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
+                float3 p = abs(frac(c.xxx + K.xyz) * 6.0 - K.www);
+                return c.z * lerp(K.xxx, saturate(p - K.xxx), c.y);
+            }
+            float3 vrcColorGrade(float3 c)
+            {
+                c *= _Brightness;
+                c = (c - 0.5) * _Contrast + 0.5;
+                float3 hsv = vrcRgb2Hsv(max(c, 0.0));
+                hsv.x = frac(hsv.x + _Hue);
+                hsv.y = saturate(hsv.y * _Saturation);
+                c = vrcHsv2Rgb(hsv);
+                if (_Posterize > 0.001)
+                {
+                    float steps = lerp(64.0, 3.0, _Posterize);
+                    c = floor(c * steps + 0.5) / steps;
+                }
+                return c;
+            }
+            float2 vrcScroll(float2 uv) { return uv + _Time.y * float2(_ScrollX, _ScrollY); }
+            float3 vrcWobble(float3 posOS, float3 normalOS)
+            {
+                float w = sin(_Time.y * _WobbleSpeed + posOS.x * 8.0 + posOS.y * 6.0) * _WobbleAmount;
+                return posOS + normalOS * w;
+            }
 
             struct appdata
             {
@@ -817,16 +1278,10 @@ export const builtInShaders: ShaderInfo[] = [
             v2f vert(appdata v)
             {
                 v2f o;
-
-                // Animated wobble — displace along the surface normal.
-                float4 pos = v.vertex;
-                float wob = sin(_Time.y * _WobbleSpeed
-                                + v.vertex.x * 8.0 + v.vertex.y * 6.0) * _WobbleAmount;
-                pos.xyz += v.normal * wob;
-
-                o.pos = UnityObjectToClipPos(pos);
-                o.uv = TRANSFORM_TEX(v.uv, _MainTex);
-                o.worldPos = mul(unity_ObjectToWorld, pos).xyz;
+                float4 vp = float4(vrcWobble(v.vertex.xyz, v.normal), 1.0);
+                o.pos = UnityObjectToClipPos(vp);
+                o.uv = vrcScroll(TRANSFORM_TEX(v.uv, _MainTex));
+                o.worldPos = mul(unity_ObjectToWorld, vp).xyz;
                 o.worldNormal = UnityObjectToWorldNormal(v.normal);
                 o.worldTangent = normalize(mul((float3x3)unity_ObjectToWorld, v.tangent.xyz));
                 o.worldBitangent = cross(o.worldNormal, o.worldTangent) * v.tangent.w;
@@ -836,7 +1291,6 @@ export const builtInShaders: ShaderInfo[] = [
 
             fixed4 frag(v2f i) : SV_Target
             {
-                // --- Normal mapping ---
                 float3 nTS = UnpackNormal(tex2D(_BumpMap, i.uv));
                 nTS.xy *= _BumpScale;
                 nTS = normalize(nTS);
@@ -848,11 +1302,10 @@ export const builtInShaders: ShaderInfo[] = [
                 float3 V = normalize(_WorldSpaceCameraPos - i.worldPos);
                 float ndv = saturate(dot(N, V));
 
-                // --- Fresnel ---
                 float fres = saturate(_FresnelBias
                     + (1.0 - _FresnelBias) * pow(1.0 - ndv, _FresnelPower));
 
-                // --- Refraction (GrabPass) with chromatic aberration ---
+                // Refraction with chromatic aberration.
                 float4 gp = i.grabPos;
                 gp.xy += N.xy * _RefractionStrength * gp.w;
                 float ca = _ChromaticAberration * 0.03;
@@ -863,21 +1316,18 @@ export const builtInShaders: ShaderInfo[] = [
                     tex2Dproj(_VRCGlassGrab, UNITY_PROJ_COORD(gp)).g,
                     tex2Dproj(_VRCGlassGrab, UNITY_PROJ_COORD(gpB)).b);
 
-                // Saturation of what's seen through the glass.
                 float lum = dot(refracted, float3(0.299, 0.587, 0.114));
-                refracted = lerp(float3(lum, lum, lum), refracted, _Saturation);
+                refracted = lerp(float3(lum, lum, lum), refracted, _RefractSaturation);
 
-                // --- Tint ---
                 fixed4 tex = tex2D(_MainTex, i.uv) * _Color;
+                tex.rgb = vrcColorGrade(tex.rgb);
                 float3 col = refracted * lerp(float3(1, 1, 1), tex.rgb, _Color.a);
 
-                // --- Cubemap reflection (world reflection probe) ---
                 float3 refl = reflect(-V, N);
                 float4 envRaw = UNITY_SAMPLE_TEXCUBE(unity_SpecCube0, refl);
                 float3 env = DecodeHDR(envRaw, unity_SpecCube0_HDR);
                 col += env * _ReflectionTint.rgb * _ReflectionStrength * fres;
 
-                // --- Specular glint (Blinn-Phong) ---
                 float3 L = _WorldSpaceLightPos0.xyz;
                 float Llen = length(L);
                 L = Llen > 1e-4 ? L / Llen : float3(0, 1, 0);
@@ -885,14 +1335,10 @@ export const builtInShaders: ShaderInfo[] = [
                 float spec = pow(saturate(dot(N, H)), _SpecPower);
                 col += _SpecularColor.rgb * spec * _SpecIntensity * _LightColor0.rgb;
 
-                // --- Thin-film iridescence ---
                 float irMix = sin(ndv * _IridScale + _Time.y * 0.5) * 0.5 + 0.5;
                 col += lerp(_IridA.rgb, _IridB.rgb, irMix) * _IridStrength * fres;
 
-                // --- Rim ---
                 col += _RimColor.rgb * pow(1.0 - ndv, _FresnelPower) * _RimIntensity;
-
-                // --- Inner glow (strongest face-on) ---
                 col += _GlowColor.rgb * _GlowIntensity * (1.0 - fres);
 
                 float alpha = lerp(_MinAlpha, _MaxAlpha, fres);
