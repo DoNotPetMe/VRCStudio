@@ -2,12 +2,9 @@ import { useState, useRef, useCallback } from 'react';
 import {
   Paintbrush, Copy, Check, Download, Upload, FileCode, X,
   Sparkles, Box, Droplets, ChevronDown, ChevronUp, Sliders,
-  Wrench, Zap, Smile, FlaskConical, Info, Code,
 } from 'lucide-react';
 import { builtInShaders, downloadShaderFile, type ShaderInfo } from '../data/shaders';
-import { unityTools, categoryMeta, downloadUnityTool, type UnityTool } from '../data/unityTools';
 import { parseShaderProperties, rgbaToHex, hexToRgba, injectPropertyDefaults, downloadShaderWithDefaults, type ShaderProp } from '../utils/shaderPropertyParser';
-import MaterialMaker from '../components/MaterialMaker';
 
 // ─── Shader Section ────────────────────────────────────────────────────────────
 
@@ -164,117 +161,6 @@ function ShaderPropRow({ prop, value, onChange }: {
   return null;
 }
 
-// ─── Unity Tools Section ───────────────────────────────────────────────────────
-
-const toolCategoryIcons: Record<string, typeof Wrench> = {
-  avatar: Wrench,
-  helpers: Zap,
-  fun: Smile,
-  unconventional: FlaskConical,
-};
-
-function UnityToolCard({ tool }: { tool: UnityTool }) {
-  const [showDetails, setShowDetails] = useState(false);
-  const [copyDone, setCopyDone] = useState(false);
-
-  const handleCopy = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    navigator.clipboard.writeText(tool.code);
-    setCopyDone(true);
-    setTimeout(() => setCopyDone(false), 2000);
-  };
-
-  return (
-    <div className="rounded-lg border border-surface-800 bg-surface-800/20 hover:border-surface-700 transition-colors">
-      <div className="p-3">
-        <div className="flex items-start gap-2.5">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="text-sm font-semibold text-surface-200">{tool.name}</span>
-              {tool.isNew && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-accent-500/20 text-accent-400 font-bold">NEW</span>}
-            </div>
-            <p className="text-xs text-surface-500 mt-0.5 line-clamp-2">{tool.description}</p>
-          </div>
-        </div>
-
-        {showDetails && (
-          <div className="mt-2.5 p-2.5 bg-surface-900/50 rounded-lg space-y-1.5 animate-fade-in">
-            <p className="text-xs text-surface-400">{tool.details}</p>
-            <div className="flex items-center gap-1.5">
-              <Code size={10} className="text-surface-600 flex-shrink-0" />
-              <code className="text-[10px] text-surface-500 font-mono">{tool.menuPath}</code>
-            </div>
-          </div>
-        )}
-
-        <div className="flex gap-1.5 mt-2.5">
-          <button onClick={() => setShowDetails(!showDetails)}
-            className="text-xs px-2 py-1 rounded bg-surface-800 text-surface-400 hover:bg-surface-700 transition-colors flex items-center gap-1">
-            <Info size={10} /> {showDetails ? 'Hide' : 'Details'}
-          </button>
-          <button onClick={e => { e.stopPropagation(); downloadUnityTool(tool); }}
-            className="flex-1 text-xs py-1 rounded bg-accent-600/15 text-accent-400 hover:bg-accent-600/25 transition-colors flex items-center justify-center gap-1">
-            <Download size={10} /> Download .cs
-          </button>
-          <button onClick={handleCopy}
-            className={`text-xs px-2 py-1 rounded transition-colors flex items-center gap-1 ${copyDone ? 'bg-green-500/15 text-green-400' : 'bg-surface-800 text-surface-400 hover:bg-surface-700'}`}>
-            {copyDone ? <Check size={10} /> : <Copy size={10} />} {copyDone ? 'Copied' : 'Copy'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function UnityToolsSection() {
-  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(['avatar']));
-  const categories = Object.entries(categoryMeta);
-
-  const toggleCategory = (key: string) => {
-    setExpandedCategories(prev => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  };
-
-  return (
-    <div className="space-y-2">
-      {categories.map(([key, meta]) => {
-        const catTools = unityTools.filter(t => t.category === key);
-        const Icon = toolCategoryIcons[key] || Wrench;
-        const isOpen = expandedCategories.has(key);
-        return (
-          <div key={key} className="rounded-lg border border-surface-800 overflow-hidden">
-            <button onClick={() => toggleCategory(key)}
-              className="w-full flex items-center justify-between px-4 py-3 hover:bg-surface-800/30 transition-colors">
-              <div className="flex items-center gap-2.5">
-                <div className="w-7 h-7 rounded-lg bg-surface-800 flex items-center justify-center">
-                  <Icon size={14} className="text-accent-400" />
-                </div>
-                <div className="text-left">
-                  <div className="text-sm font-semibold">{meta.label}</div>
-                  <div className="text-[11px] text-surface-500">{meta.description}</div>
-                </div>
-                <span className="text-[10px] bg-surface-800 text-surface-500 px-2 py-0.5 rounded-full font-semibold ml-1">
-                  {catTools.length}
-                </span>
-              </div>
-              {isOpen ? <ChevronUp size={16} className="text-surface-500 flex-shrink-0" /> : <ChevronDown size={16} className="text-surface-500 flex-shrink-0" />}
-            </button>
-            {isOpen && (
-              <div className="px-4 pb-4 grid grid-cols-1 md:grid-cols-2 gap-2 animate-fade-in">
-                {catTools.map(tool => <UnityToolCard key={tool.id} tool={tool} />)}
-              </div>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
 // ─── Main AvatarEditor ─────────────────────────────────────────────────────────
 
 export default function AvatarEditor() {
@@ -328,7 +214,7 @@ export default function AvatarEditor() {
     <div className="max-w-6xl mx-auto space-y-4 animate-fade-in">
       <div>
         <h1 className="text-2xl font-bold flex items-center gap-2"><Paintbrush size={24} /> Avatar Editor</h1>
-        <p className="text-surface-400 text-sm mt-1">Custom shaders, material maker, asset management, and Unity editor tools</p>
+        <p className="text-surface-400 text-sm mt-1">Custom shaders and asset management for your avatar projects</p>
       </div>
 
       {/* ── Shaders ── */}
@@ -424,26 +310,6 @@ export default function AvatarEditor() {
         )}
       </section>
 
-      {/* ── Material Maker ── */}
-      <section className="glass-panel-solid">
-        <button onClick={() => toggleSection('material')} className="w-full flex items-center justify-between p-4">
-          <div className="flex items-center gap-2">
-            <Paintbrush size={18} className="text-purple-400" />
-            <h2 className="text-lg font-semibold">Material Maker</h2>
-            <span className="text-xs text-surface-500 ml-2">Create & export Unity .mat files</span>
-          </div>
-          {expandedSection === 'material' ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-        </button>
-        {expandedSection === 'material' && (
-          <div className="px-4 pb-4">
-            <p className="text-xs text-surface-500 mb-4">
-              Design Unity materials visually — adjust properties, preview with a live material ball, then export as a valid Unity <code className="font-mono">.mat</code> YAML file ready to drop into your project.
-            </p>
-            <MaterialMaker />
-          </div>
-        )}
-      </section>
-
       {/* ── Asset Library ── */}
       <section className="glass-panel-solid">
         <button onClick={() => toggleSection('assets')} className="w-full flex items-center justify-between p-4">
@@ -526,25 +392,6 @@ export default function AvatarEditor() {
         )}
       </section>
 
-      {/* ── Unity Editor Tools ── */}
-      <section className="glass-panel-solid">
-        <button onClick={() => toggleSection('unity-tools')} className="w-full flex items-center justify-between p-4">
-          <div className="flex items-center gap-2">
-            <Wrench size={18} className="text-green-400" />
-            <h2 className="text-lg font-semibold">Unity Editor Tools</h2>
-            <span className="text-xs text-surface-500 ml-2">{unityTools.length} tools</span>
-          </div>
-          {expandedSection === 'unity-tools' ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-        </button>
-        {expandedSection === 'unity-tools' && (
-          <div className="px-4 pb-4">
-            <div className="mb-4 p-3 rounded-lg bg-green-500/8 border border-green-500/20 text-xs text-green-300">
-              <strong>How to use:</strong> Download any <code className="font-mono">.cs</code> file → place it in an <code className="font-mono">Editor/</code> folder inside your Unity project → tools will appear in Unity's top menu under <strong>VRC Studio Tools</strong>.
-            </div>
-            <UnityToolsSection />
-          </div>
-        )}
-      </section>
     </div>
   );
 }
