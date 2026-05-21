@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Plus, Trash2, Copy, Download, Save, ChevronDown, Edit2, Check, X } from 'lucide-react';
+import { Trash2, Copy, Download, Save, Edit2, Check, X } from 'lucide-react';
 import {
   MaterialSettings, SavedMaterial, DEFAULT_MATERIAL_SETTINGS,
   exportUnityMaterial, exportMaterialJSON, downloadMaterialFile,

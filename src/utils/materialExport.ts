@@ -95,11 +95,14 @@ export function exportUnityMaterial(mat: SavedMaterial): string {
     shaderName = 'Custom/Shader';
   }
 
+  // Unity's Standard shader uses exactly one render-mode keyword, and they
+  // are mutually exclusive: Cutout -> _ALPHATEST_ON, Fade -> _ALPHABLEND_ON,
+  // Transparent -> _ALPHAPREMULTIPLY_ON, Opaque -> none.
   const keywords: string[] = [];
   if (s.emissionEnabled) keywords.push('_EMISSION');
-  if (s.renderMode === 'Fade' || s.renderMode === 'Transparent') keywords.push('_ALPHAPREMULTIPLY_ON');
-  if (s.renderMode !== 'Opaque') keywords.push('_ALPHABLEND_ON');
   if (s.renderMode === 'Cutout') keywords.push('_ALPHATEST_ON');
+  else if (s.renderMode === 'Fade') keywords.push('_ALPHABLEND_ON');
+  else if (s.renderMode === 'Transparent') keywords.push('_ALPHAPREMULTIPLY_ON');
 
   const renderMode = RENDER_MODE_MAP[s.renderMode];
   const srcBlend = SRC_BLEND_MAP[s.renderMode];

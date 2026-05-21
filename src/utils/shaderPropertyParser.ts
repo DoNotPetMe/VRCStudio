@@ -22,12 +22,15 @@ export function parseShaderProperties(code: string): ShaderProp[] {
   const block = propsMatch[1];
   const props: ShaderProp[] = [];
 
-  // Match property lines: _Name ("Label", TypeExpr) = DefaultVal
-  const lineRe = /^\s*(\w+)\s*\("([^"]+)",\s*([\w\s\[\](),.-]+)\)\s*=\s*(.+)$/gm;
+  // Match property lines, with optional Unity material-property attributes:
+  //   [HDR][NoScaleOffset] _Name ("Label", TypeExpr) = DefaultVal
+  // Group 1 = the bracketed attribute prefix (may be empty), 2 = name,
+  // 3 = label, 4 = type expression, 5 = default value.
+  const lineRe = /^\s*((?:\[[^\]]+\]\s*)*)(\w+)\s*\("([^"]+)",\s*([\w\s\[\](),.-]+)\)\s*=\s*(.+)$/gm;
   let m: RegExpExecArray | null;
 
   while ((m = lineRe.exec(block)) !== null) {
-    const [, name, label, typeRaw, defaultRaw] = m;
+    const [, attrs, name, label, typeRaw, defaultRaw] = m;
     const typeStr = typeRaw.trim();
     const typeLC = typeStr.toLowerCase();
 
@@ -42,7 +45,9 @@ export function parseShaderProperties(code: string): ShaderProp[] {
         default: parseFloat(defaultRaw.trim()) || 0,
       });
     } else if (/color/.test(typeLC)) {
-      const hdr = /\[hdr\]/i.test(typeStr);
+      // [HDR] is an attribute prefix before the property name, not part
+      // of the type expression — check the captured attribute group.
+      const hdr = /\[hdr\]/i.test(attrs);
       const colorM = defaultRaw.match(/\(\s*([\d.eE+-]+)\s*,\s*([\d.eE+-]+)\s*,\s*([\d.eE+-]+)\s*,\s*([\d.eE+-]+)\s*\)/);
       props.push({
         name,
@@ -95,15 +100,19 @@ export function injectPropertyDefaults(
 ): string {
   let result = code;
   for (const [name, value] of Object.entries(overrides)) {
+    // The type expression can itself contain parentheses (e.g.
+    // `Range(0, 1)`), so we can't use `[^)]*` for it — that stops at the
+    // inner paren and the match fails. Match non-greedily up to the
+    // `) = ` that separates the header from the default value.
     if (Array.isArray(value)) {
       const [r, g, b, a] = value as number[];
       result = result.replace(
-        new RegExp(`(${name}\\s*\\("[^"]*",\\s*[^)]*\\)\\s*=\\s*)\\([^)\\n]*\\)`),
+        new RegExp(`(${name}\\s*\\("[^"]*",[\\s\\S]*?\\)\\s*=\\s*)\\([^)\\n]*\\)`),
         `$1(${r.toFixed(4)}, ${g.toFixed(4)}, ${b.toFixed(4)}, ${a.toFixed(4)})`
       );
     } else {
       result = result.replace(
-        new RegExp(`(${name}\\s*\\("[^"]*",\\s*[^)]*\\)\\s*=\\s*)[\\d.eE+-]+`),
+        new RegExp(`(${name}\\s*\\("[^"]*",[\\s\\S]*?\\)\\s*=\\s*)[\\d.eE+-]+`),
         `$1${value}`
       );
     }
