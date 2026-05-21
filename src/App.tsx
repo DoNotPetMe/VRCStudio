@@ -29,7 +29,6 @@ import AvatarEditor from './pages/AvatarEditor';
 import Reports from './pages/Reports';
 import OSCPage from './pages/OSC';
 import InstanceAvatars from './pages/InstanceAvatars';
-import EmojiMaker from './pages/EmojiMaker';
 import LoadingSpinner from './components/common/LoadingSpinner';
 import { useLocationTracking } from './hooks/useLocationTracking';
 import { useTrayStatus } from './hooks/useTrayStatus';
@@ -161,7 +160,6 @@ function AppShell() {
         <Route path="/reports" element={<Reports />} />
         <Route path="/osc" element={<OSCPage />} />
         <Route path="/instance-avatars" element={<InstanceAvatars />} />
-        <Route path="/emoji-maker" element={<EmojiMaker />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

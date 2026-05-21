@@ -64,7 +64,6 @@ const ROUTES: Record<string, string> = {
   '/instance-avatars': 'instance-avatars',
   '/osc':              'osc',
   '/avatar-editor':    'avatar-editor',
-  '/emoji-maker':      'emoji-maker',
   '/activity':         'activity',
   '/friend-analytics': 'analytics',
   '/events':           'events',

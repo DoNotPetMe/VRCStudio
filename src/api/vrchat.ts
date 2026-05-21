@@ -47,9 +47,9 @@ class VRChatAPI {
   }
 
   /**
-   * Exposed for callers (e.g. the emoji uploader) that need to make
-   * arbitrary authenticated requests to /api/1/*. Path is appended after
-   * /api/1 — pass e.g. '/file', '/emoji', not '/api/1/file'.
+   * Exposed for callers that need to make arbitrary authenticated
+   * requests to /api/1/*. Path is appended after /api/1 — pass e.g.
+   * '/users/usr_xxx', not '/api/1/users/usr_xxx'.
    */
   async rawRequest<T = any>(path: string, options: RequestInit = {}): Promise<T> {
     return this.request<T>(path, options);

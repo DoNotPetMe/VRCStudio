@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Users, Globe, Shirt, Star, Settings,
   LogOut, Bell, Search, History, UsersRound, FileText, Camera,
   ChevronDown, Flame, BarChart3, CalendarPlus, Paintbrush, Flag, Radio,
-  UserCheck, Smile,
+  UserCheck,
 } from 'lucide-react';
 import { useState } from 'react';
 import { useAuthStore } from '../../stores/authStore';
@@ -38,7 +38,6 @@ const browseNavItems = [
 const toolsNavItems = [
   { to: '/osc',              icon: Radio,        label: 'OSC',               hackerLabel: 'osc.listen(9001)' },
   { to: '/avatar-editor',    icon: Paintbrush,   label: 'Avatar Editor',     hackerLabel: 'avatar.edit()' },
-  { to: '/emoji-maker',      icon: Smile,        label: 'Emoji Maker',       hackerLabel: 'emoji.build()' },
   { to: '/activity',         icon: Flame,        label: 'Activity Map',      hackerLabel: 'metrics.heatmap' },
   { to: '/friend-analytics', icon: BarChart3,    label: 'Analytics',         hackerLabel: 'metrics.compute()' },
   { to: '/events',           icon: CalendarPlus, label: 'Events',            hackerLabel: 'cron.schedule' },
