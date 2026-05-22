@@ -1,16 +1,28 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
-  Radio, MessageSquare, Sliders, Zap, Send, Power, Settings as SettingsIcon,
-  AlertCircle, Trash2, ArrowDownToLine, Copy, Check, RotateCw, ChevronDown,
-  ChevronRight, Clock, Activity, Plus, Minus,
+  MessageSquare, Send, Power, AlertCircle, Trash2, Clock, Sparkles,
+  Repeat, Plus, X, ChevronDown, ChevronRight, Check, Copy, Wand2,
+  History, Pencil, Settings as SettingsIcon,
 } from 'lucide-react';
-import { useOSCStore, composeChatboxStatus, OSCMessage } from '../stores/oscStore';
+import { useOSCStore, composeChatboxStatus } from '../stores/oscStore';
 
-type Tab = 'chatbox' | 'params' | 'presets' | 'monitor' | 'config';
+type Send = (address: string, args?: any[]) => Promise<void>;
+
+const CHATBOX_MAX = 144;
+
+/** Send a string to VRChat's in-world chatbox bubble. */
+function sendToChatbox(send: Send, text: string, silent = true) {
+  return send('/chatbox/input', [
+    { type: 's', value: text.slice(0, CHATBOX_MAX) },
+    { type: 'T', value: true },                    // bypass keyboard — send immediately
+    { type: silent ? 'F' : 'T', value: !silent },  // notification SFX
+  ]);
+}
+
+// ─── Page ────────────────────────────────────────────────────────────────────
 
 export default function OSCPage() {
-  const { connected, config, parameters, log, start, stop, send, setConfig, clearLog, clearParameters } = useOSCStore();
-  const [tab, setTab] = useState<Tab>('chatbox');
+  const { connected, config, start, stop, send, setConfig } = useOSCStore();
   const [error, setError] = useState<string | null>(null);
 
   // Auto-start if configured
@@ -31,14 +43,14 @@ export default function OSCPage() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto space-y-4 animate-fade-in">
+    <div className="max-w-3xl mx-auto space-y-4 animate-fade-in">
       <div className="flex items-end justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Radio size={22} className="text-accent-400" /> OSC
+            <MessageSquare size={22} className="text-accent-400" /> OSC Chatbox
           </h1>
           <p className="text-xs text-surface-500 mt-1">
-            Bidirectional OSC bridge for VRChat &middot; sends to <span className="text-surface-400">{config.sendHost}:{config.sendPort}</span> &middot; listens on <span className="text-surface-400">:{config.recvPort}</span>
+            Send messages straight to your in-world VRChat chat bubble &middot; via OSC to <span className="text-surface-400">{config.sendHost}:{config.sendPort}</span>
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -68,40 +80,30 @@ export default function OSCPage() {
       {!window.electronAPI && (
         <div className="glass-panel-solid border border-amber-500/30 bg-amber-500/10 p-3 rounded-lg flex items-start gap-2">
           <AlertCircle size={16} className="text-amber-500 flex-shrink-0 mt-0.5" />
-          <p className="text-xs text-amber-400">OSC requires the desktop app — running in a browser, send/receive will not work.</p>
+          <p className="text-xs text-amber-400">OSC requires the desktop app — running in a browser, sending will not work.</p>
         </div>
       )}
 
-      <div className="flex gap-1 border-b border-surface-800 pb-px overflow-x-auto">
-        {([
-          { key: 'chatbox' as Tab,  icon: MessageSquare,   label: 'Chatbox' },
-          { key: 'params' as Tab,   icon: Sliders,         label: 'Parameters' },
-          { key: 'presets' as Tab,  icon: Zap,             label: 'Triggers' },
-          { key: 'monitor' as Tab,  icon: ArrowDownToLine, label: `Monitor${log.length > 0 ? ` (${log.length})` : ''}` },
-          { key: 'config' as Tab,   icon: SettingsIcon,    label: 'Config' },
-        ]).map(({ key, icon: Icon, label }) => (
-          <button
-            key={key}
-            onClick={() => setTab(key)}
-            className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
-              tab === key ? 'tab-active' : 'tab-inactive'
-            }`}
-          >
-            <Icon size={14} />{label}
-          </button>
-        ))}
-      </div>
+      {!connected && window.electronAPI && (
+        <div className="glass-panel-solid border border-surface-700 p-3 rounded-lg flex items-start gap-2">
+          <Power size={15} className="text-surface-500 flex-shrink-0 mt-0.5" />
+          <p className="text-xs text-surface-400">
+            OSC is stopped. Hit <strong className="text-surface-300">Start</strong> above, and make sure OSC is enabled in VRChat
+            (<span className="text-surface-300">Action Menu → Options → OSC → Enabled</span>).
+          </p>
+        </div>
+      )}
 
-      {tab === 'chatbox' && <ChatboxTab connected={connected} send={send} />}
-      {tab === 'params' && <ParametersTab parameters={parameters} send={send} clear={clearParameters} />}
-      {tab === 'presets' && <PresetsTab connected={connected} send={send} />}
-      {tab === 'monitor' && <MonitorTab log={log} clear={clearLog} send={send} />}
-      {tab === 'config' && <ConfigTab config={config} setConfig={setConfig} connected={connected} restart={async () => { await stop(); await start(); }} />}
+      <ComposeCard connected={connected} send={send} />
+      <QuickPhrases connected={connected} send={send} />
+      <LiveStatusCard connected={connected} />
+      <DecoratorCard connected={connected} send={send} />
+      <ConnectionCard config={config} setConfig={setConfig} connected={connected} restart={async () => { await stop(); await start(); }} />
     </div>
   );
 }
 
-// ─── Shared bits ─────────────────────────────────────────────────────────────
+// ─── Shared ──────────────────────────────────────────────────────────────────
 
 function Switch({ checked, onChange, disabled }: {
   checked: boolean;
@@ -126,42 +128,62 @@ function Switch({ checked, onChange, disabled }: {
   );
 }
 
-// ─── Chatbox ────────────────────────────────────────────────────────────────
+function CardHeader({ icon: Icon, title, hint, right }: {
+  icon: typeof Clock;
+  title: string;
+  hint?: string;
+  right?: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <div className="flex items-center gap-2 min-w-0">
+        <Icon size={15} className="text-accent-400 flex-shrink-0" />
+        <span className="text-sm font-semibold">{title}</span>
+        {hint && <span className="text-[11px] text-surface-500 truncate hidden sm:inline">{hint}</span>}
+      </div>
+      {right}
+    </div>
+  );
+}
 
-function ChatboxTab({ connected, send }: { connected: boolean; send: (a: string, args?: any[]) => Promise<void> }) {
+// ─── Compose ─────────────────────────────────────────────────────────────────
+
+const RECENT_KEY = 'vrcstudio_osc_recent';
+
+function loadRecent(): string[] {
+  try { const r = localStorage.getItem(RECENT_KEY); if (r) return JSON.parse(r); } catch {}
+  return [];
+}
+function saveRecent(v: string[]) {
+  try { localStorage.setItem(RECENT_KEY, JSON.stringify(v)); } catch {}
+}
+
+function ComposeCard({ connected, send }: { connected: boolean; send: Send }) {
   const [text, setText] = useState('');
   const [silent, setSilent] = useState(true);
   const [showTyping, setShowTyping] = useState(false);
+  const [recent, setRecent] = useState<string[]>(loadRecent);
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const cb = useOSCStore(s => s.chatboxStatus);
-  const setChatboxStatus = useOSCStore(s => s.setChatboxStatus);
+  const pushRecent = (msg: string) => {
+    setRecent(prev => {
+      const next = [msg, ...prev.filter(m => m !== msg)].slice(0, 8);
+      saveRecent(next);
+      return next;
+    });
+  };
 
-  // Tick once a second so the live preview clock stays current.
-  const [, forceTick] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => forceTick(n => n + 1), 1000);
-    return () => clearInterval(t);
-  }, []);
-  const preview = composeChatboxStatus(cb);
-
-  const sendMsg = async (asTyping = false) => {
-    if (!asTyping && !text.trim()) return;
-    if (asTyping) {
-      await send('/chatbox/typing', [{ type: 'T', value: true }]);
-      return;
-    }
-    await send('/chatbox/input', [
-      { type: 's', value: text.trim() },
-      { type: 'T', value: true },                  // bypass keyboard (send immediately)
-      { type: silent ? 'F' : 'T', value: !silent }, // sfx
-    ]);
+  const sendMsg = async () => {
+    const t = text.trim();
+    if (!connected || !t) return;
+    await sendToChatbox(send, t, silent);
+    pushRecent(t);
     setText('');
   };
 
   const onChange = (v: string) => {
     setText(v);
-    if (showTyping) {
+    if (showTyping && connected) {
       send('/chatbox/typing', [{ type: 'T', value: true }]);
       if (typingTimer.current) clearTimeout(typingTimer.current);
       typingTimer.current = setTimeout(() => {
@@ -170,7 +192,8 @@ function ChatboxTab({ connected, send }: { connected: boolean; send: (a: string,
     }
   };
 
-  const clear = async () => {
+  const clearChatbox = async () => {
+    if (!connected) return;
     await send('/chatbox/input', [
       { type: 's', value: '' },
       { type: 'T', value: true },
@@ -178,621 +201,434 @@ function ChatboxTab({ connected, send }: { connected: boolean; send: (a: string,
     ]);
   };
 
-  const QUICK = ['👋 Hi!', 'AFK', 'BRB', 'gn ✨', '🎉', 'lol', '💜', '✨ here'];
-
   return (
-    <div className="space-y-4">
-      <div className="glass-panel-solid p-5 space-y-4">
-        <div>
-          <label className="text-xs font-semibold text-surface-400 uppercase tracking-wider">Send to in-world chatbox</label>
-          <p className="text-[11px] text-surface-500 mt-1">Goes through VRChat's avatar chat bubble at /chatbox/input.</p>
-        </div>
+    <div className="glass-panel-solid p-5 space-y-3">
+      <CardHeader icon={MessageSquare} title="Compose" hint="goes straight to your chat bubble" />
 
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={text}
-            onChange={e => onChange(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMsg(); } }}
-            maxLength={144}
-            placeholder="Type a message... (max 144 chars)"
-            className="flex-1 bg-surface-900 border border-surface-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent-500"
-            disabled={!connected}
-          />
-          <button onClick={() => sendMsg()} disabled={!connected || !text.trim()} className="btn-primary text-sm flex items-center gap-1.5">
-            <Send size={14} /> Send
-          </button>
-        </div>
+      <div className="flex gap-2">
+        <input
+          type="text"
+          value={text}
+          onChange={e => onChange(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMsg(); } }}
+          maxLength={CHATBOX_MAX}
+          placeholder={`Type a message... (max ${CHATBOX_MAX} chars)`}
+          className="flex-1 bg-surface-900 border border-surface-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent-500"
+          disabled={!connected}
+        />
+        <button onClick={sendMsg} disabled={!connected || !text.trim()} className="btn-primary text-sm flex items-center gap-1.5">
+          <Send size={14} /> Send
+        </button>
+      </div>
 
-        <div className="flex items-center justify-between flex-wrap gap-3 text-xs">
-          <div className="flex items-center gap-3">
-            <label className="flex items-center gap-2 text-surface-400 cursor-pointer">
-              <input type="checkbox" checked={silent} onChange={e => setSilent(e.target.checked)} className="accent-accent-500" />
-              Silent (no SFX)
-            </label>
-            <label className="flex items-center gap-2 text-surface-400 cursor-pointer">
-              <input type="checkbox" checked={showTyping} onChange={e => setShowTyping(e.target.checked)} className="accent-accent-500" />
-              Show typing indicator
-            </label>
+      <div className="flex items-center justify-between flex-wrap gap-3 text-xs">
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-2 text-surface-400 cursor-pointer">
+            <input type="checkbox" checked={silent} onChange={e => setSilent(e.target.checked)} className="accent-accent-500" />
+            Silent (no SFX)
+          </label>
+          <label className="flex items-center gap-2 text-surface-400 cursor-pointer">
+            <input type="checkbox" checked={showTyping} onChange={e => setShowTyping(e.target.checked)} className="accent-accent-500" />
+            Typing indicator
+          </label>
+        </div>
+        <span className="text-surface-500 tabular-nums">{text.length} / {CHATBOX_MAX}</span>
+        <button onClick={clearChatbox} disabled={!connected} className="btn-ghost text-xs flex items-center gap-1">
+          <Trash2 size={11} /> Clear chatbox
+        </button>
+      </div>
+
+      {recent.length > 0 && (
+        <div className="border-t border-surface-800 pt-3">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[10px] font-semibold text-surface-500 uppercase tracking-wider flex items-center gap-1">
+              <History size={11} /> Recent
+            </span>
+            <button
+              onClick={() => { setRecent([]); saveRecent([]); }}
+              className="text-[10px] text-surface-600 hover:text-surface-400"
+            >
+              clear
+            </button>
           </div>
-          <span className="text-surface-500 tabular-nums">{text.length} / 144</span>
-          <button onClick={clear} disabled={!connected} className="btn-ghost text-xs flex items-center gap-1">
-            <Trash2 size={11} /> Clear chatbox
-          </button>
-        </div>
-
-        <div>
-          <div className="text-[10px] font-semibold text-surface-500 uppercase tracking-wider mb-2">Quick send</div>
           <div className="flex flex-wrap gap-1.5">
-            {QUICK.map(q => (
+            {recent.map((r, i) => (
               <button
-                key={q}
-                onClick={() => { setText(q); setTimeout(() => sendMsg(), 0); }}
-                disabled={!connected}
-                className="px-2.5 py-1 text-xs bg-surface-800 hover:bg-surface-700 rounded transition-colors"
+                key={i}
+                onClick={() => setText(r)}
+                title="Click to load into the box"
+                className="px-2.5 py-1 text-xs bg-surface-800 hover:bg-surface-700 rounded transition-colors max-w-[220px] truncate"
               >
-                {q}
+                {r}
               </button>
             ))}
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Quick phrases ───────────────────────────────────────────────────────────
+
+const PHRASES_KEY = 'vrcstudio_osc_quick_phrases';
+const DEFAULT_PHRASES = [
+  '👋 Hi!', 'AFK', 'BRB', 'gn ✨', 'ty! 💜', 'lol', 'omw',
+  '(ノ◕ヮ◕)ノ*:･ﾟ✧', 'ヽ(•‿•)ノ', '(´｡• ᵕ •｡`)', '♪~ ᕕ(ᐛ)ᕗ', '( ˘ ³˘)♥',
+];
+
+function loadPhrases(): string[] {
+  try { const r = localStorage.getItem(PHRASES_KEY); if (r) return JSON.parse(r); } catch {}
+  return DEFAULT_PHRASES;
+}
+function savePhrases(v: string[]) {
+  try { localStorage.setItem(PHRASES_KEY, JSON.stringify(v)); } catch {}
+}
+
+function QuickPhrases({ connected, send }: { connected: boolean; send: Send }) {
+  const [phrases, setPhrases] = useState<string[]>(loadPhrases);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+
+  const update = (next: string[]) => { setPhrases(next); savePhrases(next); };
+
+  const add = () => {
+    const t = draft.trim();
+    if (!t || phrases.includes(t)) { setDraft(''); return; }
+    update([...phrases, t]);
+    setDraft('');
+  };
+
+  return (
+    <div className="glass-panel-solid p-5 space-y-3">
+      <CardHeader
+        icon={Sparkles}
+        title="Quick phrases"
+        hint={editing ? 'tap × to remove' : 'one tap to send'}
+        right={
+          <button
+            onClick={() => setEditing(e => !e)}
+            className={`text-xs flex items-center gap-1 px-2 py-1 rounded transition-colors ${
+              editing ? 'bg-accent-500/15 text-accent-400' : 'btn-ghost'
+            }`}
+          >
+            <Pencil size={11} /> {editing ? 'Done' : 'Edit'}
+          </button>
+        }
+      />
+
+      <div className="flex flex-wrap gap-1.5">
+        {phrases.map((p, i) => (
+          <div key={i} className="flex items-center">
+            <button
+              onClick={() => { if (connected && !editing) sendToChatbox(send, p); }}
+              disabled={!connected && !editing}
+              className={`px-2.5 py-1 text-xs bg-surface-800 rounded transition-colors ${
+                editing ? 'rounded-r-none' : 'hover:bg-surface-700'
+              } ${!connected && !editing ? 'opacity-50' : ''}`}
+            >
+              {p}
+            </button>
+            {editing && (
+              <button
+                onClick={() => update(phrases.filter((_, j) => j !== i))}
+                className="px-1.5 py-1 bg-rose-500/15 text-rose-400 hover:bg-rose-500/25 rounded-r transition-colors"
+              >
+                <X size={12} />
+              </button>
+            )}
+          </div>
+        ))}
+        {phrases.length === 0 && <span className="text-xs text-surface-600">No phrases — add some below.</span>}
       </div>
 
-      {/* ── Live status auto-sender ── */}
-      <div className="glass-panel-solid p-5 space-y-3">
-        <div className="flex items-center justify-between gap-3">
+      {editing && (
+        <div className="flex gap-2 pt-1">
+          <input
+            value={draft}
+            onChange={e => setDraft(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); add(); } }}
+            maxLength={CHATBOX_MAX}
+            placeholder="New phrase or emoji..."
+            className="flex-1 bg-surface-900 border border-surface-700 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-accent-500"
+          />
+          <button onClick={add} disabled={!draft.trim()} className="btn-secondary text-sm flex items-center gap-1">
+            <Plus size={13} /> Add
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Live status ─────────────────────────────────────────────────────────────
+
+function LiveStatusCard({ connected }: { connected: boolean }) {
+  const cb = useOSCStore(s => s.chatboxStatus);
+  const setChatboxStatus = useOSCStore(s => s.setChatboxStatus);
+
+  // Tick once a second so the preview clock — and message rotation — stay live.
+  const [, forceTick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => forceTick(n => n + 1), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  const interval = Math.max(3, cb.intervalSec);
+  const previewIndex = Math.floor(Date.now() / 1000 / interval);
+  const preview = composeChatboxStatus(cb, previewIndex);
+  const msgCount = cb.messages.filter(m => m.trim()).length;
+
+  return (
+    <div className="glass-panel-solid p-5 space-y-3">
+      <CardHeader
+        icon={Clock}
+        title="Live status"
+        hint="auto-updates on a timer"
+        right={
           <div className="flex items-center gap-2">
-            <Clock size={15} className="text-accent-400" />
-            <span className="text-sm font-semibold">Live status</span>
             {cb.enabled && (
               <span className="text-[10px] text-green-400 bg-green-500/10 px-1.5 py-0.5 rounded-full">
                 every {cb.intervalSec}s
               </span>
             )}
+            <Switch checked={cb.enabled} onChange={v => setChatboxStatus({ enabled: v })} />
           </div>
-          <Switch checked={cb.enabled} onChange={v => setChatboxStatus({ enabled: v })} />
-        </div>
-        <p className="text-[11px] text-surface-500">
-          Keeps your chatbox updated on a timer — a live clock, the date, your session
-          uptime, or a custom note. Runs the whole time VRC Studio is open, even on other pages.
-        </p>
+        }
+      />
+      <p className="text-[11px] text-surface-500">
+        Keeps your chatbox fed with a live clock, the date, your session uptime, or a rotating
+        message list. Runs the whole time VRC Studio is open — even on other pages.
+      </p>
 
-        <div className="bg-surface-900 border border-surface-800 rounded-lg px-3 py-2">
-          <div className="text-[10px] text-surface-500 uppercase tracking-wider mb-0.5">Preview</div>
-          <div className="text-sm text-surface-100 break-words min-h-[1.25rem]">
-            {preview || <span className="text-surface-600">(nothing enabled)</span>}
+      <div className="bg-surface-900 border border-surface-800 rounded-lg px-3 py-2">
+        <div className="text-[10px] text-surface-500 uppercase tracking-wider mb-0.5">Preview</div>
+        <div className="text-sm text-surface-100 break-words min-h-[1.25rem]">
+          {preview || <span className="text-surface-600">(nothing enabled)</span>}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+        <label className="flex items-center gap-2 text-xs text-surface-300 cursor-pointer">
+          <input type="checkbox" checked={cb.showClock} onChange={e => setChatboxStatus({ showClock: e.target.checked })} className="accent-accent-500" />
+          Clock
+        </label>
+        <label className={`flex items-center gap-2 text-xs cursor-pointer ${cb.showClock ? 'text-surface-300' : 'text-surface-600'}`}>
+          <input type="checkbox" checked={cb.clock24h} disabled={!cb.showClock} onChange={e => setChatboxStatus({ clock24h: e.target.checked })} className="accent-accent-500" />
+          24-hour time
+        </label>
+        <label className="flex items-center gap-2 text-xs text-surface-300 cursor-pointer">
+          <input type="checkbox" checked={cb.showDate} onChange={e => setChatboxStatus({ showDate: e.target.checked })} className="accent-accent-500" />
+          Date
+        </label>
+        <label className="flex items-center gap-2 text-xs text-surface-300 cursor-pointer">
+          <input type="checkbox" checked={cb.showUptime} onChange={e => setChatboxStatus({ showUptime: e.target.checked })} className="accent-accent-500" />
+          Session uptime
+        </label>
+      </div>
+
+      <div className="border-t border-surface-800 pt-3 space-y-2">
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-xs text-surface-300 flex items-center gap-1.5">
+            <Repeat size={12} className="text-accent-400" />
+            Rotate through a message list
+          </span>
+          <Switch checked={cb.rotateMessages} onChange={v => setChatboxStatus({ rotateMessages: v })} />
+        </div>
+
+        {cb.rotateMessages ? (
+          <div>
+            <textarea
+              value={cb.messages.join('\n')}
+              onChange={e => setChatboxStatus({ messages: e.target.value.split('\n') })}
+              rows={4}
+              placeholder={'One message per line...\nHello there!\nHaving a great day ✨\nask me anything'}
+              className="w-full bg-surface-900 border border-surface-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent-500 resize-y"
+            />
+            <p className="text-[10px] text-surface-600 mt-1">
+              {msgCount} message{msgCount !== 1 ? 's' : ''} — one shows each cycle, then it loops.
+            </p>
           </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-x-4 gap-y-2">
-          <label className="flex items-center gap-2 text-xs text-surface-300 cursor-pointer">
-            <input type="checkbox" checked={cb.showClock} onChange={e => setChatboxStatus({ showClock: e.target.checked })} className="accent-accent-500" />
-            Clock
-          </label>
-          <label className={`flex items-center gap-2 text-xs cursor-pointer ${cb.showClock ? 'text-surface-300' : 'text-surface-600'}`}>
-            <input type="checkbox" checked={cb.clock24h} disabled={!cb.showClock} onChange={e => setChatboxStatus({ clock24h: e.target.checked })} className="accent-accent-500" />
-            24-hour time
-          </label>
-          <label className="flex items-center gap-2 text-xs text-surface-300 cursor-pointer">
-            <input type="checkbox" checked={cb.showDate} onChange={e => setChatboxStatus({ showDate: e.target.checked })} className="accent-accent-500" />
-            Date
-          </label>
-          <label className="flex items-center gap-2 text-xs text-surface-300 cursor-pointer">
-            <input type="checkbox" checked={cb.showUptime} onChange={e => setChatboxStatus({ showUptime: e.target.checked })} className="accent-accent-500" />
-            Session uptime
-          </label>
-        </div>
-
-        <div className="flex gap-2 flex-wrap">
+        ) : (
           <input
             value={cb.customText}
             onChange={e => setChatboxStatus({ customText: e.target.value })}
             maxLength={80}
             placeholder="Custom message (optional)"
-            className="flex-1 min-w-[200px] bg-surface-900 border border-surface-700 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-accent-500"
+            className="w-full bg-surface-900 border border-surface-700 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-accent-500"
           />
-          <label className="flex items-center gap-1.5 text-xs text-surface-400">
-            Every
-            <input
-              type="number" min={3} max={60}
-              value={cb.intervalSec}
-              onChange={e => setChatboxStatus({ intervalSec: parseInt(e.target.value, 10) || 5 })}
-              className="w-14 bg-surface-900 border border-surface-700 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:border-accent-500"
-            />
-            s
-          </label>
-        </div>
-        {cb.enabled && !connected && (
-          <p className="text-[11px] text-amber-400">OSC is stopped — status will start sending once you connect.</p>
         )}
-      </div>
-    </div>
-  );
-}
 
-// ─── Parameters ──────────────────────────────────────────────────────────────
-
-const BUILTIN_RE = /^(VRMode|TrackingType|MuteSelf|InStation|Seated|AFK|Earmuffs|IsLocal|Upright|Grounded|Voice|Viseme|Velocity[XYZ]|GestureLeft|GestureRight|GestureLeftWeight|GestureRightWeight|AngularY|AvatarVersion|ScaleModified|ScaleFactor|EyeHeightAsMeters|EyeHeightAsPercent)$/;
-
-function ParametersTab({ parameters, send, clear }: {
-  parameters: Record<string, any>;
-  send: (a: string, args?: any[]) => Promise<void>;
-  clear: () => Promise<void>;
-}) {
-  const [filter, setFilter] = useState('');
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
-
-  const grouped = useMemo(() => {
-    const q = filter.toLowerCase();
-    const entries = Object.entries(parameters).filter(([addr]) =>
-      !q || addr.toLowerCase().includes(q)
-    );
-    const out: Record<string, [string, any][]> = { 'Custom': [], 'Built-in': [] };
-    for (const [addr, val] of entries) {
-      const name = addr.replace('/avatar/parameters/', '');
-      out[BUILTIN_RE.test(name) ? 'Built-in' : 'Custom'].push([addr, val]);
-    }
-    out['Built-in'].sort();
-    out['Custom'].sort();
-    return out;
-  }, [parameters, filter]);
-
-  const totalCount = Object.keys(parameters).length;
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-2 flex-wrap">
-        <input
-          value={filter}
-          onChange={e => setFilter(e.target.value)}
-          placeholder={`Filter ${totalCount} parameter${totalCount !== 1 ? 's' : ''}...`}
-          className="flex-1 bg-surface-900 border border-surface-700 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-accent-500 min-w-0"
-        />
-        <button onClick={clear} className="btn-ghost text-xs flex items-center gap-1">
-          <Trash2 size={12} /> Clear
-        </button>
-      </div>
-
-      {totalCount === 0 && (
-        <div className="glass-panel-solid p-8 text-center text-surface-500 text-sm">
-          No parameters received yet. Make sure VRChat is running with OSC enabled, then change avatars or interact in-world to populate this list.
-        </div>
-      )}
-
-      {totalCount > 0 && (
-        <p className="text-[11px] text-surface-500 -mt-1">
-          Live values from your avatar. Flip a switch, drag a slider or step an int to drive
-          the parameter back into VRChat in real time.
-        </p>
-      )}
-
-      {Object.entries(grouped).map(([group, entries]) => entries.length > 0 && (
-        <div key={group} className="glass-panel-solid overflow-hidden">
-          <button
-            onClick={() => setCollapsed(c => ({ ...c, [group]: !c[group] }))}
-            className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-surface-800/40 transition-colors"
-          >
-            <div className="flex items-center gap-2">
-              {collapsed[group] ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
-              <span className="text-sm font-semibold">{group}</span>
-              <span className="text-[10px] text-surface-500">({entries.length})</span>
-            </div>
-          </button>
-          {!collapsed[group] && (
-            <div className="divide-y divide-surface-800/40">
-              {entries.map(([addr, val]) => (
-                <div key={addr} className="px-4 py-2 flex items-center gap-3 hover:bg-surface-800/30 transition-colors">
-                  <code className="text-xs text-surface-300 flex-1 truncate min-w-0" title={addr}>
-                    {addr.replace('/avatar/parameters/', '')}
-                  </code>
-                  <ParamControl addr={addr} value={val} send={send} />
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function ParamControl({ addr, value, send }: {
-  addr: string;
-  value: any;
-  send: (a: string, args?: any[]) => Promise<void>;
-}) {
-  if (value === null || value === undefined) {
-    return <span className="text-xs text-surface-600">—</span>;
-  }
-
-  if (typeof value === 'boolean') {
-    return (
-      <div className="flex items-center gap-2">
-        <span className={`text-[10px] tabular-nums w-7 text-right ${value ? 'text-green-400' : 'text-surface-500'}`}>
-          {value ? 'on' : 'off'}
-        </span>
-        <Switch checked={value} onChange={v => send(addr, [v])} />
-      </div>
-    );
-  }
-
-  if (typeof value === 'number') {
-    if (Number.isInteger(value)) {
-      return (
-        <div className="flex items-center gap-1.5">
-          <button
-            onClick={() => send(addr, [value - 1])}
-            className="w-6 h-6 rounded bg-surface-800 hover:bg-surface-700 flex items-center justify-center transition-colors"
-          >
-            <Minus size={12} />
-          </button>
-          <code className="text-xs text-surface-100 tabular-nums w-10 text-center">{value}</code>
-          <button
-            onClick={() => send(addr, [value + 1])}
-            className="w-6 h-6 rounded bg-surface-800 hover:bg-surface-700 flex items-center justify-center transition-colors"
-          >
-            <Plus size={12} />
-          </button>
-        </div>
-      );
-    }
-    if (Math.abs(value) <= 1) {
-      const min = value < 0 ? -1 : 0;
-      return (
-        <div className="flex items-center gap-2">
+        <label className="flex items-center gap-1.5 text-xs text-surface-400 w-fit">
+          Update every
           <input
-            type="range"
-            min={min} max={1} step={0.01}
-            value={value}
-            onChange={e => send(addr, [parseFloat(e.target.value)])}
-            className="w-28 accent-accent-500 cursor-pointer"
+            type="number" min={3} max={60}
+            value={cb.intervalSec}
+            onChange={e => setChatboxStatus({ intervalSec: parseInt(e.target.value, 10) || 5 })}
+            className="w-14 bg-surface-900 border border-surface-700 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:border-accent-500"
           />
-          <code className="text-xs text-surface-200 tabular-nums w-12 text-right">{value.toFixed(2)}</code>
-        </div>
-      );
-    }
-    // Out-of-range floats (Velocity etc.) are telemetry — show value only.
-    return <code className="text-xs text-surface-300 tabular-nums">{value.toFixed(3)}</code>;
-  }
-
-  return <ParamStringControl addr={addr} value={String(value)} send={send} />;
-}
-
-function ParamStringControl({ addr, value, send }: {
-  addr: string;
-  value: string;
-  send: (a: string, args?: any[]) => Promise<void>;
-}) {
-  const [draft, setDraft] = useState(value);
-  useEffect(() => { setDraft(value); }, [value]);
-  return (
-    <input
-      value={draft}
-      onChange={e => setDraft(e.target.value)}
-      onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); send(addr, [draft]); } }}
-      onBlur={() => { if (draft !== value) send(addr, [draft]); }}
-      className="bg-surface-900 border border-surface-700 rounded px-2 py-0.5 text-xs w-40 focus:outline-none focus:border-accent-500"
-    />
-  );
-}
-
-// ─── Triggers (presets) ─────────────────────────────────────────────────────
-
-interface Preset {
-  id: string;
-  label: string;
-  address: string;
-  args: any[];
-  hold?: number; // ms before sending the "off" follow-up (for buttons)
-  offArgs?: any[];
-}
-
-const PRESET_KEY = 'vrcstudio_osc_presets';
-
-function loadPresets(): Preset[] {
-  try {
-    const raw = localStorage.getItem(PRESET_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch {}
-  return [
-    { id: 'wave',   label: 'Wave',         address: '/avatar/parameters/Wave',  args: [true], offArgs: [false], hold: 1500 },
-    { id: 'sit',    label: 'Toggle Sit',   address: '/avatar/parameters/Sit',   args: [true] },
-    { id: 'dance',  label: 'Dance',        address: '/avatar/parameters/Dance', args: [1] },
-    { id: 'voice0', label: 'Mute Voice',   address: '/input/Voice',             args: [0] },
-    { id: 'voice1', label: 'Unmute Voice', address: '/input/Voice',             args: [1] },
-    { id: 'jump',   label: 'Jump',         address: '/input/Jump',              args: [1], offArgs: [0], hold: 100 },
-  ];
-}
-
-function savePresets(p: Preset[]) {
-  try { localStorage.setItem(PRESET_KEY, JSON.stringify(p)); } catch {}
-}
-
-function PresetsTab({ connected, send }: { connected: boolean; send: (a: string, args?: any[]) => Promise<void> }) {
-  const [presets, setPresets] = useState<Preset[]>(loadPresets);
-  const [editing, setEditing] = useState<Preset | null>(null);
-
-  const triggerPreset = async (p: Preset) => {
-    await send(p.address, p.args);
-    if (p.hold && p.offArgs) {
-      setTimeout(() => send(p.address, p.offArgs!), p.hold);
-    }
-  };
-
-  const update = (next: Preset[]) => {
-    setPresets(next);
-    savePresets(next);
-  };
-
-  return (
-    <div className="space-y-4">
-      <p className="text-[11px] text-surface-500">
-        One-click OSC triggers — toggle avatar parameters or fire actions. Use "hold" to
-        auto-release after a delay (great for emotes).
-      </p>
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
-        {presets.map(p => (
-          <div key={p.id} className="glass-panel-solid p-3 flex flex-col gap-2">
-            <button
-              onClick={() => triggerPreset(p)}
-              disabled={!connected}
-              className="flex-1 text-left"
-            >
-              <div className="text-sm font-semibold">{p.label}</div>
-              <code className="text-[10px] text-surface-500 truncate block">{p.address}</code>
-              <code className="text-[10px] text-surface-600">{JSON.stringify(p.args)}{p.hold ? ` → hold ${p.hold}ms` : ''}</code>
-            </button>
-            <div className="flex gap-1">
-              <button
-                onClick={() => triggerPreset(p)}
-                disabled={!connected}
-                className="flex-1 text-xs btn-secondary"
-              >
-                <Zap size={11} className="inline" /> Trigger
-              </button>
-              <button onClick={() => setEditing(p)} className="btn-ghost px-1.5"><SettingsIcon size={11} /></button>
-              <button
-                onClick={() => update(presets.filter(x => x.id !== p.id))}
-                className="btn-ghost px-1.5 text-rose-400 hover:text-rose-300"
-              >
-                <Trash2 size={11} />
-              </button>
-            </div>
-          </div>
-        ))}
-        <button
-          onClick={() => setEditing({ id: `p_${Date.now()}`, label: 'New trigger', address: '/avatar/parameters/', args: [true] })}
-          className="glass-panel border-dashed border-surface-700 p-3 text-sm text-surface-500 hover:text-surface-300 hover:border-accent-500/40 transition-colors"
-        >
-          + New trigger
-        </button>
+          seconds
+        </label>
       </div>
 
-      {editing && (
-        <PresetEditor
-          preset={editing}
-          onClose={() => setEditing(null)}
-          onSave={(p) => {
-            const exists = presets.some(x => x.id === p.id);
-            update(exists ? presets.map(x => x.id === p.id ? p : x) : [...presets, p]);
-            setEditing(null);
-          }}
-        />
+      {cb.enabled && !connected && (
+        <p className="text-[11px] text-amber-400">OSC is stopped — status will start sending once you connect.</p>
       )}
     </div>
   );
 }
 
-function PresetEditor({ preset, onClose, onSave }: { preset: Preset; onClose: () => void; onSave: (p: Preset) => void }) {
-  const [label, setLabel] = useState(preset.label);
-  const [address, setAddress] = useState(preset.address);
-  const [argsJSON, setArgsJSON] = useState(JSON.stringify(preset.args));
-  const [hold, setHold] = useState<string>(preset.hold ? String(preset.hold) : '');
-  const [offArgsJSON, setOffArgsJSON] = useState(preset.offArgs ? JSON.stringify(preset.offArgs) : '');
-  const [error, setError] = useState<string | null>(null);
+// ─── Decorator ───────────────────────────────────────────────────────────────
 
-  const save = () => {
-    try {
-      const args = JSON.parse(argsJSON);
-      const offArgs = offArgsJSON ? JSON.parse(offArgsJSON) : undefined;
-      const holdNum = hold ? parseInt(hold, 10) : undefined;
-      onSave({ ...preset, label, address, args, hold: holdNum, offArgs });
-    } catch {
-      setError('Invalid JSON in args');
-    }
-  };
+const FRAMES: { id: string; label: string; wrap: (t: string) => string }[] = [
+  { id: 'none',    label: 'Plain',  wrap: t => t },
+  { id: 'star',    label: '★ ★',    wrap: t => `★ ${t} ★` },
+  { id: 'sparkle', label: '✦ ✦',    wrap: t => `✦ ${t} ✦` },
+  { id: 'heart',   label: '♡ ♡',    wrap: t => `♡ ${t} ♡` },
+  { id: 'flower',  label: '✿ ✿',    wrap: t => `✿ ${t} ✿` },
+  { id: 'cute',    label: '✧･ﾟ',    wrap: t => `✧･ﾟ: ${t} :･ﾟ✧` },
+  { id: 'bracket', label: '「 」',   wrap: t => `「 ${t} 」` },
+  { id: 'bracket2',label: '『 』',   wrap: t => `『 ${t} 』` },
+  { id: 'angle',   label: '≪ ≫',    wrap: t => `≪ ${t} ≫` },
+  { id: 'arrow',   label: '▸ ◂',    wrap: t => `▸ ${t} ◂` },
+  { id: 'wave',    label: '～ ～',   wrap: t => `～${t}～` },
+  { id: 'dot',     label: '·· ··',  wrap: t => `·· ${t} ··` },
+];
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
-      <div className="glass-panel-solid w-full max-w-md mx-4 p-5 space-y-3" onClick={e => e.stopPropagation()}>
-        <h3 className="text-base font-semibold">Edit trigger</h3>
-        <Field label="Label">
-          <input value={label} onChange={e => setLabel(e.target.value)} className="osc-input" />
-        </Field>
-        <Field label="OSC address">
-          <input value={address} onChange={e => setAddress(e.target.value)} className="osc-input font-mono text-xs" />
-        </Field>
-        <Field label="Args (JSON array)" hint='e.g. [true]  or  [1.5]  or  ["hi"]'>
-          <input value={argsJSON} onChange={e => setArgsJSON(e.target.value)} className="osc-input font-mono text-xs" />
-        </Field>
-        <Field label="Hold (ms, optional)">
-          <input value={hold} onChange={e => setHold(e.target.value)} placeholder="e.g. 1500" className="osc-input" />
-        </Field>
-        <Field label="Off args (JSON array, sent after hold)">
-          <input value={offArgsJSON} onChange={e => setOffArgsJSON(e.target.value)} placeholder="e.g. [false]" className="osc-input font-mono text-xs" />
-        </Field>
-        {error && <p className="text-xs text-rose-400">{error}</p>}
-        <div className="flex gap-2 justify-end pt-2">
-          <button onClick={onClose} className="btn-ghost text-sm">Cancel</button>
-          <button onClick={save} className="btn-primary text-sm">Save</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
-  return (
-    <label className="block">
-      <div className="text-xs font-semibold text-surface-400 mb-1">{label}</div>
-      {children}
-      {hint && <p className="text-[10px] text-surface-600 mt-1">{hint}</p>}
-    </label>
-  );
-}
-
-// ─── Monitor (raw log) ──────────────────────────────────────────────────────
-
-function MonitorTab({ log, clear, send }: { log: OSCMessage[]; clear: () => void; send: (a: string, args?: any[]) => Promise<void> }) {
-  const [filter, setFilter] = useState('');
-  const [showOutgoing, setShowOutgoing] = useState(true);
-  const [showIncoming, setShowIncoming] = useState(true);
-  const [rawAddr, setRawAddr] = useState('');
-  const [rawArgs, setRawArgs] = useState('');
+function DecoratorCard({ connected, send }: { connected: boolean; send: Send }) {
+  const [text, setText] = useState('');
+  const [frameId, setFrameId] = useState('star');
+  const [spaced, setSpaced] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  const stats = useMemo(() => {
-    let sent = 0, recv = 0;
-    for (const m of log) { if (m.outgoing) sent++; else recv++; }
-    return { sent, recv };
-  }, [log]);
+  const frame = FRAMES.find(f => f.id === frameId) || FRAMES[0];
+  const inner = spaced ? [...text].join(' ') : text;
+  const full = text ? frame.wrap(inner) : '';
+  const decorated = full.slice(0, CHATBOX_MAX);
+  const trimmed = full.length > CHATBOX_MAX;
 
-  const filtered = useMemo(() => {
-    return log.filter(m => {
-      if (m.outgoing && !showOutgoing) return false;
-      if (!m.outgoing && !showIncoming) return false;
-      if (filter && !m.address.toLowerCase().includes(filter.toLowerCase())) return false;
-      return true;
-    });
-  }, [log, filter, showOutgoing, showIncoming]);
-
-  const sendRaw = async () => {
-    if (!rawAddr) return;
-    let args: any[] = [];
-    try {
-      args = rawArgs ? JSON.parse(rawArgs) : [];
-    } catch {
-      alert('Args must be valid JSON, e.g. [true]  or  ["text"]');
-      return;
-    }
-    await send(rawAddr, args);
-  };
-
-  const copyAll = () => {
-    const text = filtered.map(m => `[${new Date(m.ts).toLocaleTimeString()}] ${m.outgoing ? '→' : '←'} ${m.address} ${JSON.stringify(m.args)}`).join('\n');
-    navigator.clipboard.writeText(text);
+  const copy = () => {
+    if (!decorated) return;
+    navigator.clipboard.writeText(decorated);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };
 
   return (
-    <div className="space-y-3">
-      <div className="glass-panel-solid p-3 grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2">
-        <input
-          value={rawAddr}
-          onChange={e => setRawAddr(e.target.value)}
-          placeholder="/avatar/parameters/MyParam"
-          className="osc-input font-mono text-xs"
-        />
-        <div className="flex gap-2">
-          <input
-            value={rawArgs}
-            onChange={e => setRawArgs(e.target.value)}
-            placeholder="[true]"
-            className="osc-input font-mono text-xs w-32"
-          />
-          <button onClick={sendRaw} className="btn-primary text-sm flex items-center gap-1.5"><Send size={12} /> Send</button>
+    <div className="glass-panel-solid p-5 space-y-3">
+      <CardHeader icon={Wand2} title="Text decorator" hint="dress a message up before sending" />
+
+      <input
+        value={text}
+        onChange={e => setText(e.target.value)}
+        placeholder="Type something to decorate..."
+        className="w-full bg-surface-900 border border-surface-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent-500"
+      />
+
+      <div className="flex flex-wrap gap-1.5">
+        {FRAMES.map(f => (
+          <button
+            key={f.id}
+            onClick={() => setFrameId(f.id)}
+            className={`px-2.5 py-1 text-xs rounded transition-colors ${
+              f.id === frameId ? 'bg-accent-500/20 text-accent-300 ring-1 ring-accent-500/40' : 'bg-surface-800 hover:bg-surface-700 text-surface-300'
+            }`}
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
+
+      <label className="flex items-center gap-2 text-xs text-surface-400 cursor-pointer w-fit">
+        <input type="checkbox" checked={spaced} onChange={e => setSpaced(e.target.checked)} className="accent-accent-500" />
+        S p a c e d   o u t
+      </label>
+
+      <div className="bg-surface-900 border border-surface-800 rounded-lg px-3 py-2">
+        <div className="flex items-center justify-between">
+          <span className="text-[10px] text-surface-500 uppercase tracking-wider">Preview</span>
+          <span className={`text-[10px] tabular-nums ${trimmed ? 'text-amber-400' : 'text-surface-600'}`}>
+            {decorated.length} / {CHATBOX_MAX}{trimmed ? ' (trimmed)' : ''}
+          </span>
+        </div>
+        <div className="text-sm text-surface-100 break-words min-h-[1.25rem] mt-0.5">
+          {decorated || <span className="text-surface-600">(empty)</span>}
         </div>
       </div>
 
-      <div className="flex items-center gap-2 flex-wrap">
-        <input
-          value={filter}
-          onChange={e => setFilter(e.target.value)}
-          placeholder="Filter address..."
-          className="flex-1 bg-surface-900 border border-surface-700 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-accent-500 min-w-0"
-        />
-        <label className="flex items-center gap-1 text-xs text-surface-400 cursor-pointer">
-          <input type="checkbox" checked={showOutgoing} onChange={e => setShowOutgoing(e.target.checked)} className="accent-accent-500" /> Sent
-        </label>
-        <label className="flex items-center gap-1 text-xs text-surface-400 cursor-pointer">
-          <input type="checkbox" checked={showIncoming} onChange={e => setShowIncoming(e.target.checked)} className="accent-accent-500" /> Received
-        </label>
-        <button onClick={copyAll} className="btn-ghost text-xs flex items-center gap-1">
-          {copied ? <Check size={11} /> : <Copy size={11} />} {copied ? 'Copied!' : 'Copy'}
+      <div className="flex gap-2">
+        <button
+          onClick={() => { if (connected && decorated) sendToChatbox(send, decorated); }}
+          disabled={!connected || !decorated}
+          className="btn-primary text-sm flex items-center gap-1.5 flex-1 justify-center"
+        >
+          <Send size={14} /> Send
         </button>
-        <button onClick={clear} className="btn-ghost text-xs flex items-center gap-1 text-rose-400 hover:text-rose-300">
-          <Trash2 size={11} /> Clear
+        <button
+          onClick={copy}
+          disabled={!decorated}
+          className={`text-sm flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition-colors flex-1 justify-center ${
+            copied ? 'bg-green-500/15 text-green-400' : 'bg-surface-800 text-surface-300 hover:bg-surface-700'
+          }`}
+        >
+          {copied ? <Check size={14} /> : <Copy size={14} />} {copied ? 'Copied!' : 'Copy'}
         </button>
-      </div>
-
-      <div className="flex items-center gap-4 text-xs text-surface-500 px-1">
-        <span className="flex items-center gap-1"><Activity size={12} className="text-accent-400" /> {log.length} buffered</span>
-        <span className="text-accent-400">↑ {stats.sent} sent</span>
-        <span className="text-green-400">↓ {stats.recv} received</span>
-      </div>
-
-      <div className="glass-panel-solid overflow-hidden">
-        {filtered.length === 0 ? (
-          <div className="p-8 text-center text-surface-500 text-sm">
-            No OSC traffic yet. Sent/received messages will appear here in real time.
-          </div>
-        ) : (
-          <div className="max-h-[60vh] overflow-y-auto divide-y divide-surface-800/40">
-            {filtered.map((m, i) => (
-              <div key={i} className="px-3 py-1.5 flex items-center gap-3 text-xs hover:bg-surface-800/30 transition-colors">
-                <span className="text-surface-600 tabular-nums w-20">{new Date(m.ts).toLocaleTimeString()}</span>
-                <span className={`w-4 text-center ${m.outgoing ? 'text-accent-400' : 'text-green-400'}`}>{m.outgoing ? '→' : '←'}</span>
-                <code className="flex-1 text-surface-300 truncate">{m.address}</code>
-                <code className="text-surface-500 truncate max-w-[40%]">{JSON.stringify(m.args)}</code>
-              </div>
-            ))}
-          </div>
-        )}
       </div>
     </div>
   );
 }
 
-// ─── Config ─────────────────────────────────────────────────────────────────
+// ─── Connection ──────────────────────────────────────────────────────────────
 
-function ConfigTab({ config, setConfig, connected, restart }: {
+function ConnectionCard({ config, setConfig, connected, restart }: {
   config: ReturnType<typeof useOSCStore.getState>['config'];
   setConfig: (patch: any) => void;
   connected: boolean;
   restart: () => Promise<void>;
 }) {
+  const [open, setOpen] = useState(false);
+
   return (
-    <div className="glass-panel-solid p-5 space-y-4 max-w-lg">
-      <Field label="Send to host" hint="Default 127.0.0.1 — match VRChat's OSC settings">
-        <input value={config.sendHost} onChange={e => setConfig({ sendHost: e.target.value })} className="osc-input" />
-      </Field>
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="Send port" hint="VRChat receives on 9000">
-          <input type="number" value={config.sendPort} onChange={e => setConfig({ sendPort: parseInt(e.target.value, 10) || 9000 })} className="osc-input" />
-        </Field>
-        <Field label="Receive port" hint="VRChat sends from 9001">
-          <input type="number" value={config.recvPort} onChange={e => setConfig({ recvPort: parseInt(e.target.value, 10) || 9001 })} className="osc-input" />
-        </Field>
-      </div>
-      <Field label="Log buffer size">
-        <input type="number" value={config.logSize} onChange={e => setConfig({ logSize: Math.max(50, parseInt(e.target.value, 10) || 250) })} className="osc-input" />
-      </Field>
-      <label className="flex items-center gap-2 text-sm cursor-pointer">
-        <input type="checkbox" checked={config.autoStart} onChange={e => setConfig({ autoStart: e.target.checked })} className="accent-accent-500" />
-        Auto-start OSC when the app launches
-      </label>
-      <div className="pt-2 flex justify-end">
-        <button onClick={restart} className="btn-secondary text-sm flex items-center gap-1.5">
-          <RotateCw size={13} /> {connected ? 'Restart with new settings' : 'Apply settings'}
-        </button>
-      </div>
-      <div className="border-t border-surface-800 pt-3">
-        <p className="text-[11px] text-surface-500">
-          To receive parameters, enable OSC in VRChat's <strong>Action Menu → Options → OSC</strong>. To check what your avatar exposes, look in
-          <code className="mx-1 text-surface-400">%APPDATA%\..\LocalLow\VRChat\VRChat\OSC\&lt;userId&gt;\Avatars\</code>
-        </p>
-      </div>
+    <div className="glass-panel-solid overflow-hidden">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between px-4 py-3 hover:bg-surface-800/40 transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          <SettingsIcon size={15} className="text-surface-400" />
+          <span className="text-sm font-semibold">Connection</span>
+        </div>
+        {open ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+      </button>
+
+      {open && (
+        <div className="px-4 pb-4 space-y-3">
+          <label className="block">
+            <div className="text-xs font-semibold text-surface-400 mb-1">Send to host</div>
+            <input value={config.sendHost} onChange={e => setConfig({ sendHost: e.target.value })} className="osc-input" />
+            <p className="text-[10px] text-surface-600 mt-1">Default 127.0.0.1 — leave it unless VRChat runs on another machine.</p>
+          </label>
+          <label className="block">
+            <div className="text-xs font-semibold text-surface-400 mb-1">Send port</div>
+            <input
+              type="number"
+              value={config.sendPort}
+              onChange={e => setConfig({ sendPort: parseInt(e.target.value, 10) || 9000 })}
+              className="osc-input"
+            />
+            <p className="text-[10px] text-surface-600 mt-1">VRChat listens on 9000 by default.</p>
+          </label>
+          <label className="flex items-center gap-2 text-sm cursor-pointer">
+            <input type="checkbox" checked={config.autoStart} onChange={e => setConfig({ autoStart: e.target.checked })} className="accent-accent-500" />
+            Auto-start OSC when the app launches
+          </label>
+          <div className="flex justify-end">
+            <button onClick={restart} className="btn-secondary text-sm">
+              {connected ? 'Restart with new settings' : 'Apply settings'}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

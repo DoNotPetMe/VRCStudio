@@ -24,6 +24,8 @@ export interface OSCChatboxStatus {
   showDate: boolean;
   showUptime: boolean;
   customText: string;
+  rotateMessages: boolean;
+  messages: string[];
   separator: string;
 }
 
@@ -60,6 +62,8 @@ const defaultChatboxStatus: OSCChatboxStatus = {
   showDate: false,
   showUptime: false,
   customText: '',
+  rotateMessages: false,
+  messages: [],
   separator: ' · ',
 };
 
@@ -79,10 +83,17 @@ function saveChatboxStatus(s: OSCChatboxStatus) {
 
 const appStart = Date.now();
 
-/** Build the chatbox status string from the currently-enabled tokens. */
-export function composeChatboxStatus(s: OSCChatboxStatus): string {
+/**
+ * Build the chatbox status string from the currently-enabled tokens.
+ * `rotationIndex` selects which message to show when rotation is on.
+ */
+export function composeChatboxStatus(s: OSCChatboxStatus, rotationIndex = 0): string {
   const parts: string[] = [];
-  if (s.customText.trim()) parts.push(s.customText.trim());
+  const msgs = s.messages.filter(m => m.trim().length > 0);
+  const lead = s.rotateMessages && msgs.length > 0
+    ? msgs[((rotationIndex % msgs.length) + msgs.length) % msgs.length]
+    : s.customText;
+  if (lead && lead.trim()) parts.push(lead.trim());
   if (s.showClock) {
     parts.push(new Date().toLocaleTimeString([], {
       hour: '2-digit', minute: '2-digit', hour12: !s.clock24h,
@@ -201,6 +212,7 @@ export const useOSCStore = create<OSCState>((set, get) => ({
 // is open, regardless of which page is mounted.
 
 let chatboxTimer: ReturnType<typeof setInterval> | null = null;
+let rotationIndex = 0;
 
 /** Start/stop the recurring chatbox-status sender to match current settings. */
 function applyChatboxLoop() {
@@ -210,7 +222,7 @@ function applyChatboxLoop() {
   const tick = () => {
     const st = useOSCStore.getState();
     if (!st.connected) return;
-    const msg = composeChatboxStatus(st.chatboxStatus);
+    const msg = composeChatboxStatus(st.chatboxStatus, rotationIndex++);
     if (!msg) return;
     st.send('/chatbox/input', [
       { type: 's', value: msg },
