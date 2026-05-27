@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search as SearchIcon, Users, Globe, Shirt, Heart, Database, Pin, PinOff } from 'lucide-react';
+import { Search as SearchIcon, Users, Globe, Shirt, Heart, Database, Pin, PinOff, LayoutGrid } from 'lucide-react';
 import api from '../api/vrchat';
 import { vrcdb, VRCDB_PROVIDERS, getProviderId, setProviderId } from '../api/vrcdb';
 import type { ProviderId, VRCDBAvatar } from '../api/vrcdb';
@@ -8,13 +8,18 @@ import UserAvatar from '../components/common/UserAvatar';
 import WorldCard from '../components/common/WorldCard';
 import EmptyState from '../components/common/EmptyState';
 import LoadingSpinner from '../components/common/LoadingSpinner';
-import { VrcdbPanel } from './Avatars';
+import {
+  VrcdbPanel, PageNavigator,
+  COLUMN_OPTIONS, PER_PAGE_OPTIONS, COLUMNS_KEY, PER_PAGE_KEY, loadAvatarPref,
+} from './Avatars';
 import type { VRCUser, VRCWorld, VRCAvatar } from '../types/vrchat';
 import { getBestAvatarUrl } from '../utils/avatar';
 import { useAvatarSwitcherStore } from '../stores/avatarSwitcherStore';
 
 type SearchCategory = 'users' | 'worlds' | 'avatars';
 type AvatarSubTab = 'vrc' | 'own' | 'favorites' | 'database';
+
+const VRC_CHUNK = 100;
 
 export default function SearchPage() {
   const { togglePin, isPinned } = useAvatarSwitcherStore();
@@ -37,7 +42,24 @@ export default function SearchPage() {
   const [hasSearched, setHasSearched] = useState(false);
   const [avatarsLoaded, setAvatarsLoaded] = useState(false);
 
-  // Load own/favorite avatars once when the avatars category is first opened
+  // Display preferences (shared with Avatars page via localStorage keys)
+  const [columns, setColumns] = useState<number>(() => loadAvatarPref(COLUMNS_KEY, 4));
+  const [perPage, setPerPage] = useState<number>(() => loadAvatarPref(PER_PAGE_KEY, 20));
+  const saveColumns = (v: number) => { setColumns(v); localStorage.setItem(COLUMNS_KEY, String(v)); };
+  const savePerPage = (v: number) => {
+    setPerPage(v);
+    localStorage.setItem(PER_PAGE_KEY, String(v));
+    setVrcPage(0); setOwnPage(0); setFavPage(0);
+  };
+
+  // Pagination state
+  const [vrcPage, setVrcPage] = useState(0);
+  const [vrcReachedEnd, setVrcReachedEnd] = useState(false);
+  const [vrcLoading, setVrcLoading] = useState(false);
+  const [ownPage, setOwnPage] = useState(0);
+  const [favPage, setFavPage] = useState(0);
+  const [lastQuery, setLastQuery] = useState<string>('');
+
   useEffect(() => {
     if (category === 'avatars' && !avatarsLoaded) {
       setAvatarsLoaded(true);
@@ -77,6 +99,32 @@ export default function SearchPage() {
       setVrcdbError(err instanceof Error ? err.message : 'Search failed');
     }
     setVrcdbLoading(false);
+  };
+
+  const ensureVrcPageLoaded = async (targetPage: number, q: string, existing: VRCAvatar[], reachedEnd: boolean) => {
+    if (reachedEnd) return;
+    const needed = (targetPage + 1) * perPage;
+    if (existing.length >= needed) return;
+    setVrcLoading(true);
+    let current = existing.slice();
+    let ended = false;
+    try {
+      while (current.length < needed && !ended) {
+        const more = await api.searchAvatars({ query: q, count: VRC_CHUNK, offset: current.length });
+        if (more.length < VRC_CHUNK) ended = true;
+        if (more.length === 0) break;
+        current = [...current, ...more];
+      }
+    } catch {}
+    setAvatarResults(current);
+    setVrcReachedEnd(ended);
+    setVrcLoading(false);
+  };
+
+  const goToVrcPage = (page: number) => {
+    setVrcPage(page);
+    if (lastQuery) ensureVrcPageLoaded(page, lastQuery, avatarResults, vrcReachedEnd);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const copyId = (id: string) => {
@@ -145,6 +193,9 @@ export default function SearchPage() {
             setWorldResults([]);
             setCategory('avatars');
             setAvatarSubTab('vrc');
+            setVrcReachedEnd(true);
+            setVrcPage(0);
+            setLastQuery('');
             break;
           }
         }
@@ -152,11 +203,15 @@ export default function SearchPage() {
         const [users, worlds, avatars] = await Promise.allSettled([
           api.searchUsers(q, 20),
           api.searchWorlds({ query: q, count: 20 }),
-          api.searchAvatars({ query: q, count: 20 }),
+          api.searchAvatars({ query: q, count: VRC_CHUNK }),
         ]);
         setUserResults(users.status === 'fulfilled' ? users.value : []);
         setWorldResults(worlds.status === 'fulfilled' ? worlds.value : []);
-        setAvatarResults(avatars.status === 'fulfilled' ? avatars.value : []);
+        const avs = avatars.status === 'fulfilled' ? avatars.value : [];
+        setAvatarResults(avs);
+        setVrcReachedEnd(avs.length < VRC_CHUNK);
+        setVrcPage(0);
+        setLastQuery(q);
         if (category === 'avatars') setAvatarSubTab('vrc');
       }
     } catch (err) {
@@ -165,6 +220,37 @@ export default function SearchPage() {
 
     setIsLoading(false);
   };
+
+  // Derived pagination values for the currently visible sub-tab
+  const sliceFor = (list: VRCAvatar[], page: number) => list.slice(page * perPage, (page + 1) * perPage);
+
+  const renderAvatarGrid = (list: VRCAvatar[]) => (
+    <div className="grid gap-4" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
+      {list.map(avatar => {
+        const pinned = isPinned(avatar.id);
+        return (
+          <div key={avatar.id} className="relative group glass-panel-solid overflow-hidden card-hover">
+            <div className="aspect-square overflow-hidden">
+              <img src={avatar.thumbnailImageUrl || avatar.imageUrl} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy" />
+            </div>
+            <div className="p-3">
+              <h3 className="text-sm font-semibold truncate">{avatar.name}</h3>
+              <p className="text-xs text-surface-400 truncate">by {avatar.authorName}</p>
+            </div>
+            <button
+              onClick={e => { e.stopPropagation(); togglePin(avatar.id); }}
+              className={`absolute top-2 right-2 p-1.5 rounded-lg backdrop-blur-sm transition-all ${
+                pinned ? 'bg-accent-600/80 text-white opacity-100' : 'bg-black/50 text-white opacity-0 group-hover:opacity-100'
+              }`}
+              title={pinned ? 'Unpin' : 'Pin to Quick Switch'}
+            >
+              {pinned ? <Pin size={11} /> : <PinOff size={11} />}
+            </button>
+          </div>
+        );
+      })}
+    </div>
+  );
 
   return (
     <div className="max-w-5xl mx-auto space-y-4 animate-fade-in">
@@ -213,24 +299,58 @@ export default function SearchPage() {
 
       {/* Avatar sub-tabs */}
       {category === 'avatars' && (
-        <div className="flex gap-1 border-b border-surface-700/60 pb-px -mt-2">
-          {([
-            { key: 'vrc'      as AvatarSubTab, icon: SearchIcon, label: `VRChat${avatarResults.length ? ` (${avatarResults.length})` : ''}` },
-            { key: 'own'      as AvatarSubTab, icon: Shirt,      label: `My Uploads${ownAvatars.length ? ` (${ownAvatars.length})` : ''}` },
-            { key: 'favorites'as AvatarSubTab, icon: Heart,      label: `Favorites${favoriteAvatars.length ? ` (${favoriteAvatars.length})` : ''}` },
-            { key: 'database' as AvatarSubTab, icon: Database,   label: `Database${vrcdbResults.length ? ` (${vrcdbResults.length})` : ''}` },
-          ]).map(({ key, icon: Icon, label }) => (
-            <button
-              key={key}
-              onClick={() => setAvatarSubTab(key)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border-b-2 -mb-px transition-colors ${
-                avatarSubTab === key ? 'tab-active' : 'tab-inactive'
-              }`}
-            >
-              <Icon size={12} /> {label}
-            </button>
-          ))}
-        </div>
+        <>
+          <div className="flex gap-1 border-b border-surface-700/60 pb-px -mt-2">
+            {([
+              { key: 'vrc'      as AvatarSubTab, icon: SearchIcon, label: `VRChat${avatarResults.length ? ` (${avatarResults.length}${!vrcReachedEnd ? '+' : ''})` : ''}` },
+              { key: 'own'      as AvatarSubTab, icon: Shirt,      label: `My Uploads${ownAvatars.length ? ` (${ownAvatars.length})` : ''}` },
+              { key: 'favorites'as AvatarSubTab, icon: Heart,      label: `Favorites${favoriteAvatars.length ? ` (${favoriteAvatars.length})` : ''}` },
+              { key: 'database' as AvatarSubTab, icon: Database,   label: `Database${vrcdbResults.length ? ` (${vrcdbResults.length})` : ''}` },
+            ]).map(({ key, icon: Icon, label }) => (
+              <button
+                key={key}
+                onClick={() => setAvatarSubTab(key)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border-b-2 -mb-px transition-colors ${
+                  avatarSubTab === key ? 'tab-active' : 'tab-inactive'
+                }`}
+              >
+                <Icon size={12} /> {label}
+              </button>
+            ))}
+          </div>
+
+          {/* Display controls (columns + per page) */}
+          <div className="flex items-center gap-3 flex-wrap text-xs text-surface-400">
+            <div className="flex items-center gap-1.5">
+              <LayoutGrid size={13} className="text-surface-500" />
+              <span>Columns:</span>
+              <div className="flex gap-1">
+                {COLUMN_OPTIONS.map(c => (
+                  <button key={c} onClick={() => saveColumns(c)}
+                    className={`w-7 h-6 rounded border text-xs transition-colors ${
+                      columns === c ? 'border-accent-500 bg-accent-500/20 text-accent-400 font-semibold' : 'border-surface-700 hover:border-surface-500 text-surface-400'
+                    }`}
+                  >{c}</button>
+                ))}
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span>Per page:</span>
+              <div className="flex gap-1">
+                {PER_PAGE_OPTIONS.map(n => (
+                  <button key={n} onClick={() => savePerPage(n)}
+                    className={`px-2 h-6 rounded border text-xs transition-colors ${
+                      perPage === n ? 'border-accent-500 bg-accent-500/20 text-accent-400 font-semibold' : 'border-surface-700 hover:border-surface-500 text-surface-400'
+                    }`}
+                  >{n}</button>
+                ))}
+              </div>
+            </div>
+            {avatarSubTab === 'vrc' && avatarResults.length > 0 && (
+              <span className="ml-auto text-surface-600">{avatarResults.length}{!vrcReachedEnd ? '+' : ''} loaded</span>
+            )}
+          </div>
+        </>
       )}
 
       {/* Results */}
@@ -273,41 +393,22 @@ export default function SearchPage() {
           )}
 
           {category === 'avatars' && avatarSubTab === 'vrc' && (
+            vrcLoading ? <LoadingSpinner className="py-16" /> :
             avatarResults.length === 0 && !hasSearched ? (
               <EmptyState icon={SearchIcon} title="Search for avatars" description="Enter a name in the search bar above" />
             ) : avatarResults.length === 0 ? (
               <EmptyState icon={SearchIcon} title="No avatars found" description="Try different search terms" />
             ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-                {avatarResults.map(avatar => {
-                  const pinned = isPinned(avatar.id);
-                  return (
-                    <div key={avatar.id} className="relative group glass-panel-solid overflow-hidden card-hover">
-                      <div className="aspect-square overflow-hidden">
-                        <img
-                          src={avatar.thumbnailImageUrl || avatar.imageUrl}
-                          alt=""
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                          loading="lazy"
-                        />
-                      </div>
-                      <div className="p-3">
-                        <h3 className="text-sm font-semibold truncate">{avatar.name}</h3>
-                        <p className="text-xs text-surface-400 truncate">by {avatar.authorName}</p>
-                      </div>
-                      <button
-                        onClick={e => { e.stopPropagation(); togglePin(avatar.id); }}
-                        className={`absolute top-2 right-2 p-1.5 rounded-lg backdrop-blur-sm transition-all ${
-                          pinned ? 'bg-accent-600/80 text-white opacity-100' : 'bg-black/50 text-white opacity-0 group-hover:opacity-100'
-                        }`}
-                        title={pinned ? 'Unpin' : 'Pin to Quick Switch'}
-                      >
-                        {pinned ? <Pin size={11} /> : <PinOff size={11} />}
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
+              <>
+                {renderAvatarGrid(sliceFor(avatarResults, vrcPage))}
+                <PageNavigator
+                  page={vrcPage}
+                  totalPages={Math.max(1, Math.ceil(avatarResults.length / perPage))}
+                  hasUnknownEnd={!vrcReachedEnd && avatarResults.length > 0}
+                  loading={vrcLoading}
+                  onGoTo={goToVrcPage}
+                />
+              </>
             )
           )}
 
@@ -316,31 +417,14 @@ export default function SearchPage() {
             ownAvatars.length === 0 ? (
               <EmptyState icon={Shirt} title="No uploaded avatars" description="Avatars you've uploaded to VRChat will appear here" />
             ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-                {ownAvatars.map(avatar => {
-                  const pinned = isPinned(avatar.id);
-                  return (
-                    <div key={avatar.id} className="relative group glass-panel-solid overflow-hidden card-hover">
-                      <div className="aspect-square overflow-hidden">
-                        <img src={avatar.thumbnailImageUrl || avatar.imageUrl} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy" />
-                      </div>
-                      <div className="p-3">
-                        <h3 className="text-sm font-semibold truncate">{avatar.name}</h3>
-                        <p className="text-xs text-surface-400 truncate">by {avatar.authorName}</p>
-                      </div>
-                      <button
-                        onClick={e => { e.stopPropagation(); togglePin(avatar.id); }}
-                        className={`absolute top-2 right-2 p-1.5 rounded-lg backdrop-blur-sm transition-all ${
-                          pinned ? 'bg-accent-600/80 text-white opacity-100' : 'bg-black/50 text-white opacity-0 group-hover:opacity-100'
-                        }`}
-                        title={pinned ? 'Unpin' : 'Pin to Quick Switch'}
-                      >
-                        {pinned ? <Pin size={11} /> : <PinOff size={11} />}
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
+              <>
+                {renderAvatarGrid(sliceFor(ownAvatars, ownPage))}
+                <PageNavigator
+                  page={ownPage}
+                  totalPages={Math.max(1, Math.ceil(ownAvatars.length / perPage))}
+                  onGoTo={p => { setOwnPage(p); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                />
+              </>
             )
           )}
 
@@ -349,31 +433,14 @@ export default function SearchPage() {
             favoriteAvatars.length === 0 ? (
               <EmptyState icon={Heart} title="No favorited avatars" description="Avatars you favorite in VRChat will appear here" />
             ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-                {favoriteAvatars.map(avatar => {
-                  const pinned = isPinned(avatar.id);
-                  return (
-                    <div key={avatar.id} className="relative group glass-panel-solid overflow-hidden card-hover">
-                      <div className="aspect-square overflow-hidden">
-                        <img src={avatar.thumbnailImageUrl || avatar.imageUrl} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy" />
-                      </div>
-                      <div className="p-3">
-                        <h3 className="text-sm font-semibold truncate">{avatar.name}</h3>
-                        <p className="text-xs text-surface-400 truncate">by {avatar.authorName}</p>
-                      </div>
-                      <button
-                        onClick={e => { e.stopPropagation(); togglePin(avatar.id); }}
-                        className={`absolute top-2 right-2 p-1.5 rounded-lg backdrop-blur-sm transition-all ${
-                          pinned ? 'bg-accent-600/80 text-white opacity-100' : 'bg-black/50 text-white opacity-0 group-hover:opacity-100'
-                        }`}
-                        title={pinned ? 'Unpin' : 'Pin to Quick Switch'}
-                      >
-                        {pinned ? <Pin size={11} /> : <PinOff size={11} />}
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
+              <>
+                {renderAvatarGrid(sliceFor(favoriteAvatars, favPage))}
+                <PageNavigator
+                  page={favPage}
+                  totalPages={Math.max(1, Math.ceil(favoriteAvatars.length / perPage))}
+                  onGoTo={p => { setFavPage(p); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                />
+              </>
             )
           )}
 
@@ -389,6 +456,8 @@ export default function SearchPage() {
               onChangeProvider={changeProvider}
               onSearch={() => searchVrcdb(query.trim())}
               hasQuery={!!query.trim()}
+              perPage={perPage}
+              columns={columns}
               onFindByAuthor={async (authorId, authorName) => {
                 setVrcdbLoading(true);
                 setVrcdbError(null);

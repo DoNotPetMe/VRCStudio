@@ -17,15 +17,17 @@ import { useAvatarSwitcherStore } from '../stores/avatarSwitcherStore';
 type AvatarTab = 'own' | 'favorites' | 'vrc_search' | 'vrcdb';
 
 const VRC_CHUNK = 100;
-const COLUMN_OPTIONS = [2, 3, 4, 5, 6] as const;
-const PER_PAGE_OPTIONS = [12, 24, 36, 48] as const;
-const COLUMNS_KEY = 'vrcstudio_avatar_columns';
-const PER_PAGE_KEY = 'vrcstudio_avatar_perpage';
+export const COLUMN_OPTIONS = [2, 3, 4, 5, 6] as const;
+export const PER_PAGE_OPTIONS = [10, 20, 40, 60, 100] as const;
+export const COLUMNS_KEY = 'vrcstudio_avatar_columns';
+export const PER_PAGE_KEY = 'vrcstudio_avatar_perpage';
 
-function loadPref<T extends number>(key: string, fallback: T): T {
+export function loadAvatarPref<T extends number>(key: string, fallback: T): T {
   const v = localStorage.getItem(key);
   return v ? (Number(v) as T) : fallback;
 }
+
+const loadPref = loadAvatarPref;
 
 function getPlatformSupport(avatar: VRCAvatar): { pc: boolean; quest: boolean } {
   const pkgs = avatar.unityPackages ?? [];
@@ -84,7 +86,7 @@ export default function AvatarsPage() {
   const [ownPage, setOwnPage] = useState(0);
   const [favPage, setFavPage] = useState(0);
   const [columns, setColumns] = useState<number>(() => loadPref(COLUMNS_KEY, 4));
-  const [perPage, setPerPage] = useState<number>(() => loadPref(PER_PAGE_KEY, 24));
+  const [perPage, setPerPage] = useState<number>(() => loadPref(PER_PAGE_KEY, 20));
   const [lastQuery, setLastQuery] = useState<{ q: string; tag?: string } | null>(null);
 
   useEffect(() => {
@@ -500,7 +502,7 @@ export default function AvatarsPage() {
   );
 }
 
-function PageNavigator({
+export function PageNavigator({
   page, totalPages, hasUnknownEnd = false, loading = false,
   onGoTo,
 }: {
@@ -564,7 +566,7 @@ function PageNavigator({
 export function VrcdbPanel({
   results, loading, error, copiedId, providerId,
   onCopy, onWear, onChangeProvider, onSearch, hasQuery, onFindByAuthor,
-  perPage = 24, columns = 4,
+  perPage = 20, columns = 4,
 }: {
   results: VRCDBAvatar[];
   loading: boolean;

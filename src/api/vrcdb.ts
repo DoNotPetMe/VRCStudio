@@ -139,7 +139,7 @@ async function tryProviders(
 }
 
 export const vrcdb = {
-  search: (query: string, count = 50) => tryProviders(p => p.searchUrl(query, count)),
+  search: (query: string, count = 200) => tryProviders(p => p.searchUrl(query, count)),
   getByAuthor: (authorId: string) => tryProviders(p => p.byAuthorUrl(authorId)),
   getById: (avatarId: string) => tryProviders(p => p.byIdUrl(avatarId)),
   searchByTag: (tag: string, count = 50) => tryProviders(p => 'tagSearchUrl' in p ? p.tagSearchUrl(tag, count) : null),
