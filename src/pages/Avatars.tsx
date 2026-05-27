@@ -3,7 +3,7 @@ import {
   Shirt, Search, ArrowLeft, Heart, AlertCircle, RotateCw,
   Pin, PinOff, Zap, Copy, Check, Database, ExternalLink,
   ChevronLeft, ChevronRight,
-  Monitor, Smartphone, Shuffle, User, Tag, X,
+  Monitor, Smartphone, Shuffle, User, Tag, X, LayoutGrid,
 } from 'lucide-react';
 import api from '../api/vrchat';
 import { vrcdb, VRCDB_PROVIDERS, getProviderId, setProviderId } from '../api/vrcdb';
@@ -15,6 +15,17 @@ import type { VRCAvatar } from '../types/vrchat';
 import { useAvatarSwitcherStore } from '../stores/avatarSwitcherStore';
 
 type AvatarTab = 'own' | 'favorites' | 'vrc_search' | 'vrcdb';
+
+const VRC_CHUNK = 100;
+const COLUMN_OPTIONS = [2, 3, 4, 5, 6] as const;
+const PER_PAGE_OPTIONS = [12, 24, 36, 48] as const;
+const COLUMNS_KEY = 'vrcstudio_avatar_columns';
+const PER_PAGE_KEY = 'vrcstudio_avatar_perpage';
+
+function loadPref<T extends number>(key: string, fallback: T): T {
+  const v = localStorage.getItem(key);
+  return v ? (Number(v) as T) : fallback;
+}
 
 function getPlatformSupport(avatar: VRCAvatar): { pc: boolean; quest: boolean } {
   const pkgs = avatar.unityPackages ?? [];
@@ -68,8 +79,13 @@ export default function AvatarsPage() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [providerId, setProviderIdState] = useState<ProviderId>(getProviderId());
   const [surpriseMeLoading, setSurpriseMeLoading] = useState(false);
-  const [vrcSearchOffset, setVrcSearchOffset] = useState(0);
-  const [vrcSearchHasMore, setVrcSearchHasMore] = useState(false);
+  const [vrcPage, setVrcPage] = useState(0);
+  const [vrcReachedEnd, setVrcReachedEnd] = useState(false);
+  const [ownPage, setOwnPage] = useState(0);
+  const [favPage, setFavPage] = useState(0);
+  const [columns, setColumns] = useState<number>(() => loadPref(COLUMNS_KEY, 4));
+  const [perPage, setPerPage] = useState<number>(() => loadPref(PER_PAGE_KEY, 24));
+  const [lastQuery, setLastQuery] = useState<{ q: string; tag?: string } | null>(null);
 
   useEffect(() => {
     loadFavoriteAvatars();
@@ -98,6 +114,35 @@ export default function AvatarsPage() {
     setOwnLoading(false);
   };
 
+  const saveColumns = (v: number) => { setColumns(v); localStorage.setItem(COLUMNS_KEY, String(v)); };
+  const savePerPage = (v: number) => { setPerPage(v); localStorage.setItem(PER_PAGE_KEY, String(v)); };
+
+  const ensureVrcPageLoaded = async (targetPage: number, query: { q: string; tag?: string }, existingResults: VRCAvatar[], reachedEnd: boolean) => {
+    if (reachedEnd) return;
+    const needed = (targetPage + 1) * perPage;
+    if (existingResults.length >= needed) return;
+    setVrcSearchLoading(true);
+    let current = existingResults.slice();
+    let ended = false;
+    try {
+      while (current.length < needed && !ended) {
+        const more = await api.searchAvatars({ query: query.q || undefined, tag: query.tag, count: VRC_CHUNK, offset: current.length });
+        if (more.length < VRC_CHUNK) ended = true;
+        if (more.length === 0) break;
+        current = [...current, ...more];
+      }
+    } catch {}
+    setVrcSearchResults(current);
+    setVrcReachedEnd(ended);
+    setVrcSearchLoading(false);
+  };
+
+  const goToVrcPage = (page: number) => {
+    setVrcPage(page);
+    if (lastQuery) ensureVrcPageLoaded(page, lastQuery, vrcSearchResults, vrcReachedEnd);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const handleSearch = async () => {
     const q = searchInput.trim();
     const t = tagInput.trim();
@@ -105,14 +150,18 @@ export default function AvatarsPage() {
     if (tab === 'vrcdb') {
       if (q) searchVrcdb(q);
     } else {
+      const apiTag = t ? `author_tag_${t}` : undefined;
+      const query = { q, tag: apiTag };
       setTab('vrc_search');
+      setVrcPage(0);
+      setVrcSearchResults([]);
+      setVrcReachedEnd(false);
+      setLastQuery(query);
       setVrcSearchLoading(true);
-      setVrcSearchOffset(0);
       try {
-        const apiTag = t ? `author_tag_${t}` : undefined;
-        const results = await api.searchAvatars({ query: q || undefined, tag: apiTag, count: 100 });
+        const results = await api.searchAvatars({ query: q || undefined, tag: apiTag, count: VRC_CHUNK });
         setVrcSearchResults(results);
-        setVrcSearchHasMore(results.length === 100);
+        setVrcReachedEnd(results.length < VRC_CHUNK);
       } catch {}
       setVrcSearchLoading(false);
     }
@@ -163,29 +212,18 @@ export default function AvatarsPage() {
 
   const handleFindByCreator = async (avatar: VRCAvatar) => {
     setSelected(null);
+    const query = { q: avatar.authorName };
     setTab('vrc_search');
-    setVrcSearchLoading(true);
-    setVrcSearchOffset(0);
+    setVrcPage(0);
+    setVrcSearchResults([]);
+    setVrcReachedEnd(false);
+    setLastQuery(query);
     setSearchInput(avatar.authorName);
-    try {
-      const results = await api.searchAvatars({ query: avatar.authorName, count: 100 });
-      setVrcSearchResults(results);
-      setVrcSearchHasMore(results.length === 100);
-    } catch {}
-    setVrcSearchLoading(false);
-  };
-
-  const handleLoadMoreVrc = async () => {
     setVrcSearchLoading(true);
     try {
-      const q = searchInput.trim();
-      const t = tagInput.trim();
-      const apiTag = t ? `author_tag_${t}` : undefined;
-      const newOffset = vrcSearchOffset + 100;
-      const more = await api.searchAvatars({ query: q || undefined, tag: apiTag, count: 100, offset: newOffset });
-      setVrcSearchResults(prev => [...prev, ...more]);
-      setVrcSearchOffset(newOffset);
-      setVrcSearchHasMore(more.length === 100);
+      const results = await api.searchAvatars({ query: avatar.authorName, count: VRC_CHUNK });
+      setVrcSearchResults(results);
+      setVrcReachedEnd(results.length < VRC_CHUNK);
     } catch {}
     setVrcSearchLoading(false);
   };
@@ -194,8 +232,15 @@ export default function AvatarsPage() {
     ? 'Search Database — name, author, or avtr_ ID...'
     : 'Search avatars...';
 
-  const vrcAvatars = tab === 'own' ? ownAvatars : tab === 'favorites' ? favoriteAvatars : vrcSearchResults;
+  const allVrcAvatars = tab === 'own' ? ownAvatars : tab === 'favorites' ? favoriteAvatars : vrcSearchResults;
   const vrcLoading = tab === 'own' ? ownLoading : tab === 'favorites' ? favLoading : vrcSearchLoading;
+
+  const currentPage = tab === 'own' ? ownPage : tab === 'favorites' ? favPage : vrcPage;
+  const setCurrentPage = tab === 'own' ? setOwnPage : tab === 'favorites' ? setFavPage : goToVrcPage;
+
+  const totalPages = Math.max(1, Math.ceil(allVrcAvatars.length / perPage));
+  const hasUnknownEnd = tab === 'vrc_search' && !vrcReachedEnd && allVrcAvatars.length > 0;
+  const vrcAvatars = allVrcAvatars.slice(currentPage * perPage, (currentPage + 1) * perPage);
 
   if (selected) {
     const { pc, quest } = getPlatformSupport(selected);
@@ -326,6 +371,38 @@ export default function AvatarsPage() {
         ))}
       </div>
 
+      {/* Display controls */}
+      <div className="flex items-center gap-3 flex-wrap text-xs text-surface-400">
+        <div className="flex items-center gap-1.5">
+          <LayoutGrid size={13} className="text-surface-500" />
+          <span>Columns:</span>
+          <div className="flex gap-1">
+            {COLUMN_OPTIONS.map(c => (
+              <button key={c} onClick={() => saveColumns(c)}
+                className={`w-7 h-6 rounded border text-xs transition-colors ${
+                  columns === c ? 'border-accent-500 bg-accent-500/20 text-accent-400 font-semibold' : 'border-surface-700 hover:border-surface-500 text-surface-400'
+                }`}
+              >{c}</button>
+            ))}
+          </div>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span>Per page:</span>
+          <div className="flex gap-1">
+            {PER_PAGE_OPTIONS.map(n => (
+              <button key={n} onClick={() => { savePerPage(n); setOwnPage(0); setFavPage(0); setVrcPage(0); }}
+                className={`px-2 h-6 rounded border text-xs transition-colors ${
+                  perPage === n ? 'border-accent-500 bg-accent-500/20 text-accent-400 font-semibold' : 'border-surface-700 hover:border-surface-500 text-surface-400'
+                }`}
+              >{n}</button>
+            ))}
+          </div>
+        </div>
+        {tab === 'vrc_search' && allVrcAvatars.length > 0 && (
+          <span className="ml-auto text-surface-600">{allVrcAvatars.length}{!vrcReachedEnd ? '+' : ''} loaded</span>
+        )}
+      </div>
+
       {tab === 'vrcdb' ? (
         <VrcdbPanel
           results={vrcdbResults}
@@ -338,6 +415,8 @@ export default function AvatarsPage() {
           onChangeProvider={changeProvider}
           onSearch={() => searchVrcdb(searchInput.trim())}
           hasQuery={!!searchInput.trim()}
+          perPage={perPage}
+          columns={columns}
           onFindByAuthor={async (authorId, authorName) => {
             setVrcdbLoading(true);
             setVrcdbError(null);
@@ -362,7 +441,7 @@ export default function AvatarsPage() {
             </div>
             <button onClick={loadOwnAvatars} className="btn-secondary text-xs flex items-center gap-1 flex-shrink-0"><RotateCw size={14} /> Retry</button>
           </div>
-        ) : vrcAvatars.length === 0 ? (
+        ) : allVrcAvatars.length === 0 ? (
           <EmptyState
             icon={tab === 'vrc_search' ? Search : tab === 'favorites' ? Heart : Shirt}
             title={tab === 'vrc_search' ? 'No avatars found' : tab === 'favorites' ? 'No favorited avatars' : 'No uploaded avatars'}
@@ -370,7 +449,7 @@ export default function AvatarsPage() {
           />
         ) : (
           <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          <div className="grid gap-4" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
             {vrcAvatars.map(avatar => {
               const pinned = isPinned(avatar.id);
               return (
@@ -407,17 +486,13 @@ export default function AvatarsPage() {
               );
             })}
           </div>
-          {tab === 'vrc_search' && vrcSearchHasMore && (
-            <div className="flex justify-center pt-4">
-              <button
-                onClick={handleLoadMoreVrc}
-                disabled={vrcSearchLoading}
-                className="btn-secondary text-sm"
-              >
-                {vrcSearchLoading ? 'Loading...' : `Load more (${vrcSearchResults.length} shown)`}
-              </button>
-            </div>
-          )}
+          <PageNavigator
+            page={currentPage}
+            totalPages={totalPages}
+            hasUnknownEnd={hasUnknownEnd}
+            loading={vrcSearchLoading}
+            onGoTo={setCurrentPage}
+          />
           </>
         )
       )}
@@ -425,11 +500,71 @@ export default function AvatarsPage() {
   );
 }
 
-const VRCDB_PAGE_SIZE = 20;
+function PageNavigator({
+  page, totalPages, hasUnknownEnd = false, loading = false,
+  onGoTo,
+}: {
+  page: number;
+  totalPages: number;
+  hasUnknownEnd?: boolean;
+  loading?: boolean;
+  onGoTo: (page: number) => void;
+}) {
+  if (totalPages <= 1 && !hasUnknownEnd) return null;
+  const effectiveTotal = hasUnknownEnd ? totalPages + 1 : totalPages;
+  const pages = Array.from({ length: effectiveTotal }, (_, i) => i)
+    .filter(i => Math.abs(i - page) <= 3 || i === 0 || i === effectiveTotal - 1)
+    .reduce<(number | 'gap')[]>((acc, i, idx, arr) => {
+      if (idx > 0 && i - (arr[idx - 1] as number) > 1) acc.push('gap');
+      acc.push(i);
+      return acc;
+    }, []);
+
+  return (
+    <div className="flex items-center justify-center gap-2 pt-2">
+      <button onClick={() => onGoTo(0)} disabled={page === 0}
+        className="p-1.5 rounded border border-surface-700 text-surface-400 hover:text-surface-200 hover:border-surface-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors" title="First page">
+        <ChevronLeft size={14} className="inline" /><ChevronLeft size={14} className="inline -ml-2" />
+      </button>
+      <button onClick={() => onGoTo(page - 1)} disabled={page === 0}
+        className="p-1.5 rounded border border-surface-700 text-surface-400 hover:text-surface-200 hover:border-surface-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors" title="Previous page">
+        <ChevronLeft size={14} />
+      </button>
+      <div className="flex gap-1">
+        {pages.map((item, idx) =>
+          item === 'gap' ? (
+            <span key={`gap-${idx}`} className="px-1.5 py-1 text-xs text-surface-600">…</span>
+          ) : item === effectiveTotal - 1 && hasUnknownEnd ? (
+            <button key={item} onClick={() => onGoTo(item as number)} disabled={loading}
+              className={`min-w-[28px] h-7 px-1.5 rounded text-xs border transition-colors ${
+                page === item ? 'border-accent-500 bg-accent-500/20 text-accent-400 font-semibold' : 'border-surface-700 text-surface-400 hover:text-surface-200 hover:border-surface-500'
+              }`}
+            >{loading && page === item ? '…' : `${(item as number) + 1}+`}</button>
+          ) : (
+            <button key={item} onClick={() => onGoTo(item as number)}
+              className={`min-w-[28px] h-7 px-1.5 rounded text-xs border transition-colors ${
+                page === item ? 'border-accent-500 bg-accent-500/20 text-accent-400 font-semibold' : 'border-surface-700 text-surface-400 hover:text-surface-200 hover:border-surface-500'
+              }`}
+            >{(item as number) + 1}</button>
+          )
+        )}
+      </div>
+      <button onClick={() => onGoTo(page + 1)} disabled={page >= effectiveTotal - 1 && !hasUnknownEnd}
+        className="p-1.5 rounded border border-surface-700 text-surface-400 hover:text-surface-200 hover:border-surface-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors" title="Next page">
+        <ChevronRight size={14} />
+      </button>
+      <button onClick={() => onGoTo(effectiveTotal - 1)} disabled={page >= effectiveTotal - 1 && !hasUnknownEnd}
+        className="p-1.5 rounded border border-surface-700 text-surface-400 hover:text-surface-200 hover:border-surface-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors" title="Last page">
+        <ChevronRight size={14} className="inline" /><ChevronRight size={14} className="inline -ml-2" />
+      </button>
+    </div>
+  );
+}
 
 export function VrcdbPanel({
   results, loading, error, copiedId, providerId,
   onCopy, onWear, onChangeProvider, onSearch, hasQuery, onFindByAuthor,
+  perPage = 24, columns = 4,
 }: {
   results: VRCDBAvatar[];
   loading: boolean;
@@ -442,6 +577,8 @@ export function VrcdbPanel({
   onSearch: () => void;
   hasQuery: boolean;
   onFindByAuthor: (authorId: string, authorName: string) => void;
+  perPage?: number;
+  columns?: number;
 }) {
   const [wearingId, setWearingId] = useState<string | null>(null);
   const [wornId, setWornId] = useState<string | null>(null);
@@ -449,8 +586,8 @@ export function VrcdbPanel({
 
   useEffect(() => { setPage(0); }, [results]);
 
-  const totalPages = Math.max(1, Math.ceil(results.length / VRCDB_PAGE_SIZE));
-  const pageResults = results.slice(page * VRCDB_PAGE_SIZE, (page + 1) * VRCDB_PAGE_SIZE);
+  const totalPages = Math.max(1, Math.ceil(results.length / perPage));
+  const pageResults = results.slice(page * perPage, (page + 1) * perPage);
 
   const handleWear = async (id: string) => {
     setWearingId(id);
@@ -496,7 +633,7 @@ export function VrcdbPanel({
             {totalPages > 1 && <span>Page {page + 1} of {totalPages}</span>}
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          <div className="grid gap-4" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
             {pageResults.map(avatar => {
               const isWearing = wearingId === avatar.id;
               const isWorn = wornId === avatar.id;
@@ -545,42 +682,7 @@ export function VrcdbPanel({
             })}
           </div>
 
-          {totalPages > 1 && (
-            <div className="flex items-center justify-center gap-2 pt-2">
-              <button onClick={() => { setPage(0); window.scrollTo({ top: 0, behavior: 'smooth' }); }} disabled={page === 0} className="p-1.5 rounded border border-surface-700 text-surface-400 hover:text-surface-200 hover:border-surface-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors" title="First page">
-                <ChevronLeft size={14} className="inline" /><ChevronLeft size={14} className="inline -ml-2" />
-              </button>
-              <button onClick={() => { setPage(p => p - 1); window.scrollTo({ top: 0, behavior: 'smooth' }); }} disabled={page === 0} className="p-1.5 rounded border border-surface-700 text-surface-400 hover:text-surface-200 hover:border-surface-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors" title="Previous page">
-                <ChevronLeft size={14} />
-              </button>
-              <div className="flex gap-1">
-                {Array.from({ length: totalPages }, (_, i) => i)
-                  .filter(i => Math.abs(i - page) <= 3 || i === 0 || i === totalPages - 1)
-                  .reduce<(number | 'gap')[]>((acc, i, idx, arr) => {
-                    if (idx > 0 && i - (arr[idx - 1] as number) > 1) acc.push('gap');
-                    acc.push(i);
-                    return acc;
-                  }, [])
-                  .map((item, idx) =>
-                    item === 'gap' ? (
-                      <span key={`gap-${idx}`} className="px-1.5 py-1 text-xs text-surface-600">…</span>
-                    ) : (
-                      <button key={item} onClick={() => { setPage(item as number); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
-                        className={`min-w-[28px] h-7 px-1.5 rounded text-xs border transition-colors ${
-                          page === item ? 'border-accent-500 bg-accent-500/20 text-accent-400 font-semibold' : 'border-surface-700 text-surface-400 hover:text-surface-200 hover:border-surface-500'
-                        }`}
-                      >{(item as number) + 1}</button>
-                    )
-                  )}
-              </div>
-              <button onClick={() => { setPage(p => p + 1); window.scrollTo({ top: 0, behavior: 'smooth' }); }} disabled={page === totalPages - 1} className="p-1.5 rounded border border-surface-700 text-surface-400 hover:text-surface-200 hover:border-surface-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors" title="Next page">
-                <ChevronRight size={14} />
-              </button>
-              <button onClick={() => { setPage(totalPages - 1); window.scrollTo({ top: 0, behavior: 'smooth' }); }} disabled={page === totalPages - 1} className="p-1.5 rounded border border-surface-700 text-surface-400 hover:text-surface-200 hover:border-surface-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors" title="Last page">
-                <ChevronRight size={14} className="inline" /><ChevronRight size={14} className="inline -ml-2" />
-              </button>
-            </div>
-          )}
+          <PageNavigator page={page} totalPages={totalPages} onGoTo={p => { setPage(p); window.scrollTo({ top: 0, behavior: 'smooth' }); }} />
         </>
       )}
       <div className="px-3 py-2 border-t border-surface-800/40 text-[10px] text-surface-600 leading-relaxed">
