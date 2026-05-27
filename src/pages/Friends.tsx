@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useSettingsStore } from '../stores/settingsStore';
 import {
   Users, MapPin, StickyNote, Globe,
   ChevronRight, RotateCw, X, Star, ExternalLink, LogIn,
@@ -64,6 +65,8 @@ function useDetailPanel() {
 export default function FriendsPage() {
   const { onlineFriends, offlineFriends, notes, setNote, isLoading, fetchAllFriends,
           tagColors, setTagColor, getAllTags } = useFriendStore();
+  const { settings } = useSettingsStore();
+  const { showOfflineFriends, showAvatarInList, showBioPreview, showTrustBadges, compactMode, groupByStatus } = settings.display;
   const { worldCache, getWorld } = useWorldStore();
   const { starredIds, toggleStar, isStarred } = useStarredFriendsStore();
   const currentInstance = useInstanceHistoryStore(s => s.currentInstance);
@@ -108,7 +111,7 @@ export default function FriendsPage() {
     let list: VRCUser[] = [];
     if (tab === 'online') list = [...onlineFriends];
     else if (tab === 'offline') list = [...offlineFriends];
-    else if (tab === 'all') list = [...onlineFriends, ...offlineFriends];
+    else if (tab === 'all') list = showOfflineFriends ? [...onlineFriends, ...offlineFriends] : [...onlineFriends];
     else if (tab === 'starred') list = allFriends.filter(f => isStarred(f.id));
     else return [];
 
@@ -173,6 +176,66 @@ export default function FriendsPage() {
 
   const privateCount = onlineFriends.filter(f => f.location === 'private').length;
 
+  const renderFriend = (friend: VRCUser) => {
+    const note = notes[friend.id];
+    return (
+      <button
+        key={friend.id}
+        onClick={() => detail.user?.id === friend.id ? detail.close() : detail.open(friend)}
+        className={`glass-panel-solid ${compactMode ? 'p-1.5' : 'p-3'} flex items-center ${compactMode ? 'gap-2' : 'gap-3'} w-full text-left card-hover group ${
+          detail.user?.id === friend.id ? 'border-accent-500/30' : ''
+        }`}
+      >
+        {showAvatarInList && (
+          <UserAvatar src={getBestAvatarUrl(friend)} status={friend.status} size={compactMode ? 'sm' : 'md'} />
+        )}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className={`font-medium ${compactMode ? 'text-xs' : 'text-sm'}`}>{friend.displayName}</span>
+            {note?.tags?.map(tag => (
+              <span key={tag} className={`badge text-[10px] ${tagBadgeClass(tagColors[tag])}`}>{tag}</span>
+            ))}
+            {showTrustBadges && (() => {
+              const tags = friend.tags;
+              if (!tags?.length) return null;
+              const rank = getTrustRank(tags);
+              return <span className={`inline-block text-[9px] px-1.5 py-0.5 rounded-full border font-medium flex-shrink-0 ${RANK_COLORS[rank]}`}>{rank}</span>;
+            })()}
+          </div>
+          {showBioPreview && (
+            <div className={`text-xs text-surface-500 truncate ${compactMode ? '' : 'mt-0.5'}`}>
+              {friend.statusDescription || friend.status}
+            </div>
+          )}
+        </div>
+
+        {friend.location && friend.location !== 'private' && friend.location !== 'offline' && (
+          <div className="text-xs text-surface-500 flex items-center gap-1 flex-shrink-0">
+            <MapPin size={11} />
+            <span className="max-w-[120px] truncate font-mono text-[10px]">
+              {worldCache[friend.location.split(':')[0]]?.name || friend.location.split(':')[0]}
+            </span>
+          </div>
+        )}
+        {friend.location === 'private' && friend.status !== 'offline' && (
+          <span className="text-xs text-surface-600 flex-shrink-0">Private</span>
+        )}
+        {note?.note && <StickyNote size={12} className="text-amber-400/70 flex-shrink-0" />}
+        <button
+          onClick={e => { e.stopPropagation(); toggleStar(friend.id); }}
+          className={`p-1 rounded transition-colors flex-shrink-0 ${
+            isStarred(friend.id)
+              ? 'text-amber-400 hover:text-amber-300'
+              : 'text-surface-700 hover:text-surface-400 opacity-0 group-hover:opacity-100'
+          }`}
+          title={isStarred(friend.id) ? 'Remove from starred' : 'Star this friend'}
+        >
+          <Star size={13} fill={isStarred(friend.id) ? 'currentColor' : 'none'} />
+        </button>
+      </button>
+    );
+  };
+
   return (
     <div className={`max-w-5xl mx-auto space-y-4 animate-fade-in ${detail.user ? 'mr-80' : ''}`}>
       <div className="flex items-center justify-between">
@@ -190,12 +253,12 @@ export default function FriendsPage() {
       {/* Tabs */}
       <div className="flex gap-1 border-b border-surface-800 pb-px flex-wrap">
         {([
-          { key: 'online' as FriendTab, label: `Online (${onlineFriends.length})` },
-          { key: 'offline' as FriendTab, label: `Offline (${offlineFriends.length})` },
-          { key: 'all' as FriendTab, label: `All (${onlineFriends.length + offlineFriends.length})` },
-          { key: 'starred' as FriendTab, label: `Starred (${starredIds.length})` },
-          { key: 'gps' as FriendTab, label: `GPS Map (${worldGroups.length} worlds)` },
-        ]).map(({ key, label }) => (
+          { key: 'online' as FriendTab, label: `Online (${onlineFriends.length})`, show: true },
+          { key: 'offline' as FriendTab, label: `Offline (${offlineFriends.length})`, show: showOfflineFriends },
+          { key: 'all' as FriendTab, label: `All (${showOfflineFriends ? onlineFriends.length + offlineFriends.length : onlineFriends.length})`, show: true },
+          { key: 'starred' as FriendTab, label: `Starred (${starredIds.length})`, show: true },
+          { key: 'gps' as FriendTab, label: `GPS Map (${worldGroups.length} worlds)`, show: true },
+        ]).filter(t => t.show).map(({ key, label }) => (
           <button
             key={key}
             onClick={() => setTab(key)}
@@ -342,57 +405,32 @@ export default function FriendsPage() {
                 : search ? 'Try a different search' : 'Friends appear once data loads'
             }
           />
-        ) : (
-          <div className="space-y-0.5">
-            {friends.map(friend => {
-              const note = notes[friend.id];
-              return (
-                <button
-                  key={friend.id}
-                  onClick={() => detail.user?.id === friend.id ? detail.close() : detail.open(friend)}
-                  className={`glass-panel-solid p-3 flex items-center gap-3 w-full text-left card-hover group ${
-                    detail.user?.id === friend.id ? 'border-accent-500/30' : ''
-                  }`}
-                >
-                  <UserAvatar src={getBestAvatarUrl(friend)} status={friend.status} size="md" />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-sm">{friend.displayName}</span>
-                      {note?.tags?.map(tag => (
-                        <span key={tag} className={`badge text-[10px] ${tagBadgeClass(tagColors[tag])}`}>{tag}</span>
-                      ))}
+        ) : groupByStatus && (tab === 'online' || tab === 'all') ? (
+          // Grouped by status sections
+          <div className="space-y-4">
+            {(['join me', 'active', 'ask me', 'busy', 'offline'] as const)
+              .map(status => {
+                const group = friends.filter(f => f.status === status);
+                if (group.length === 0) return null;
+                const labels: Record<string, string> = {
+                  'join me': 'Join Me', 'active': 'Online',
+                  'ask me': 'Ask Me', 'busy': 'Busy', 'offline': 'Offline',
+                };
+                return (
+                  <div key={status}>
+                    <div className="text-[10px] font-semibold uppercase tracking-wider text-surface-600 px-1 pb-1">
+                      {labels[status]} ({group.length})
                     </div>
-                    <div className="text-xs text-surface-500 truncate mt-0.5">
-                      {friend.statusDescription || friend.status}
+                    <div className="space-y-0.5">
+                      {group.map(renderFriend)}
                     </div>
                   </div>
-
-                  {friend.location && friend.location !== 'private' && friend.location !== 'offline' && (
-                    <div className="text-xs text-surface-500 flex items-center gap-1 flex-shrink-0">
-                      <MapPin size={11} />
-                      <span className="max-w-[120px] truncate font-mono text-[10px]">
-                        {worldCache[friend.location.split(':')[0]]?.name || friend.location.split(':')[0]}
-                      </span>
-                    </div>
-                  )}
-                  {friend.location === 'private' && friend.status !== 'offline' && (
-                    <span className="text-xs text-surface-600 flex-shrink-0">Private</span>
-                  )}
-                  {note?.note && <StickyNote size={12} className="text-amber-400/70 flex-shrink-0" />}
-                  <button
-                    onClick={e => { e.stopPropagation(); toggleStar(friend.id); }}
-                    className={`p-1 rounded transition-colors flex-shrink-0 ${
-                      isStarred(friend.id)
-                        ? 'text-amber-400 hover:text-amber-300'
-                        : 'text-surface-700 hover:text-surface-400 opacity-0 group-hover:opacity-100'
-                    }`}
-                    title={isStarred(friend.id) ? 'Remove from starred' : 'Star this friend'}
-                  >
-                    <Star size={13} fill={isStarred(friend.id) ? 'currentColor' : 'none'} />
-                  </button>
-                </button>
-              );
-            })}
+                );
+              })}
+          </div>
+        ) : (
+          <div className="space-y-0.5">
+            {friends.map(renderFriend)}
           </div>
         )
       )}
@@ -421,7 +459,7 @@ export default function FriendsPage() {
                 <div className={`absolute bottom-0 right-0 w-4 h-4 rounded-full ring-2 ring-surface-900 ${statusDotColors[detail.user.status]}`} />
               </div>
               <h3 className="text-lg font-bold mt-3">{detail.user.displayName}</h3>
-              {(() => {
+              {showTrustBadges && (() => {
                 const tags = (detail.fullUser || detail.user).tags;
                 if (!tags?.length) return null;
                 const rank = getTrustRank(tags);

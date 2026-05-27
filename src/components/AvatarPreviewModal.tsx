@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { X, Copy, Check, ExternalLink } from 'lucide-react';
 import type { VRCAvatar } from '../types/vrchat';
 
@@ -9,6 +9,12 @@ interface AvatarPreviewModalProps {
 
 export default function AvatarPreviewModal({ avatar, onClose }: AvatarPreviewModalProps) {
   const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
 
   const handleCopyId = () => {
     navigator.clipboard.writeText(avatar.id);

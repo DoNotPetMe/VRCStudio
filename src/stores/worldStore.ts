@@ -10,6 +10,7 @@ interface WorldState {
   worldCache: Record<string, VRCWorld>;
   instanceCache: Record<string, VRCInstance>;
   isLoading: boolean;
+  error: string | null;
   searchQuery: string;
 
   searchWorlds: (query: string) => Promise<void>;
@@ -19,6 +20,7 @@ interface WorldState {
   getWorld: (worldId: string) => Promise<VRCWorld>;
   getInstance: (worldId: string, instanceId: string) => Promise<VRCInstance>;
   setSearchQuery: (query: string) => void;
+  clearError: () => void;
 }
 
 export const useWorldStore = create<WorldState>((set, get) => ({
@@ -29,29 +31,32 @@ export const useWorldStore = create<WorldState>((set, get) => ({
   worldCache: {},
   instanceCache: {},
   isLoading: false,
+  error: null,
   searchQuery: '',
 
+  clearError: () => set({ error: null }),
+
   searchWorlds: async (query) => {
-    set({ isLoading: true, searchQuery: query });
+    set({ isLoading: true, searchQuery: query, error: null });
     try {
       const results = await api.searchWorlds({ query, count: 30, sort: 'relevance' });
       const cache = { ...get().worldCache };
       results.forEach(w => { cache[w.id] = w; });
       set({ searchResults: results, worldCache: cache, isLoading: false });
     } catch {
-      set({ isLoading: false });
+      set({ isLoading: false, error: 'Search failed — check your connection and try again' });
     }
   },
 
   fetchActiveWorlds: async () => {
-    set({ isLoading: true });
+    set({ isLoading: true, error: null });
     try {
       const worlds = await api.getActiveWorlds(30);
       const cache = { ...get().worldCache };
       worlds.forEach(w => { cache[w.id] = w; });
       set({ activeWorlds: worlds, worldCache: cache, isLoading: false });
     } catch {
-      set({ isLoading: false });
+      set({ isLoading: false, error: 'Failed to load worlds — check your connection' });
     }
   },
 
@@ -61,7 +66,9 @@ export const useWorldStore = create<WorldState>((set, get) => ({
       const cache = { ...get().worldCache };
       worlds.forEach(w => { cache[w.id] = w; });
       set({ recentWorlds: worlds, worldCache: cache });
-    } catch {}
+    } catch (e) {
+      set({ error: 'Failed to load recent worlds' });
+    }
   },
 
   fetchFavoriteWorlds: async () => {
@@ -70,7 +77,9 @@ export const useWorldStore = create<WorldState>((set, get) => ({
       const cache = { ...get().worldCache };
       worlds.forEach(w => { cache[w.id] = w; });
       set({ favoriteWorlds: worlds, worldCache: cache });
-    } catch {}
+    } catch (e) {
+      set({ error: 'Failed to load favorite worlds' });
+    }
   },
 
   getWorld: async (worldId) => {
@@ -101,3 +110,4 @@ export const useWorldStore = create<WorldState>((set, get) => ({
 
   setSearchQuery: (query) => set({ searchQuery: query }),
 }));
+

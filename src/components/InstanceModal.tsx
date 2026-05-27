@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Send, ExternalLink } from 'lucide-react';
+import { Send, ExternalLink, AlertCircle } from 'lucide-react';
 import api from '../api/vrchat';
 import LoadingSpinner from './common/LoadingSpinner';
 import type { VRCInstance, VRCWorld } from '../types/vrchat';
@@ -14,8 +14,15 @@ export default function InstanceModal({ worldId, instanceId, onClose }: Props) {
   const [instance, setInstance] = useState<VRCInstance | null>(null);
   const [world, setWorld] = useState<VRCWorld | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [inviting, setInviting] = useState(false);
   const [invited, setInvited] = useState(false);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
 
   useEffect(() => {
     loadData();
@@ -23,6 +30,7 @@ export default function InstanceModal({ worldId, instanceId, onClose }: Props) {
 
   const loadData = async () => {
     setIsLoading(true);
+    setLoadError(false);
     try {
       const [inst, w] = await Promise.allSettled([
         api.getInstance(worldId, instanceId),
@@ -30,6 +38,7 @@ export default function InstanceModal({ worldId, instanceId, onClose }: Props) {
       ]);
       if (inst.status === 'fulfilled') setInstance(inst.value);
       if (w.status === 'fulfilled') setWorld(w.value);
+      if (inst.status === 'rejected' && w.status === 'rejected') setLoadError(true);
     } catch {}
     setIsLoading(false);
   };
@@ -62,6 +71,16 @@ export default function InstanceModal({ worldId, instanceId, onClose }: Props) {
         {isLoading ? (
           <div className="p-8">
             <LoadingSpinner />
+          </div>
+        ) : loadError ? (
+          <div className="p-8 text-center space-y-3">
+            <AlertCircle size={32} className="text-surface-600 mx-auto" />
+            <p className="text-sm text-surface-400">Could not load instance info.</p>
+            <p className="text-xs text-surface-600">The instance may no longer be active.</p>
+            <div className="flex gap-2 justify-center pt-1">
+              <button onClick={loadData} className="btn-secondary text-xs">Retry</button>
+              <button onClick={onClose} className="btn-ghost text-xs">Close</button>
+            </div>
           </div>
         ) : (
           <>

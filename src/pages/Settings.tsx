@@ -618,6 +618,7 @@ export default function SettingsPage() {
                     {discordEnabled && !discordClientId && <p className="text-xs text-amber-400">⚠ Enter a Client ID to activate rich presence.</p>}
                   </div>
                   <Toggle label="Show Current World" description="Include the world name and how long you've been there" checked={discordShowWorld} onChange={v => { setDiscordShowWorld(v); saveDiscord(discordEnabled, discordClientId, v, discordShowAvatar); }} />
+                  <Toggle label="Show Avatar Thumbnail" description="Display your current avatar as the small Discord status icon" checked={discordShowAvatar} onChange={v => { setDiscordShowAvatar(v); saveDiscord(discordEnabled, discordClientId, discordShowWorld, v); }} />
                 </>
               )}
             </Section>

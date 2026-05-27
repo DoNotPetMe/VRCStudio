@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { X, Calendar, MapPin, MessageCircle, Clock, Filter } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import UserAvatar from './common/UserAvatar';
@@ -13,6 +13,12 @@ interface FriendEventDetailProps {
 
 export default function FriendEventDetail({ friend, events, onClose }: FriendEventDetailProps) {
   const [filterType, setFilterType] = useState<string | null>(null);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
 
   const filteredEvents = useMemo(() => {
     const friendEvents = events.filter(e => e.userId === friend.id);

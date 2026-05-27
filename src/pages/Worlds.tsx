@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Globe, TrendingUp, Clock, Star, Search, Users, Heart, ArrowLeft, LogIn, X, ExternalLink } from 'lucide-react';
+import { Globe, TrendingUp, Clock, Star, Search, Users, Heart, ArrowLeft, LogIn, X, ExternalLink, AlertCircle, RotateCw } from 'lucide-react';
 import { useWorldStore } from '../stores/worldStore';
 import { useFriendStore } from '../stores/friendStore';
 import SearchInput from '../components/common/SearchInput';
@@ -37,7 +37,7 @@ function instanceLabel(id: string): string {
 export default function WorldsPage() {
   const {
     searchResults, activeWorlds, recentWorlds, favoriteWorlds,
-    isLoading, searchWorlds, fetchActiveWorlds, fetchRecentWorlds, fetchFavoriteWorlds,
+    isLoading, error, clearError, searchWorlds, fetchActiveWorlds, fetchRecentWorlds, fetchFavoriteWorlds,
     getWorld, worldCache,
   } = useWorldStore();
   const { onlineFriends } = useFriendStore();
@@ -295,6 +295,19 @@ export default function WorldsPage() {
   return (
     <div className="max-w-6xl mx-auto space-y-4 animate-fade-in">
       <h1 className="text-2xl font-bold">Worlds</h1>
+
+      {error && (
+        <div className="glass-panel-solid border border-rose-500/30 bg-rose-500/10 p-3 flex items-center gap-3">
+          <AlertCircle size={16} className="text-rose-500 flex-shrink-0" />
+          <span className="text-sm text-rose-400 flex-1">{error}</span>
+          <button
+            onClick={() => { clearError(); fetchActiveWorlds(); fetchRecentWorlds(); fetchFavoriteWorlds(); }}
+            className="btn-secondary text-xs flex items-center gap-1.5 flex-shrink-0"
+          >
+            <RotateCw size={12} /> Retry
+          </button>
+        </div>
+      )}
 
       <div className="flex gap-2">
         <SearchInput

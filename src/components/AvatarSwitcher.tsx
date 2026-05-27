@@ -28,6 +28,7 @@ export default function AvatarSwitcher({ open, onClose }: Props) {
   const [isFetching, setIsFetching] = useState(false);
   const [wearingId, setWearingId] = useState<string | null>(null);
   const [wornId, setWornId] = useState<string | null>(null);
+  const [wearError, setWearError] = useState<string | null>(null);
 
   // VRCDB state
   const [vrcdbTab, setVrcdbTab] = useState<VrcdbTab>('name');
@@ -96,12 +97,16 @@ export default function AvatarSwitcher({ open, onClose }: Props) {
   const handleWear = async (avatarId: string) => {
     if (wearingId) return;
     setWearingId(avatarId);
+    setWearError(null);
     try {
       await api.selectAvatar(avatarId);
       recordSwitch(avatarId);
       setWornId(avatarId);
       setTimeout(() => setWornId(null), 3000);
-    } catch {}
+    } catch (e) {
+      setWearError(e instanceof Error ? e.message : 'Failed to switch avatar');
+      setTimeout(() => setWearError(null), 4000);
+    }
     setWearingId(null);
   };
 
@@ -297,6 +302,13 @@ export default function AvatarSwitcher({ open, onClose }: Props) {
                 className="w-full bg-surface-800 text-sm pl-8 pr-3 py-1.5 rounded-lg border border-surface-700/40 focus:outline-none focus:border-accent-500/50 placeholder-surface-600"
               />
             </div>
+          </div>
+        )}
+
+        {/* Wear error banner */}
+        {wearError && (
+          <div className="mx-3 mt-2 px-3 py-2 rounded-lg bg-rose-500/10 border border-rose-500/25 text-xs text-rose-400 flex items-center gap-2 flex-shrink-0">
+            <span className="flex-1">{wearError}</span>
           </div>
         )}
 
