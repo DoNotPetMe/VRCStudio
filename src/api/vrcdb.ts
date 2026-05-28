@@ -23,7 +23,6 @@ function getVrcxId(): string {
 }
 
 // User-Agent that satisfies avtrdb's contact-info requirement.
-// Format: <App>/<Version> (+<contact URL>; <contact email>)
 const CONTACT_UA = 'VRCStudio/1.0.0 (+https://github.com/crystaldusty/vrcstudio; contact: vrcstudio@proton.me)';
 
 const AVTRDB_HEADERS = (): Record<string, string> => ({
@@ -32,23 +31,16 @@ const AVTRDB_HEADERS = (): Record<string, string> => ({
   'VRCX-ID': getVrcxId(),
 });
 
-const FALLBACK_HEADERS = (): Record<string, string> => ({
-  'User-Agent': CONTACT_UA,
-});
-
 export const VRCDB_PROVIDERS = [
   {
     id: 'avtrdb',
     label: 'avtrdb.com',
-    // avtrdb's /v3/avatar/search/vrcx endpoint REQUIRES a `search` param.
-    // Tag searches piggy-back on the same endpoint by passing the tag as
-    // the search term — avtrdb's full-text index covers tag names.
-    searchUrl: (q: string, n = 200) => `https://api.avtrdb.com/v3/avatar/search/vrcx?search=${encodeURIComponent(q)}&n=${n}`,
+    // The VRCX endpoint supports: search, n (page size), page (1-indexed)
+    // matching the web UI at avtrdb.com/search?query=...&page=N&page_size=N
+    searchPageUrl: (q: string, pageSize: number, page: number) =>
+      `https://api.avtrdb.com/v3/avatar/search/vrcx?search=${encodeURIComponent(q)}&n=${pageSize}&page=${page}`,
     byAuthorUrl: (id: string) => `https://api.avtrdb.com/v3/avatar/search/vrcx?authorId=${encodeURIComponent(id)}`,
     byIdUrl: (id: string) => `https://api.avtrdb.com/v3/avatar/search/vrcx?fileId=${encodeURIComponent(id)}`,
-    tagSearchUrl: (tag: string, n = 50) => `https://api.avtrdb.com/v3/avatar/search/vrcx?search=${encodeURIComponent(tag)}&n=${n}`,
-    // Open the canonical avtrdb page for an avatar (e.g. to use their
-    // built-in "find similar" image search there).
     webPageUrl: (avatarId: string) => `https://avtrdb.com/avatar/${encodeURIComponent(avatarId)}`,
     headers: AVTRDB_HEADERS,
   },
@@ -83,6 +75,14 @@ export interface VRCDBAvatar {
   releaseStatus: string;
 }
 
+export interface VRCDBPage {
+  avatars: VRCDBAvatar[];
+  /** true when the API returned a full page (more pages likely exist) */
+  hasMore: boolean;
+  /** total avatar count if the API returned it */
+  total?: number;
+}
+
 function normalise(raw: unknown): VRCDBAvatar[] {
   const list: unknown[] = Array.isArray(raw)
     ? raw
@@ -101,49 +101,81 @@ function normalise(raw: unknown): VRCDBAvatar[] {
     }));
 }
 
-async function fetchUrl(url: string, headers: Record<string, string>): Promise<{ avatars: VRCDBAvatar[]; status: number; rawError?: string }> {
+function extractMeta(raw: unknown): { total?: number } {
+  if (!raw || typeof raw !== 'object') return {};
+  const r = raw as any;
+  const total = r.total ?? r.total_count ?? r.totalCount ?? r.meta?.total ?? r.meta?.total_count;
+  return { total: typeof total === 'number' ? total : undefined };
+}
+
+async function fetchUrlRaw(url: string, headers: Record<string, string>): Promise<{ data: unknown; status: number; rawError?: string }> {
   if (window.electronAPI?.httpGet) {
     const res = await window.electronAPI.httpGet(url, headers);
-    if (!res.ok) return { avatars: [], status: res.status, rawError: res.raw?.slice(0, 200) };
+    if (!res.ok) return { data: null, status: res.status, rawError: res.raw?.slice(0, 200) };
     const data = res.data ?? (() => { try { return JSON.parse(res.raw); } catch { return null; } })();
-    return { avatars: normalise(data), status: res.status };
+    return { data, status: res.status };
   }
-  // Browser fallback. Note: fetch() can't set Referer/VRCX-ID securely;
-  // requests to api.avtrdb.com will fail in dev mode unless proxied.
   try {
     const res = await fetch(url, { headers });
-    if (!res.ok) return { avatars: [], status: res.status, rawError: await res.text().then(t => t.slice(0, 200)).catch(() => '') };
-    return { avatars: normalise(await res.json()), status: res.status };
+    if (!res.ok) return { data: null, status: res.status, rawError: await res.text().then(t => t.slice(0, 200)).catch(() => '') };
+    return { data: await res.json(), status: res.status };
   } catch (err) {
-    return { avatars: [], status: 0, rawError: err instanceof Error ? err.message : 'Network error' };
+    return { data: null, status: 0, rawError: err instanceof Error ? err.message : 'Network error' };
   }
 }
 
-// Try the active provider first, then fall back to others on hard error.
-async function tryProviders(
+async function fetchPage(url: string, headers: Record<string, string>, pageSize: number): Promise<VRCDBPage> {
+  const { data, status, rawError } = await fetchUrlRaw(url, headers);
+  if (status < 200 || status >= 300) {
+    throw new Error(`HTTP ${status}${rawError ? `: ${rawError}` : ''}`);
+  }
+  const avatars = normalise(data);
+  const { total } = extractMeta(data);
+  // If API returns a total we can be precise; otherwise use page fullness as heuristic
+  const hasMore = total !== undefined ? avatars.length + 0 < total : avatars.length >= pageSize;
+  return { avatars, hasMore, total };
+}
+
+// Fetch a single page from the active provider (page is 1-indexed)
+async function tryFetchPage(
   pick: (p: typeof VRCDB_PROVIDERS[number]) => string | null,
-): Promise<VRCDBAvatar[]> {
+  pageSize: number,
+): Promise<VRCDBPage> {
   const order = [getProvider(), ...VRCDB_PROVIDERS.filter(p => p.id !== getProviderId())];
   const errors: string[] = [];
   for (const provider of order) {
     const url = pick(provider);
-    if (!url) continue; // provider doesn't support this operation
-    const result = await fetchUrl(url, provider.headers());
-    if (result.status >= 200 && result.status < 300) {
-      return result.avatars;
+    if (!url) continue;
+    try {
+      return await fetchPage(url, provider.headers(), pageSize);
+    } catch (err) {
+      errors.push(`${provider.label}: ${err instanceof Error ? err.message : String(err)}`);
     }
-    errors.push(`${provider.label} → ${result.status}${result.rawError ? `: ${result.rawError}` : ''}`);
   }
-  if (errors.length === 0) throw new Error('No provider supports this search type');
-  throw new Error(`All providers failed:\n${errors.join('\n')}`);
+  throw new Error(errors.length ? `All providers failed:\n${errors.join('\n')}` : 'No provider supports this search type');
+}
+
+// Legacy single-fetch used for author/ID lookups (no pagination needed there)
+async function tryProviders(pick: (p: typeof VRCDB_PROVIDERS[number]) => string | null): Promise<VRCDBAvatar[]> {
+  const page = await tryFetchPage(pick, 200);
+  return page.avatars;
 }
 
 export const vrcdb = {
-  search: (query: string, count = 200) => tryProviders(p => p.searchUrl(query, count)),
-  getByAuthor: (authorId: string) => tryProviders(p => p.byAuthorUrl(authorId)),
-  getById: (avatarId: string) => tryProviders(p => p.byIdUrl(avatarId)),
-  searchByTag: (tag: string, count = 50) => tryProviders(p => 'tagSearchUrl' in p ? p.tagSearchUrl(tag, count) : null),
-  /** Web URL for an avatar on the active provider (for opening in browser). */
+  /** Fetch one page of search results. page is 1-indexed. */
+  searchPage: (query: string, pageSize: number, page: number): Promise<VRCDBPage> =>
+    tryFetchPage(p => p.searchPageUrl(query, pageSize, page), pageSize),
+
+  /** Legacy: fetch up to `count` results in one shot (for author/ID lookups). */
+  search: (query: string, count = 200): Promise<VRCDBAvatar[]> =>
+    tryProviders(p => p.searchPageUrl(query, count, 1)),
+
+  getByAuthor: (authorId: string): Promise<VRCDBAvatar[]> =>
+    tryProviders(p => p.byAuthorUrl(authorId)),
+
+  getById: (avatarId: string): Promise<VRCDBAvatar[]> =>
+    tryProviders(p => p.byIdUrl(avatarId)),
+
   webUrlFor: (avatarId: string): string | null => {
     const p = VRCDB_PROVIDERS.find(p => p.id === getProviderId()) ?? VRCDB_PROVIDERS[0];
     return 'webPageUrl' in p ? p.webPageUrl(avatarId) : null;

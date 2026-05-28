@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Shirt, Search, ArrowLeft, Heart, AlertCircle, RotateCw,
   Pin, PinOff, Zap, Copy, Check, Database, ExternalLink,
@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import api from '../api/vrchat';
 import { vrcdb, VRCDB_PROVIDERS, getProviderId, setProviderId } from '../api/vrcdb';
-import type { ProviderId, VRCDBAvatar } from '../api/vrcdb';
+import type { ProviderId } from '../api/vrcdb';
 import SearchInput from '../components/common/SearchInput';
 import EmptyState from '../components/common/EmptyState';
 import LoadingSpinner from '../components/common/LoadingSpinner';
@@ -67,19 +67,16 @@ export default function AvatarsPage() {
   const [favoriteAvatars, setFavoriteAvatars] = useState<VRCAvatar[]>([]);
   const [ownAvatars, setOwnAvatars] = useState<VRCAvatar[]>([]);
   const [vrcSearchResults, setVrcSearchResults] = useState<VRCAvatar[]>([]);
-  const [vrcdbResults, setVrcdbResults] = useState<VRCDBAvatar[]>([]);
+  const [vrcdbQuery, setVrcdbQuery] = useState<string | null>(null);
   const [favLoading, setFavLoading] = useState(false);
   const [ownLoading, setOwnLoading] = useState(false);
   const [vrcSearchLoading, setVrcSearchLoading] = useState(false);
-  const [vrcdbLoading, setVrcdbLoading] = useState(false);
-  const [vrcdbError, setVrcdbError] = useState<string | null>(null);
   const [searchInput, setSearchInput] = useState('');
   const [tagInput, setTagInput] = useState('');
   const [selected, setSelected] = useState<VRCAvatar | null>(null);
   const [switching, setSwitching] = useState(false);
   const [ownAvatarsError, setOwnAvatarsError] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [providerId, setProviderIdState] = useState<ProviderId>(getProviderId());
   const [surpriseMeLoading, setSurpriseMeLoading] = useState(false);
   const [vrcPage, setVrcPage] = useState(0);
   const [vrcReachedEnd, setVrcReachedEnd] = useState(false);
@@ -150,7 +147,7 @@ export default function AvatarsPage() {
     const t = tagInput.trim();
     if (!q && !t) return;
     if (tab === 'vrcdb') {
-      if (q) searchVrcdb(q);
+      if (q) setVrcdbQuery(q);
     } else {
       const apiTag = t ? `author_tag_${t}` : undefined;
       const query = { q, tag: apiTag };
@@ -169,19 +166,6 @@ export default function AvatarsPage() {
     }
   };
 
-  const searchVrcdb = async (q: string) => {
-    setVrcdbLoading(true);
-    setVrcdbError(null);
-    try {
-      const results = await vrcdb.search(q);
-      setVrcdbResults(results);
-      if (results.length === 0) setVrcdbError(null);
-    } catch (err) {
-      setVrcdbError(err instanceof Error ? err.message : 'Search failed');
-    }
-    setVrcdbLoading(false);
-  };
-
   const handleSelect = async (avatarId: string) => {
     setSwitching(true);
     try { await api.selectAvatar(avatarId); } catch {}
@@ -192,13 +176,6 @@ export default function AvatarsPage() {
     navigator.clipboard.writeText(id);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
-  };
-
-  const changeProvider = (id: ProviderId) => {
-    setProviderId(id);
-    setProviderIdState(id);
-    setVrcdbResults([]);
-    setVrcdbError(null);
   };
 
   const handleSurpriseMe = async () => {
@@ -361,7 +338,7 @@ export default function AvatarsPage() {
           { key: 'own'        as AvatarTab, icon: Shirt,    label: `My Uploads${ownAvatars.length ? ` (${ownAvatars.length})` : ''}` },
           { key: 'favorites'  as AvatarTab, icon: Heart,    label: `Favorites${favoriteAvatars.length ? ` (${favoriteAvatars.length})` : ''}` },
           ...(vrcSearchResults.length > 0 ? [{ key: 'vrc_search' as AvatarTab, icon: Search, label: `VRChat (${vrcSearchResults.length})` }] : []),
-          { key: 'vrcdb'      as AvatarTab, icon: Database, label: `Database${vrcdbResults.length ? ` (${vrcdbResults.length})` : ''}` },
+          { key: 'vrcdb'      as AvatarTab, icon: Database, label: 'Database' },
         ] as const).map(({ key, icon: Icon, label }) => (
           <button key={key} onClick={() => setTab(key)}
             className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
@@ -407,29 +384,12 @@ export default function AvatarsPage() {
 
       {tab === 'vrcdb' ? (
         <VrcdbPanel
-          results={vrcdbResults}
-          loading={vrcdbLoading}
-          error={vrcdbError}
+          query={vrcdbQuery}
           copiedId={copiedId}
-          providerId={providerId}
           onCopy={copyId}
           onWear={handleSelect}
-          onChangeProvider={changeProvider}
-          onSearch={() => searchVrcdb(searchInput.trim())}
-          hasQuery={!!searchInput.trim()}
           perPage={perPage}
           columns={columns}
-          onFindByAuthor={async (authorId, authorName) => {
-            setVrcdbLoading(true);
-            setVrcdbError(null);
-            try {
-              const r = await vrcdb.getByAuthor(authorId);
-              setVrcdbResults(r.length > 0 ? r : await vrcdb.search(authorName));
-            } catch (err) {
-              setVrcdbError(err instanceof Error ? err.message : 'Search failed');
-            }
-            setVrcdbLoading(false);
-          }}
         />
       ) : (
         vrcLoading ? (
@@ -564,40 +524,215 @@ export function PageNavigator({
 }
 
 export function VrcdbPanel({
-  results, loading, error, copiedId, providerId,
-  onCopy, onWear, onChangeProvider, onSearch, hasQuery, onFindByAuthor,
-  perPage = 20, columns = 4,
+  query,
+  copiedId,
+  onCopy,
+  onWear,
+  perPage = 20,
+  columns = 4,
 }: {
-  results: VRCDBAvatar[];
-  loading: boolean;
-  error: string | null;
+  query: string | null;
   copiedId: string | null;
-  providerId: ProviderId;
   onCopy: (id: string) => void;
   onWear: (id: string) => void;
-  onChangeProvider: (id: ProviderId) => void;
-  onSearch: () => void;
-  hasQuery: boolean;
-  onFindByAuthor: (authorId: string, authorName: string) => void;
   perPage?: number;
   columns?: number;
 }) {
+  const [providerId, setProviderIdState] = useState<ProviderId>(getProviderId());
   const [wearingId, setWearingId] = useState<string | null>(null);
   const [wornId, setWornId] = useState<string | null>(null);
-  const [page, setPage] = useState(0);
 
-  useEffect(() => { setPage(0); }, [results]);
+  // Paginated search state
+  type CachedAvatars = import('../api/vrcdb').VRCDBAvatar[];
+  const cacheRef = useRef<Map<number, CachedAvatars>>(new Map());
+  const [pageCache, setPageCache] = useState<Map<number, CachedAvatars>>(new Map());
+  const [currentPage, setCurrentPage] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [total, setTotal] = useState<number | undefined>(undefined);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [displayResults, setDisplayResults] = useState<CachedAvatars>([]);
 
-  const totalPages = Math.max(1, Math.ceil(results.length / perPage));
-  const pageResults = results.slice(page * perPage, (page + 1) * perPage);
+  // Author search override state
+  const [authorQuery, setAuthorQuery] = useState<{ id: string; name: string } | null>(null);
+  const [authorResults, setAuthorResults] = useState<CachedAvatars>([]);
+  const [authorPage, setAuthorPage] = useState(0);
+  const [authorLoading, setAuthorLoading] = useState(false);
+  const [authorError, setAuthorError] = useState<string | null>(null);
+
+  const changeProvider = (id: ProviderId) => {
+    setProviderId(id);
+    setProviderIdState(id);
+    cacheRef.current = new Map();
+    setCurrentPage(0);
+    setHasMore(false);
+    setTotal(undefined);
+    setDisplayResults([]);
+    setAuthorQuery(null);
+    // Re-fetch page 1 with new provider
+    if (query) fetchSearchPage(0, query, perPage);
+  };
+
+  const fetchSearchPage = async (pageIdx: number, q: string, ps: number) => {
+    if (cacheRef.current.has(pageIdx)) {
+      setDisplayResults(cacheRef.current.get(pageIdx)!);
+      setCurrentPage(pageIdx);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await vrcdb.searchPage(q, ps, pageIdx + 1);
+      cacheRef.current.set(pageIdx, result.avatars);
+      setDisplayResults(result.avatars);
+      setHasMore(result.hasMore);
+      if (result.total !== undefined) setTotal(result.total);
+      setCurrentPage(pageIdx);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Search failed');
+    }
+    setLoading(false);
+  };
+
+  // Reset and fetch page 1 whenever query, perPage, or providerId changes
+  useEffect(() => {
+    if (!query) return;
+    cacheRef.current = new Map();
+    setCurrentPage(0);
+    setHasMore(false);
+    setTotal(undefined);
+    setDisplayResults([]);
+    setError(null);
+    setAuthorQuery(null);
+    fetchSearchPage(0, query, perPage);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, perPage, providerId]);
+
+  // Sync pageCache ref → state for render
+  useEffect(() => {
+    setPageCache(new Map(cacheRef.current));
+  }, [displayResults]);
+
+  const goToPage = (pageIdx: number) => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (authorQuery) {
+      setAuthorPage(pageIdx);
+      return;
+    }
+    if (query) fetchSearchPage(pageIdx, query, perPage);
+  };
+
+  const handleFindByAuthor = async (authorId: string, authorName: string) => {
+    setAuthorQuery({ id: authorId, name: authorName });
+    setAuthorPage(0);
+    setAuthorResults([]);
+    setAuthorError(null);
+    setAuthorLoading(true);
+    try {
+      const r = await vrcdb.getByAuthor(authorId);
+      setAuthorResults(r.length > 0 ? r : await vrcdb.search(authorName));
+    } catch (err) {
+      setAuthorError(err instanceof Error ? err.message : 'Search failed');
+    }
+    setAuthorLoading(false);
+  };
 
   const handleWear = async (id: string) => {
+    if (wearingId) return;
     setWearingId(id);
-    await onWear(id);
-    setWornId(id);
+    try {
+      await onWear(id);
+      setWornId(id);
+      setTimeout(() => setWornId(null), 3000);
+    } catch {}
     setWearingId(null);
-    setTimeout(() => setWornId(null), 3000);
   };
+
+  const renderCard = (avatar: import('../api/vrcdb').VRCDBAvatar) => {
+    const isWearing = wearingId === avatar.id;
+    const isWorn = wornId === avatar.id;
+    const wasCopied = copiedId === avatar.id;
+    const imgUrl = avatar.thumbnailImageUrl || avatar.imageUrl;
+    return (
+      <div key={avatar.id} className="glass-panel-solid overflow-hidden flex flex-col">
+        <div className="aspect-square overflow-hidden bg-surface-800">
+          {imgUrl
+            ? <img src={imgUrl} alt="" className="w-full h-full object-cover" loading="lazy" />
+            : <div className="w-full h-full flex items-center justify-center"><Shirt size={32} className="text-surface-700" /></div>}
+        </div>
+        <div className="p-3 flex flex-col gap-2 flex-1">
+          <div>
+            <h3 className="text-sm font-semibold truncate" title={avatar.name}>{avatar.name}</h3>
+            <p className="text-xs text-surface-400 truncate">by {avatar.authorName}</p>
+          </div>
+          {avatar.description && <p className="text-[11px] text-surface-500 line-clamp-2 leading-relaxed">{avatar.description}</p>}
+          <div className="flex items-center gap-1.5 mt-auto pt-1">
+            <button onClick={() => handleWear(avatar.id)} disabled={!!wearingId}
+              className={`flex-1 text-xs py-1.5 rounded-lg font-medium transition-colors flex items-center justify-center gap-1 ${
+                isWorn ? 'bg-green-500/20 text-green-400' : 'btn-primary'
+              }`}
+            >
+              {isWorn ? <><Check size={11} /> Worn</> : isWearing ? 'Switching...' : 'Wear'}
+            </button>
+            <button onClick={() => handleFindByAuthor(avatar.authorId, avatar.authorName)}
+              className="text-[10px] px-2 py-1.5 rounded-lg border border-surface-700 hover:border-surface-500 transition-colors text-surface-400 hover:text-surface-200"
+              title={`More by ${avatar.authorName}`}
+            >more</button>
+            <button onClick={() => onCopy(avatar.id)}
+              className="p-1.5 rounded-lg border border-surface-700 hover:border-surface-500 transition-colors text-surface-400 hover:text-surface-200"
+              title="Copy avatar ID"
+            >
+              {wasCopied ? <Check size={12} className="text-green-400" /> : <Copy size={12} />}
+            </button>
+            <a href={`https://vrchat.com/home/avatar/${avatar.id}`} target="_blank" rel="noopener noreferrer"
+              onClick={e => { if (window.electronAPI?.openExternal) { e.preventDefault(); window.electronAPI.openExternal(`https://vrchat.com/home/avatar/${avatar.id}`); } }}
+              className="p-1.5 rounded-lg border border-surface-700 hover:border-surface-500 transition-colors text-surface-400 hover:text-surface-200" title="Open on VRChat website"
+            ><ExternalLink size={12} /></a>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Author search mode
+  if (authorQuery) {
+    const totalAuthorPages = Math.max(1, Math.ceil(authorResults.length / perPage));
+    const pageSlice = authorResults.slice(authorPage * perPage, (authorPage + 1) * perPage);
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center gap-3 flex-wrap">
+          <button onClick={() => setAuthorQuery(null)} className="btn-ghost text-xs flex items-center gap-1">
+            <ChevronLeft size={13} /> Back to search
+          </button>
+          <span className="text-sm text-surface-400">Avatars by <span className="text-surface-200 font-medium">{authorQuery.name}</span></span>
+          {authorResults.length > 0 && <span className="text-xs text-surface-600 ml-auto">{authorResults.length} found</span>}
+        </div>
+        {authorLoading ? <LoadingSpinner className="py-16" /> :
+         authorError ? (
+           <div className="glass-panel-solid border border-rose-500/30 bg-rose-500/10 p-4 rounded-lg text-sm text-rose-400 flex items-center justify-between gap-4">
+             <span>{authorError}</span>
+             <button onClick={() => handleFindByAuthor(authorQuery.id, authorQuery.name)} className="btn-secondary text-xs flex items-center gap-1 flex-shrink-0"><RotateCw size={12} /> Retry</button>
+           </div>
+         ) : authorResults.length === 0 ? (
+           <EmptyState icon={Database} title="No avatars found" description={`No public avatars found by ${authorQuery.name}`} />
+         ) : (
+           <>
+             <div className="grid gap-4" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
+               {pageSlice.map(renderCard)}
+             </div>
+             <PageNavigator page={authorPage} totalPages={totalAuthorPages} onGoTo={p => { setAuthorPage(p); window.scrollTo({ top: 0, behavior: 'smooth' }); }} />
+           </>
+         )}
+      </div>
+    );
+  }
+
+  // Normal search mode
+  const knownPages = pageCache.size;
+  const totalPages = total !== undefined
+    ? Math.max(1, Math.ceil(total / perPage))
+    : hasMore ? knownPages + 1 : Math.max(1, knownPages);
+  const unknownEnd = total === undefined && hasMore;
 
   return (
     <div className="space-y-4">
@@ -605,7 +740,7 @@ export function VrcdbPanel({
         <div className="flex items-center gap-1.5 text-xs text-surface-500"><Database size={12} /> Provider:</div>
         <div className="flex gap-1">
           {VRCDB_PROVIDERS.map(p => (
-            <button key={p.id} onClick={() => onChangeProvider(p.id as ProviderId)}
+            <button key={p.id} onClick={() => changeProvider(p.id as ProviderId)}
               className={`px-2.5 py-1 rounded text-xs border transition-colors ${
                 providerId === p.id ? 'border-accent-500 bg-accent-500/15 text-accent-400' : 'border-surface-700 bg-surface-800 text-surface-500 hover:text-surface-300'
               }`}
@@ -620,71 +755,37 @@ export function VrcdbPanel({
       ) : error ? (
         <div className="glass-panel-solid border border-rose-500/30 bg-rose-500/10 p-4 rounded-lg text-sm text-rose-400 flex items-center justify-between gap-4">
           <span>{error}</span>
-          {hasQuery && <button onClick={onSearch} className="btn-secondary text-xs flex items-center gap-1 flex-shrink-0"><RotateCw size={12} /> Retry</button>}
+          {query && <button onClick={() => fetchSearchPage(currentPage, query, perPage)} className="btn-secondary text-xs flex items-center gap-1 flex-shrink-0"><RotateCw size={12} /> Retry</button>}
         </div>
-      ) : results.length === 0 ? (
+      ) : displayResults.length === 0 && !query ? (
         <div className="text-center py-16 text-surface-500">
           <Database size={40} className="mx-auto mb-3 opacity-30" />
-          <p className="font-semibold">{hasQuery ? 'No avatars found' : 'Search the Database'}</p>
-          <p className="text-xs mt-1 text-surface-600">{hasQuery ? 'Try a different name, author, or paste an avtr_ ID' : 'Type a name or author in the search bar above and press Search'}</p>
+          <p className="font-semibold">Search the Database</p>
+          <p className="text-xs mt-1 text-surface-600">Type a name or author in the search bar above and press Search</p>
+        </div>
+      ) : displayResults.length === 0 ? (
+        <div className="text-center py-16 text-surface-500">
+          <Database size={40} className="mx-auto mb-3 opacity-30" />
+          <p className="font-semibold">No avatars found</p>
+          <p className="text-xs mt-1 text-surface-600">Try a different name, author, or paste an avtr_ ID</p>
         </div>
       ) : (
         <>
           <div className="flex items-center justify-between text-xs text-surface-500">
-            <span>{results.length} avatar{results.length !== 1 ? 's' : ''} found{results.length >= 200 && <span className="ml-1 text-amber-400/80">(max 200 per search — refine for more specific results)</span>}</span>
-            {totalPages > 1 && <span>Page {page + 1} of {totalPages}</span>}
+            {total !== undefined
+              ? <span>{total.toLocaleString()} avatar{total !== 1 ? 's' : ''} found &mdash; page {currentPage + 1} of {totalPages}</span>
+              : <span>Page {currentPage + 1}{hasMore ? '+' : ''}</span>}
           </div>
-
           <div className="grid gap-4" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
-            {pageResults.map(avatar => {
-              const isWearing = wearingId === avatar.id;
-              const isWorn = wornId === avatar.id;
-              const wasCopied = copiedId === avatar.id;
-              const imgUrl = avatar.thumbnailImageUrl || avatar.imageUrl;
-              return (
-                <div key={avatar.id} className="glass-panel-solid overflow-hidden flex flex-col">
-                  <div className="aspect-square overflow-hidden bg-surface-800">
-                    {imgUrl ? <img src={imgUrl} alt="" className="w-full h-full object-cover" loading="lazy" /> : <div className="w-full h-full flex items-center justify-center"><Shirt size={32} className="text-surface-700" /></div>}
-                  </div>
-                  <div className="p-3 flex flex-col gap-2 flex-1">
-                    <div>
-                      <h3 className="text-sm font-semibold truncate" title={avatar.name}>{avatar.name}</h3>
-                      <p className="text-xs text-surface-400 truncate">by {avatar.authorName}</p>
-                    </div>
-                    {avatar.description && <p className="text-[11px] text-surface-500 line-clamp-2 leading-relaxed">{avatar.description}</p>}
-                    <div className="flex items-center gap-1.5 mt-auto pt-1">
-                      <button onClick={() => handleWear(avatar.id)} disabled={!!wearingId}
-                        className={`flex-1 text-xs py-1.5 rounded-lg font-medium transition-colors flex items-center justify-center gap-1 ${
-                          isWorn ? 'bg-green-500/20 text-green-400' : 'btn-primary'
-                        }`}
-                      >
-                        {isWorn ? <><Check size={11} /> Worn</> : isWearing ? 'Switching...' : 'Wear'}
-                      </button>
-                      <button onClick={() => onFindByAuthor(avatar.authorId, avatar.authorName)}
-                        className="text-[10px] px-2 py-1.5 rounded-lg border border-surface-700 hover:border-surface-500 transition-colors text-surface-400 hover:text-surface-200"
-                        title={`More by ${avatar.authorName}`}
-                      >
-                        more
-                      </button>
-                      <button
-                        onClick={() => onCopy(avatar.id)}
-                        className="p-1.5 rounded-lg border border-surface-700 hover:border-surface-500 transition-colors text-surface-400 hover:text-surface-200"
-                        title="Copy avatar ID"
-                      >
-                        {wasCopied ? <Check size={12} className="text-green-400" /> : <Copy size={12} />}
-                      </button>
-                      <a href={`https://vrchat.com/home/avatar/${avatar.id}`} target="_blank" rel="noopener noreferrer"
-                        onClick={e => { if (window.electronAPI?.openExternal) { e.preventDefault(); window.electronAPI.openExternal(`https://vrchat.com/home/avatar/${avatar.id}`); } }}
-                        className="p-1.5 rounded-lg border border-surface-700 hover:border-surface-500 transition-colors text-surface-400 hover:text-surface-200" title="Open on VRChat website"
-                      ><ExternalLink size={12} /></a>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+            {displayResults.map(renderCard)}
           </div>
-
-          <PageNavigator page={page} totalPages={totalPages} onGoTo={p => { setPage(p); window.scrollTo({ top: 0, behavior: 'smooth' }); }} />
+          <PageNavigator
+            page={currentPage}
+            totalPages={totalPages}
+            hasUnknownEnd={unknownEnd}
+            loading={loading}
+            onGoTo={goToPage}
+          />
         </>
       )}
       <div className="px-3 py-2 border-t border-surface-800/40 text-[10px] text-surface-600 leading-relaxed">

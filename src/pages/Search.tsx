@@ -1,8 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Search as SearchIcon, Users, Globe, Shirt, Heart, Database, Pin, PinOff, LayoutGrid } from 'lucide-react';
 import api from '../api/vrchat';
-import { vrcdb, VRCDB_PROVIDERS, getProviderId, setProviderId } from '../api/vrcdb';
-import type { ProviderId, VRCDBAvatar } from '../api/vrcdb';
 import SearchInput from '../components/common/SearchInput';
 import UserAvatar from '../components/common/UserAvatar';
 import WorldCard from '../components/common/WorldCard';
@@ -32,13 +30,8 @@ export default function SearchPage() {
   const [avatarResults, setAvatarResults] = useState<VRCAvatar[]>([]);
   const [ownAvatars, setOwnAvatars] = useState<VRCAvatar[]>([]);
   const [favoriteAvatars, setFavoriteAvatars] = useState<VRCAvatar[]>([]);
-  const [vrcdbResults, setVrcdbResults] = useState<VRCDBAvatar[]>([]);
-  const [ownLoading, setOwnLoading] = useState(false);
-  const [favLoading, setFavLoading] = useState(false);
-  const [vrcdbLoading, setVrcdbLoading] = useState(false);
-  const [vrcdbError, setVrcdbError] = useState<string | null>(null);
+  const [vrcdbQuery, setVrcdbQuery] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [providerId, setProviderIdState] = useState<ProviderId>(getProviderId());
   const [hasSearched, setHasSearched] = useState(false);
   const [avatarsLoaded, setAvatarsLoaded] = useState(false);
 
@@ -46,11 +39,7 @@ export default function SearchPage() {
   const [columns, setColumns] = useState<number>(() => loadAvatarPref(COLUMNS_KEY, 4));
   const [perPage, setPerPage] = useState<number>(() => loadAvatarPref(PER_PAGE_KEY, 20));
   const saveColumns = (v: number) => { setColumns(v); localStorage.setItem(COLUMNS_KEY, String(v)); };
-  const savePerPage = (v: number) => {
-    setPerPage(v);
-    localStorage.setItem(PER_PAGE_KEY, String(v));
-    setVrcPage(0); setOwnPage(0); setFavPage(0);
-  };
+  const savePerPage = (v: number) => { setPerPage(v); localStorage.setItem(PER_PAGE_KEY, String(v)); setVrcPage(0); setOwnPage(0); setFavPage(0); };
 
   // Pagination state
   const [vrcPage, setVrcPage] = useState(0);
@@ -89,18 +78,6 @@ export default function SearchPage() {
     setFavLoading(false);
   };
 
-  const searchVrcdb = async (q: string) => {
-    setVrcdbLoading(true);
-    setVrcdbError(null);
-    try {
-      const results = await vrcdb.search(q);
-      setVrcdbResults(results);
-    } catch (err) {
-      setVrcdbError(err instanceof Error ? err.message : 'Search failed');
-    }
-    setVrcdbLoading(false);
-  };
-
   const ensureVrcPageLoaded = async (targetPage: number, q: string, existing: VRCAvatar[], reachedEnd: boolean) => {
     if (reachedEnd) return;
     const needed = (targetPage + 1) * perPage;
@@ -133,13 +110,6 @@ export default function SearchPage() {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  const changeProvider = (id: ProviderId) => {
-    setProviderId(id);
-    setProviderIdState(id);
-    setVrcdbResults([]);
-    setVrcdbError(null);
-  };
-
   const detectQueryType = (q: string): { type: 'id' | 'text'; category?: SearchCategory; id?: string } => {
     const trimmed = q.trim();
     if (trimmed.startsWith('usr_')) return { type: 'id', category: 'users', id: trimmed };
@@ -157,9 +127,9 @@ export default function SearchPage() {
     const q = query.trim();
     if (!q) return;
 
-    // Database sub-tab: route to vrcdb
+    // Database sub-tab: route to VrcdbPanel (self-fetching)
     if (category === 'avatars' && avatarSubTab === 'database') {
-      searchVrcdb(q);
+      setVrcdbQuery(q);
       return;
     }
 
@@ -305,7 +275,7 @@ export default function SearchPage() {
               { key: 'vrc'      as AvatarSubTab, icon: SearchIcon, label: `VRChat${avatarResults.length ? ` (${avatarResults.length}${!vrcReachedEnd ? '+' : ''})` : ''}` },
               { key: 'own'      as AvatarSubTab, icon: Shirt,      label: `My Uploads${ownAvatars.length ? ` (${ownAvatars.length})` : ''}` },
               { key: 'favorites'as AvatarSubTab, icon: Heart,      label: `Favorites${favoriteAvatars.length ? ` (${favoriteAvatars.length})` : ''}` },
-              { key: 'database' as AvatarSubTab, icon: Database,   label: `Database${vrcdbResults.length ? ` (${vrcdbResults.length})` : ''}` },
+              { key: 'database' as AvatarSubTab, icon: Database,   label: 'Database' },
             ]).map(({ key, icon: Icon, label }) => (
               <button
                 key={key}
@@ -446,29 +416,12 @@ export default function SearchPage() {
 
           {category === 'avatars' && avatarSubTab === 'database' && (
             <VrcdbPanel
-              results={vrcdbResults}
-              loading={vrcdbLoading}
-              error={vrcdbError}
+              query={vrcdbQuery}
               copiedId={copiedId}
-              providerId={providerId}
               onCopy={copyId}
               onWear={async (id) => { try { await api.selectAvatar(id); } catch {} }}
-              onChangeProvider={changeProvider}
-              onSearch={() => searchVrcdb(query.trim())}
-              hasQuery={!!query.trim()}
               perPage={perPage}
               columns={columns}
-              onFindByAuthor={async (authorId, authorName) => {
-                setVrcdbLoading(true);
-                setVrcdbError(null);
-                try {
-                  const r = await vrcdb.getByAuthor(authorId);
-                  setVrcdbResults(r.length > 0 ? r : await vrcdb.search(authorName));
-                } catch (err) {
-                  setVrcdbError(err instanceof Error ? err.message : 'Search failed');
-                }
-                setVrcdbLoading(false);
-              }}
             />
           )}
         </div>
