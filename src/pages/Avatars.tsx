@@ -544,8 +544,11 @@ export function VrcdbPanel({
 
   // Paginated search state
   type CachedAvatars = import('../api/vrcdb').VRCDBAvatar[];
-  const cacheRef = useRef<Map<number, CachedAvatars>>(new Map());
-  const [pageCache, setPageCache] = useState<Map<number, CachedAvatars>>(new Map());
+  type CacheEntry = { avatars: CachedAvatars; fetchedAt: number };
+  const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+  const CACHE_MAX = 30;             // max pages held at once
+  const cacheRef = useRef<Map<number, CacheEntry>>(new Map());
+  const [knownPageCount, setKnownPageCount] = useState(0);
   const [currentPage, setCurrentPage] = useState(0);
   const [hasMore, setHasMore] = useState(false);
   const [total, setTotal] = useState<number | undefined>(undefined);
@@ -560,22 +563,49 @@ export function VrcdbPanel({
   const [authorLoading, setAuthorLoading] = useState(false);
   const [authorError, setAuthorError] = useState<string | null>(null);
 
+  const resetCache = () => {
+    cacheRef.current = new Map();
+    setKnownPageCount(0);
+  };
+
+  const writeCache = (pageIdx: number, avatars: CachedAvatars) => {
+    const cache = cacheRef.current;
+    // Evict oldest entry when at cap
+    if (!cache.has(pageIdx) && cache.size >= CACHE_MAX) {
+      const oldest = [...cache.entries()].sort((a, b) => a[1].fetchedAt - b[1].fetchedAt)[0];
+      if (oldest) cache.delete(oldest[0]);
+    }
+    cache.set(pageIdx, { avatars, fetchedAt: Date.now() });
+    setKnownPageCount(cache.size);
+  };
+
+  const readCache = (pageIdx: number): CachedAvatars | null => {
+    const entry = cacheRef.current.get(pageIdx);
+    if (!entry) return null;
+    if (Date.now() - entry.fetchedAt > CACHE_TTL) {
+      cacheRef.current.delete(pageIdx);
+      setKnownPageCount(cacheRef.current.size);
+      return null;
+    }
+    return entry.avatars;
+  };
+
   const changeProvider = (id: ProviderId) => {
     setProviderId(id);
     setProviderIdState(id);
-    cacheRef.current = new Map();
+    resetCache();
     setCurrentPage(0);
     setHasMore(false);
     setTotal(undefined);
     setDisplayResults([]);
     setAuthorQuery(null);
-    // Re-fetch page 1 with new provider
     if (query) fetchSearchPage(0, query, perPage);
   };
 
   const fetchSearchPage = async (pageIdx: number, q: string, ps: number) => {
-    if (cacheRef.current.has(pageIdx)) {
-      setDisplayResults(cacheRef.current.get(pageIdx)!);
+    const cached = readCache(pageIdx);
+    if (cached) {
+      setDisplayResults(cached);
       setCurrentPage(pageIdx);
       return;
     }
@@ -583,7 +613,7 @@ export function VrcdbPanel({
     setError(null);
     try {
       const result = await vrcdb.searchPage(q, ps, pageIdx + 1);
-      cacheRef.current.set(pageIdx, result.avatars);
+      writeCache(pageIdx, result.avatars);
       setDisplayResults(result.avatars);
       setHasMore(result.hasMore);
       if (result.total !== undefined) setTotal(result.total);
@@ -597,7 +627,7 @@ export function VrcdbPanel({
   // Reset and fetch page 1 whenever query, perPage, or providerId changes
   useEffect(() => {
     if (!query) return;
-    cacheRef.current = new Map();
+    resetCache();
     setCurrentPage(0);
     setHasMore(false);
     setTotal(undefined);
@@ -607,11 +637,6 @@ export function VrcdbPanel({
     fetchSearchPage(0, query, perPage);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query, perPage, providerId]);
-
-  // Sync pageCache ref → state for render
-  useEffect(() => {
-    setPageCache(new Map(cacheRef.current));
-  }, [displayResults]);
 
   const goToPage = (pageIdx: number) => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -728,10 +753,9 @@ export function VrcdbPanel({
   }
 
   // Normal search mode
-  const knownPages = pageCache.size;
   const totalPages = total !== undefined
     ? Math.max(1, Math.ceil(total / perPage))
-    : hasMore ? knownPages + 1 : Math.max(1, knownPages);
+    : hasMore ? knownPageCount + 1 : Math.max(1, knownPageCount);
   const unknownEnd = total === undefined && hasMore;
 
   return (
