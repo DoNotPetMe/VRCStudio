@@ -44,14 +44,8 @@ counts, with "Wear" button if indexed on avtrdb • Avatar Editor
 What's playing right now in your VRChat instance • Per-instance history •
 Cross-instance history • Auto-detected YouTube / Twitch / Vimeo
 
-### 🎭 Emoji maker
-Drag-drop one image (static) or many (animated) • Auto sprite-sheet
-generation in valid VRChat grid sizes • FPS / loop / ping-pong / once •
-Live preview • Upload directly or download the PNG
-
 ### 🎛️ OSC control
-Chatbox • Live parameter monitor • Presets • Virtual D-pad and gesture
-grid • Real-time message log
+Chatbox • Live parameter monitor • Presets • Real-time message log
 
 ### 🤖 Discord
 **Rich Presence** showing your current world. **Discord bot** with your
@@ -59,25 +53,12 @@ own token exposing slash commands: `/whoami`, `/world`, `/players`,
 `/friends`, `/videos`, `/wear`, `/status`, `/say`, `/avatar`.
 
 ### 🎨 Personalization
-4 colour modes • 6 accent colours • 6 premium themes including a full
-**Hacker** TUI skin with interactive in-app terminal • 7 animated border
+4 colour modes • 6 accent colours • 6 premium themes including a full TUI skin with interactive in-app terminal • 7 animated border
 styles • Liveliness effects (particles, cursor glow, hover lift) • Audio
 visualizer • Custom CSS
 
 ### 🛠️ Tools
-Game Log parser • Screenshots viewer • Event Planner • Material/Shader
-tools • Multi-account support • Tray icon with quick status • In-app
-auto-updater
-
----
-
-## 🔄 Updating
-
-The app checks GitHub on launch. When updates exist a banner appears —
-click *Install*. For packaged `.exe` builds, re-download and re-run
-`Start Here.bat`.
-
----
+Game Log parser • Screenshots viewer • Event Planner • Multi-account support
 
 ## 🧹 Uninstalling
 
