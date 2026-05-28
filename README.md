@@ -1,8 +1,7 @@
 # VRC Studio
 
 A desktop companion app for VRChat. Friends, worlds, avatars, OSC, a
-Discord bot, video player tracking, themes, and a lot more — all local,
-all yours.
+Discord bot, video player tracking, themes, and a lot more — all local
 
 Built with Electron + React + TypeScript. Best on Windows 10/11.
 
